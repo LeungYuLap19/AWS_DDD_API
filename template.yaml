@@ -105,7 +105,7 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: !Sub '${ProjectName}-${StageName}-shared-runtime'
-      ContentUri: layers/shared-runtime/
+      ContentUri: dist/layers/shared-runtime/
       CompatibleRuntimes:
         - nodejs22.x
       RetentionPolicy: Retain
@@ -184,7 +184,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-request-authorizer'
-      CodeUri: functions/request-authorizer/
+      CodeUri: dist/functions/request-authorizer/
       Handler: index.handler
       Role: !GetAtt AuthorizerFunctionRole.Arn
       Layers:
@@ -197,7 +197,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pipeline-smoke'
-      CodeUri: functions/pipeline-smoke/
+      CodeUri: dist/functions/pipeline-smoke/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -261,7 +261,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-auth'
-      CodeUri: functions/auth/
+      CodeUri: dist/functions/auth/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -357,7 +357,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-user'
-      CodeUri: functions/user/
+      CodeUri: dist/functions/user/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -453,7 +453,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-ngo'
-      CodeUri: functions/ngo/
+      CodeUri: dist/functions/ngo/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -549,7 +549,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
-      CodeUri: functions/pet-profile/
+      CodeUri: dist/functions/pet-profile/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -645,7 +645,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-source'
-      CodeUri: functions/pet-source/
+      CodeUri: dist/functions/pet-source/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -741,7 +741,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-transfer'
-      CodeUri: functions/pet-transfer/
+      CodeUri: dist/functions/pet-transfer/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -837,7 +837,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-adoption'
-      CodeUri: functions/pet-adoption/
+      CodeUri: dist/functions/pet-adoption/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -933,7 +933,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-medical'
-      CodeUri: functions/pet-medical/
+      CodeUri: dist/functions/pet-medical/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -1029,7 +1029,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-analysis'
-      CodeUri: functions/pet-analysis/
+      CodeUri: dist/functions/pet-analysis/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -1125,7 +1125,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-recovery'
-      CodeUri: functions/pet-recovery/
+      CodeUri: dist/functions/pet-recovery/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -1221,7 +1221,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-biometric'
-      CodeUri: functions/pet-biometric/
+      CodeUri: dist/functions/pet-biometric/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -1317,7 +1317,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-notifications'
-      CodeUri: functions/notifications/
+      CodeUri: dist/functions/notifications/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -1413,7 +1413,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-commerce'
-      CodeUri: functions/commerce/
+      CodeUri: dist/functions/commerce/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -1509,7 +1509,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-logistics'
-      CodeUri: functions/logistics/
+      CodeUri: dist/functions/logistics/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:

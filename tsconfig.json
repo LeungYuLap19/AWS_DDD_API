@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "rootDir": ".",
+    "outDir": "dist",
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["node"],
+    "paths": {
+      "@aws-ddd-api/shared": [
+        "./layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index"
+      ]
+    }
+  },
+  "include": [
+    "functions/**/*.ts",
+    "layers/**/*.ts",
+    "types/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    ".aws-sam"
+  ]
+}

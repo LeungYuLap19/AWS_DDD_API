@@ -314,9 +314,9 @@
 
 也就是：
 
-- `index.js`
-- `src/handler.js`
-- `src/router.js`
+- `index.ts`
+- `src/handler.ts`
+- `src/router.ts`
 - `src/config`
 - `src/middleware`
 - `src/services`
@@ -334,39 +334,39 @@
 ```text
 functions/
   pet-profile/
-    index.js
+    index.ts
     package.json
     src/
-      handler.js
+      handler.ts
       cors.js
-      router.js
+      router.ts
       config/
-        db.js
-        env.js
+        db.ts
+        env.ts
       middleware/
-        authJWT.js
-        guard.js
-        selfAccess.js
+        authJWT.ts
+        guard.ts
+        selfAccess.ts
       services/
-        profile.js
+        profile.ts
       applications/
-        createPetProfile.js
-        getPetProfile.js
-        listMyPets.js
-        getPetByTag.js
-        updatePetProfile.js
-        deletePetProfile.js
+        createPetProfile.ts
+        getPetProfile.ts
+        listMyPets.ts
+        getPetByTag.ts
+        updatePetProfile.ts
+        deletePetProfile.ts
       models/
-        Pet.js
+        Pet.ts
       utils/
-        response.js
-        logger.js
-        sanitize.js
-        validators.js
-        zod.js
-        rateLimit.js
+        response.ts
+        logger.ts
+        sanitize.ts
+        validators.ts
+        zod.ts
+        rateLimit.ts
       zodSchema/
-        petProfileSchema.js
+        petProfileSchema.ts
       locales/
         en.json
         zh.json
@@ -374,13 +374,13 @@ functions/
 
 ### 5.3 分層責任
 
-- `handler.js`
+- `handler.ts`
   - Lambda entry
   - parse event
   - auth context
   - request dispatch
 
-- `router.js`
+- `router.ts`
   - `${httpMethod} ${resource}` 對應 use case
 
 - `middleware/`

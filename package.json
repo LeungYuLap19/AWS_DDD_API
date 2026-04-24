@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "validate": "sam validate --lint --template-file template.yaml",
-    "build": "sam build --template-file template.yaml",
+    "validate": "sam validate --template-file template.yaml",
+    "build:ts": "tsc -p tsconfig.json && node script/prepare-dist.cjs",
+    "build": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml",
     "local:api": "sam local start-api --template template.yaml",
-    "local:smoke": "sam local invoke PipelineSmokeFunction --event events/pipeline-smoke-get.json --template template.yaml"
+    "local:smoke": "npm_config_cache=.npm-cache sam local invoke PipelineSmokeFunction --event events/pipeline-smoke-get.json --template template.yaml"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1036.0",
@@ -18,5 +19,10 @@
     "nodemailer": "^8.0.5",
     "twilio": "^6.0.0",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.152",
+    "@types/node": "^24.9.1",
+    "typescript": "^5.9.3"
   }
 }
