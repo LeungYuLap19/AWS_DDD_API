@@ -1,0 +1,343 @@
+handler
+middlewares
+router
+services
+applications
+
+/auth
+  POST /account/generate-email-code
+  POST /account/verify-email-code
+  POST /account/generate-sms-code
+  POST /account/verify-sms-code
+  POST /account/register
+  POST /auth/refresh
+  ---
+  /challenges 
+    POST
+    /verify
+      POST
+  /registrations
+    /user
+      POST
+    /ngo
+      POST
+  /tokens
+    /refresh 
+      POST
+
+/user
+  GET /account/{userId}
+  POST /account/update-image
+  PUT /account
+  DELETE /account/{userId}
+  POST /account/delete-user-with-email
+  ---
+  /me (userId from jwt)
+    GET
+    PATCH
+    DELETE
+
+/ngo
+  GET /v2/account/user-list
+  GET /v2/account/edit-ngo/{ngoId}
+  GET /v2/account/edit-ngo/{ngoId}/pet-placement-options
+  POST /v2/account/register-ngo
+  PUT /v2/account/edit-ngo/{ngoId}
+  ---
+  /me (ngoId from jwt)
+    GET
+    PATCH
+    DELETE-?
+    /members
+      GET
+
+/pet
+  /profile
+    ## 1. Public tag lookup
+    GET /pets/getPetInfobyTagId/{tagId}
+
+    ## 2. Pet list queries
+    GET /pets/pet-list/{userId}
+    GET /pets/pet-list-ngo/{ngoId}
+
+    ## 3. Core pet profile read
+    GET /pets/{petID}/basic-info
+    GET /pets/{petID}/detail-info
+
+    ## 4. Core pet profile create
+    POST /pets/create-pet-basic-info
+    POST /pets/create-pet-basic-info-with-image
+
+    ## 5. Core pet profile update
+    POST /pets/updatePetImage
+    PUT /pets/{petID}/basic-info
+    POST /pets/{petID}/detail-info
+
+    ## 6. Pet delete
+    DELETE /pets/{petID}
+    POST /pets/deletePet
+    ---
+    POST
+    /{petId}
+      GET
+      PATCH
+      DELETE
+    /me (ngoId / userId from jwt)
+      GET
+    /by-tag
+      /{tagId}
+        GET
+
+  /source
+    x ## 0. public resource ???
+    x GET /animal/animalList/{lang} ???
+
+    ## 1. Pet source/origin
+    GET /v2/pets/{petID}/detail-info/source
+    POST /v2/pets/{petID}/detail-info/source
+    PUT /v2/pets/{petID}/detail-info/source/{sourceId}
+    ---
+    /{petId}
+      GET
+      POST
+      PATCH
+
+  /transfer
+    POST /pets/{petID}/detail-info/transfer
+    PUT /pets/{petID}/detail-info/NGOtransfer
+    PUT /pets/{petID}/detail-info/transfer/{transferId}
+    DELETE /pets/{petID}/detail-info/transfer/{transferId}
+    ---
+    /{petId}
+      POST
+      /{transferId}
+        PATCH
+        DELETE
+      /ngo-reassignment
+        POST
+
+  /adoption
+    GET /adoption
+    GET /adoption/{id}
+    GET /v2/pets/{petID}/pet-adoption
+    POST /v2/pets/{petID}/pet-adoption
+    PUT /v2/pets/{petID}/pet-adoption/{adoptionId}
+    DELETE /v2/pets/{petID}/pet-adoption/{adoptionId}
+    ---
+    GET
+    /{adoptionId}
+      GET
+    /{petId}
+      GET
+      POST
+      PATCH
+      DELETE
+
+
+  /medical
+    GET /deworm
+
+    GET /pets/{petID}/medical-record
+    POST /pets/{petID}/medical-record
+    PUT /pets/{petID}/medical-record/{medicalID}
+    DELETE /pets/{petID}/medical-record/{medicalID}
+
+    GET /pets/{petID}/medication-record
+    POST /pets/{petID}/medication-record
+    PUT /pets/{petID}/medication-record/{medicationID}
+    DELETE /pets/{petID}/medication-record/{medicationID}
+
+    GET /pets/{petID}/deworm-record
+    POST /pets/{petID}/deworm-record
+    PUT /pets/{petID}/deworm-record/{dewormID}
+    DELETE /pets/{petID}/deworm-record/{dewormID}
+
+    GET /v2/pets/{petID}/blood-test-record
+    POST /v2/pets/{petID}/blood-test-record
+    PUT /v2/pets/{petID}/blood-test-record/{bloodTestID}
+    DELETE /v2/pets/{petID}/blood-test-record/{bloodTestID}
+
+    GET /pets/{petID}/vaccine-record
+    POST /pets/{petID}/vaccine-record
+    PUT /pets/{petID}/vaccine-record/{vaccineID}
+    DELETE /pets/{petID}/vaccine-record/{vaccineID}
+    ---
+    /reference
+      /deworm
+        GET
+    /{petId}
+      /general
+        GET
+        POST
+        /{medicalId}
+          PATCH
+          DELETE
+      /medication
+        GET
+        POST
+        /{medicationId}
+          PATCH
+          DELETE
+      /deworming
+        GET
+        POST
+        /{dewormId}
+          PATCH
+          DELETE
+      /blood-test
+        GET
+        POST
+        /{bloodTestId}
+          PATCH
+          DELETE
+      /vaccination
+        GET
+        POST
+        /{vaccineId}
+          PATCH
+          DELETE
+
+  /analysis (need refinement)
+    GET /analysis/{eyeDiseaseName}
+    POST /analysis/eye-upload/{petId}
+    POST /analysis/breed
+    POST /util/uploadImage
+    POST /util/uploadPetBreedImage
+    GET /pets/{petID}/eyeLog
+    PUT /pets/updatePetEye
+    ---
+    /eye
+      /{petId}
+        GET
+        POST
+        PATCH
+    /breed
+      POST
+    /eye-diseases
+      /{eyeDiseaseName}
+        GET
+    /uploads
+      /image
+        POST
+      /breed-image
+        POST
+
+  /recovery
+    GET /v2/pets/pet-lost
+    GET /v2/pets/pet-found
+    POST /v2/pets/pet-lost
+    POST /v2/pets/pet-found
+    DELETE /v2/pets/pet-lost/{petLostID}
+    DELETE /v2/pets/pet-found/{petFoundID}
+    ---
+    /lost
+      GET
+      POST
+      /{petLostID}
+        DELETE
+    /found
+      GET
+      POST
+      /{petFoundID}
+        DELETE
+
+  /biometric
+    GET /petBiometrics/{petId}
+    POST /petBiometrics/register
+    POST /petBiometrics/verifyPet
+    ---
+    /{petId}
+      GET
+    /registrations
+      POST
+    /verifications
+      POST
+
+/notifications
+  GET /v2/account/{userId}/notifications
+  POST /v2/account/{userId}/notifications
+  PUT /v2/account/{userId}/notifications/{notificationId}
+  ---
+  /me (userId from jwt)
+    GET
+    /{notificationId}
+      PATCH
+  /dispatch
+    POST (userId in body)
+
+/commerce (need refinement)
+  GET /product/productList
+  GET /purchase/shop-info
+  GET /purchase/orders
+  GET /purchase/order-verification
+  GET /v2/orderVerification/supplier/{orderId}
+  GET /v2/orderVerification/whatsapp-order-link/{_id}
+  GET /v2/orderVerification/ordersInfo/{tempId}
+  GET /v2/orderVerification/getAllOrders
+  GET /v2/orderVerification/{tagId}
+
+  POST /product/productLog
+  POST /purchase/confirmation
+  PUT /v2/orderVerification/supplier/{orderId}
+  PUT /v2/orderVerification/{tagId}
+  POST /purchase/send-ptag-detection-email
+  DELETE /purchase/order-verification/{orderVerificationId}
+  ---
+  /catalog
+    GET
+    /events
+      POST
+
+  /storefront
+    GET
+
+  /orders
+    GET
+    POST
+    /{tempId}
+      GET
+    /operations
+      GET-?
+
+  /fulfillment
+    GET
+    /{orderVerificationId}
+      DELETE
+    /tags
+      /{tagId}
+        GET
+        PATCH
+    /suppliers
+      /{orderId}
+        GET
+        PATCH
+    /share-links
+      /whatsapp
+        /{_id}
+          GET
+
+  /commands
+    /ptag-detection-email
+      POST
+
+/logistics
+  POST /sf-express-routes/get-area
+  POST /sf-express-routes/get-netCode
+  POST /sf-express-routes/get-pickup-locations
+  POST /sf-express-routes/get-token
+  POST /sf-express-routes/create-order
+  POST /v2/sf-express-routes/print-cloud-waybill
+  ---
+  /lookups
+    /areas
+      POST
+    /net-codes
+      POST
+    /pickup-locations
+      POST
+  /token
+    POST
+  /shipments
+    POST
+  /cloud-waybill
+    POST

@@ -1,0 +1,22 @@
+{
+  "resource": "/pipeline/smoke",
+  "path": "/pipeline/smoke",
+  "httpMethod": "GET",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "resourcePath": "/pipeline/smoke",
+    "httpMethod": "GET",
+    "requestId": "local-smoke-request",
+    "stage": "dev",
+    "identity": {}
+  },
+  "body": null,
+  "isBase64Encoded": false
+}

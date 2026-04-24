@@ -1,9 +1,22 @@
 {
-  "name": "sam-cicd-starter",
+  "name": "aws-ddd-api",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "validate": "sam validate --lint --template-file template.yaml",
-    "build": "sam build --template-file template.yaml"
+    "build": "sam build --template-file template.yaml",
+    "local:api": "sam local start-api --template template.yaml",
+    "local:smoke": "sam local invoke PipelineSmokeFunction --event events/pipeline-smoke-get.json --template template.yaml"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1036.0",
+    "axios": "^1.15.2",
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "lambda-multipart-parser": "^1.0.1",
+    "mongoose": "^9.5.0",
+    "nodemailer": "^8.0.5",
+    "twilio": "^6.0.0",
+    "zod": "^4.3.6"
   }
 }

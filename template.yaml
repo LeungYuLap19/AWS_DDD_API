@@ -1,79 +1,272 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aws/serverless-application-model/main/samtranslator/schema/schema.json
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Minimal SAM app with one Lambda and four API endpoints.
+Description: AWS DDD API base framework with shared layer, REST proxy routes, Lambda authorizer, request validation, aliases, IAM roles, and config/secret wiring.
 
 Parameters:
-  StageName:
-    Type: String
-    Default: dev
-    AllowedPattern: '[a-zA-Z0-9-]+'
   ProjectName:
     Type: String
-    Default: hello-api
+    Default: aws-ddd-api
     AllowedPattern: '[a-zA-Z0-9-]+'
+  StageName:
+    Type: String
+    Default: development
+    AllowedPattern: '[a-zA-Z0-9-]+'
+  LambdaAliasName:
+    Type: String
+    Default: development
+    AllowedPattern: '[a-zA-Z0-9-_]+'
+  ConfigNamespace:
+    Type: String
+    Default: /aws-ddd-api/development
+  AllowedOrigins:
+    Type: String
+    Default: '*'
+  AuthSharedTokenSecretId:
+    Type: String
+    Default: ''
+    Description: Optional Secrets Manager secret id/name. If provided, the authorizer expects SecretString.token as the bearer token value.
+  AuthBypassParameterPath:
+    Type: String
+    Default: ''
+    Description: Optional SSM SecureString path for AUTH_BYPASS. Leave blank to use the local-safe default.
 
-Globals:
+Conditions:
+  HasAuthSharedTokenSecret: !Not [!Equals [!Ref AuthSharedTokenSecretId, '']]
+  HasAuthBypassParameterPath: !Not [!Equals [!Ref AuthBypassParameterPath, '']]
+
+Globals: # shared default settings applied to all resources of a given type, unless a resource overrides them.
   Function:
     Runtime: nodejs22.x
     Timeout: 10
-    MemorySize: 128
+    MemorySize: 256
     Environment:
       Variables:
+        PROJECT_NAME: !Ref ProjectName
         STAGE_NAME: !Ref StageName
+        LAMBDA_ALIAS_NAME: !Ref LambdaAliasName
+        CONFIG_NAMESPACE: !Ref ConfigNamespace
+        AUTH_BYPASS: !If
+          - HasAuthBypassParameterPath
+          - !Sub '{{resolve:ssm-secure:${AuthBypassParameterPath}}}'
+          - 'false'
+        AUTH_SHARED_TOKEN: !If
+          - HasAuthSharedTokenSecret
+          - !Sub '{{resolve:secretsmanager:${AuthSharedTokenSecretId}:SecretString:token}}'
+          - 'local-dev-token'
 
 Resources:
-  HttpApi:
-    Type: AWS::Serverless::HttpApi
+  RestApi:
+    Type: AWS::Serverless::Api
     Properties:
+      Name: !Sub '${ProjectName}-${StageName}'
       StageName: !Ref StageName
-      CorsConfiguration:
-        AllowOrigins:
-          - '*'
-        AllowHeaders:
-          - content-type
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
+      EndpointConfiguration: REGIONAL
+      Cors: # it will handle OPTIONS automatically, no OPTIONS needed in every path
+        AllowOrigin: !Sub "'${AllowedOrigins}'"
+        AllowHeaders: "'Content-Type,Authorization,X-Request-Id'"
+        AllowMethods: "'OPTIONS,GET,POST,PUT,DELETE'"
+      Models: # request/response schemas, validates the request body before Lambda runs
+        CreateWidgetRequest:
+          type: object # body must be a JSON object
+          additionalProperties: false # no extra unknown fields allowed
+          required:
+            - name
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 100
+            description:
+              type: string
+              maxLength: 500
+      Auth: # configure authorization behavior for the API or for a specific route
+        DefaultAuthorizer: DddTokenAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          DddTokenAuthorizer:
+            FunctionArn: !GetAtt RequestAuthorizerFunction.Arn # Amazon Resource Name
+            Identity:
+              Header: Authorization
+              ValidationExpression: '^Bearer .+$'
+              ReauthorizeEvery: 0
 
-  HelloApiFunction:
+  SharedRuntimeLayer: # the Lambda Layer resource you defined in the template
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub '${ProjectName}-${StageName}-shared-runtime'
+      ContentUri: layers/shared-runtime/
+      CompatibleRuntimes:
+        - nodejs22.x
+      RetentionPolicy: Retain
+
+  SharedFunctionRole: # default app Lambda permissions, 
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # basic Lambda logging
+      Policies:
+        - PolicyName: shared-config-read # reading config/secrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter 
+                  - ssm:GetParameters
+                  - secretsmanager:GetSecretValue
+                Resource: '*'
+
+  AuthorizerFunctionRole: # the IAM role for the authorizer Lambda only - RequestAuthorizerFunction
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: authorizer-config-read
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - secretsmanager:GetSecretValue
+                Resource: '*'
+
+  RequestAuthorizerFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${StageName}-hello-api'
-      CodeUri: src/
-      Handler: app.handler
+      FunctionName: !Sub '${ProjectName}-${StageName}-request-authorizer'
+      CodeUri: functions/request-authorizer/
+      Handler: index.handler
+      Role: !GetAtt AuthorizerFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+
+  PipelineSmokeFunction: # CI/CD smoke test example
+    # - proves deployment pipeline works
+    # - intentionally tiny and low-risk
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pipeline-smoke'
+      CodeUri: functions/pipeline-smoke/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
       Events:
-        ListHello:
-          Type: HttpApi
+        PipelineSmokeAny:
+          Type: Api
           Properties:
-            ApiId: !Ref HttpApi
-            Path: /hello
+            RestApiId: !Ref RestApi
+            Path: /pipeline/smoke
+            Method: ANY
+            Auth:
+              Authorizer: NONE
+
+  FrameworkProxyFunction: # API Gateway proxy integration example
+    # - path catch-all routing with {proxy+}
+    # - a public route family
+    # - thin Lambda route dispatch using event.httpMethod + event.resource
+    # - demonstrates catch-all routing with {proxy+}
+    # - demonstrates open routes without authorizer
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-framework-proxy'
+      CodeUri: functions/framework-proxy/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        FrameworkProxyRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /framework/proxy
             Method: GET
-        CreateHello:
-          Type: HttpApi
+            Auth:
+              Authorizer: NONE # authorizer can be excluded per route
+        FrameworkProxyAny:
+          Type: Api
           Properties:
-            ApiId: !Ref HttpApi
-            Path: /hello
+            RestApiId: !Ref RestApi
+            Path: /framework/proxy/{proxy+}
+            Method: ANY
+            Auth:
+              Authorizer: NONE # authorizer can be excluded per route
+
+  FrameworkProtectedFunction: # protected app-route example
+    # - demonstrates default authorizer usage
+    # - demonstrates request validation
+    # - demonstrates reading auth context
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-framework-protected'
+      CodeUri: functions/framework-protected/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        ProtectedConfigGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /framework/protected/config
+            Method: GET
+        ProtectedWidgetCreate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /framework/protected/widgets
             Method: POST
-        UpdateHello:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /hello/{id}
-            Method: PUT
-        DeleteHello:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /hello/{id}
-            Method: DELETE
+            RequestModel:
+              Model: CreateWidgetRequest
+              Required: true
+              ValidateBody: true
 
-Outputs:
+Outputs: # expose useful values from the deployed stack after CloudFormation/SAM finishes
+  # - “after deploy, show me these values”
   ApiUrl:
-    Description: Base URL for the deployed HTTP API stage.
-    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}'
+    Description: Base URL for the deployed REST API stage.
+    Value: !Sub 'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}'
 
-  HelloApiFunctionName:
-    Description: Lambda function name.
-    Value: !Ref HelloApiFunction
+  PipelineSmokeFunctionName:
+    Description: Smoke-test Lambda function name.
+    Value: !Ref PipelineSmokeFunction
+
+  AuthorizerFunctionName:
+    Description: Lambda authorizer function name.
+    Value: !Ref RequestAuthorizerFunction
+
+  SharedRuntimeLayerArn:
+    Description: Shared runtime layer version ARN.
+    Value: !Ref SharedRuntimeLayer
+
+  LambdaAliasNameOut:
+    Description: Alias published for every function via AutoPublishAlias.
+    Value: !Ref LambdaAliasName

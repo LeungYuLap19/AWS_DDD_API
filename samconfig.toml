@@ -1,9 +1,17 @@
 version = 0.1
 
 [default.deploy.parameters]
-stack_name = "hello-api-dev"
+stack_name = "aws-ddd-api-development"
 resolve_s3 = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 fail_on_empty_changeset = false
-parameter_overrides = "StageName=dev ProjectName=hello-api"
+parameter_overrides = "StageName=development ProjectName=aws-ddd-api LambdaAliasName=development ConfigNamespace=/aws-ddd-api/development AllowedOrigins=*"
+
+[production.deploy.parameters]
+stack_name = "aws-ddd-api-production"
+resolve_s3 = true
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+parameter_overrides = "StageName=production ProjectName=aws-ddd-api LambdaAliasName=production ConfigNamespace=/aws-ddd-api/production AllowedOrigins=*"

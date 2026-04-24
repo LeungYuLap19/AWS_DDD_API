@@ -14,7 +14,7 @@ Parameters:
     Description: Branch allowed to deploy.
   ProjectStackPrefix:
     Type: String
-    Default: hello-api
+    Default: aws-ddd-api
     Description: Prefix for stack names this role can deploy.
 
 Resources:

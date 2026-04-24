@@ -1,11 +1,11 @@
-name: Deploy SAM App
+name: Deploy AWS DDD API
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'sam-cicd-starter/**'
+      - 'AWS_DDD_API/**'
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: sam-cicd-starter
+        working-directory: AWS_DDD_API
     env:
       AWS_REGION: ap-east-1
     steps:
@@ -47,9 +47,9 @@ jobs:
       - name: Deploy app
         run: >
           sam deploy
-          --stack-name hello-api-dev
+          --stack-name aws-ddd-api-dev
           --resolve-s3
           --capabilities CAPABILITY_IAM
           --no-confirm-changeset
           --no-fail-on-empty-changeset
-          --parameter-overrides StageName=dev ProjectName=hello-api
+          --parameter-overrides StageName=dev ProjectName=aws-ddd-api
