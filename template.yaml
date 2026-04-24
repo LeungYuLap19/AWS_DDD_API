@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Minimal SAM app with one Lambda and four API endpoints.
+
+Parameters:
+  StageName:
+    Type: String
+    Default: dev
+    AllowedPattern: '[a-zA-Z0-9-]+'
+  ProjectName:
+    Type: String
+    Default: hello-api
+    AllowedPattern: '[a-zA-Z0-9-]+'
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 10
+    MemorySize: 128
+    Environment:
+      Variables:
+        STAGE_NAME: !Ref StageName
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+
+  HelloApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-hello-api'
+      CodeUri: src/
+      Handler: app.handler
+      Events:
+        ListHello:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /hello
+            Method: GET
+        CreateHello:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /hello
+            Method: POST
+        UpdateHello:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /hello/{id}
+            Method: PUT
+        DeleteHello:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /hello/{id}
+            Method: DELETE
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for the deployed HTTP API stage.
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}'
+
+  HelloApiFunctionName:
+    Description: Lambda function name.
+    Value: !Ref HelloApiFunction

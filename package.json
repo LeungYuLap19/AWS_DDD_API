@@ -1,0 +1,9 @@
+{
+  "name": "sam-cicd-starter",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "validate": "sam validate --lint --template-file template.yaml",
+    "build": "sam build --template-file template.yaml"
+  }
+}

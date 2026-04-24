@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Bootstrap stack for GitHub Actions OIDC deployment into AWS.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Description: GitHub organization or username that owns the repository.
+  GitHubRepo:
+    Type: String
+    Description: GitHub repository name.
+  BranchName:
+    Type: String
+    Default: main
+    Description: Branch allowed to deploy.
+  ProjectStackPrefix:
+    Type: String
+    Default: hello-api
+    Description: Prefix for stack names this role can deploy.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - ffffffffffffffffffffffffffffffffffffffff
+
+  GitHubActionsDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectStackPrefix}-github-actions-deploy-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${BranchName}'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudFormationFullAccess
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
+        - arn:aws:iam::aws:policy/IAMFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+Outputs:
+  GitHubActionsRoleArn:
+    Description: ARN to store as the GitHub secret AWS_DEPLOY_ROLE_ARN.
+    Value: !GetAtt GitHubActionsDeployRole.Arn
