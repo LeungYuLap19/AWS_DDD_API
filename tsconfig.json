@@ -13,12 +13,7 @@
     "outDir": "dist",
     "declaration": false,
     "sourceMap": false,
-    "types": ["node"],
-    "paths": {
-      "@aws-ddd-api/shared": [
-        "./layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index"
-      ]
-    }
+    "types": ["node"]
   },
   "include": [
     "functions/**/*.ts",
