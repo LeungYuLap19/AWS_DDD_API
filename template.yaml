@@ -26,6 +26,10 @@ Parameters:
     Type: String
     Default: 44tq771b0m
     Description: Existing API Gateway API key ID to attach to this API usage plan.
+  JwtSecret:
+    Type: String
+    Default: 0YzXfGJprZG7vNA0TxSVSGgTvI0Goct4mYfpp988tSi
+    Description: JWT secret used by the Lambda authorizer when no SSM parameter path is provided.
   JwtSecretParameterPath:
     Type: String
     Default: ''
@@ -57,7 +61,7 @@ Globals: # shared default settings applied to all resources of a given type, unl
         JWT_SECRET: !If
           - HasJwtSecretParameterPath
           - !Sub '{{resolve:ssm-secure:${JwtSecretParameterPath}}}'
-          - 'local-dev-jwt-secret'
+          - !Ref JwtSecret
 
 Resources:
   RestApi:
