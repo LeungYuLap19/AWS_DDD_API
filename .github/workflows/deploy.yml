@@ -7,19 +7,25 @@ on:
     paths:
       - 'AWS_DDD_API/**'
   workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: Deploy production after development succeeds
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy:
+  deploy-development:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: AWS_DDD_API
     env:
-      AWS_REGION: ap-east-1
+      AWS_REGION: ap-southeast-1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,18 +44,55 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Install request authorizer dependencies
+        run: npm install
+        working-directory: AWS_DDD_API/functions/request-authorizer
+
       - name: Validate template
-        run: sam validate --lint --template-file template.yaml
+        run: sam validate --template-file template.yaml
 
       - name: Build app
         run: sam build --template-file template.yaml
 
-      - name: Deploy app
-        run: >
-          sam deploy
-          --stack-name aws-ddd-api-dev
-          --resolve-s3
-          --capabilities CAPABILITY_IAM
-          --no-confirm-changeset
-          --no-fail-on-empty-changeset
-          --parameter-overrides StageName=dev ProjectName=aws-ddd-api
+      - name: Deploy development
+        run: sam deploy --config-env default
+
+  deploy-production:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_production == true
+    needs: deploy-development
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AWS_DDD_API
+    env:
+      AWS_REGION: ap-southeast-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SAM
+        uses: aws-actions/setup-sam@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install request authorizer dependencies
+        run: npm install
+        working-directory: AWS_DDD_API/functions/request-authorizer
+
+      - name: Validate template
+        run: sam validate --template-file template.yaml
+
+      - name: Build app
+        run: sam build --template-file template.yaml
+
+      - name: Deploy production
+        run: sam deploy --config-env production
