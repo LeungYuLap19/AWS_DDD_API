@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'AWS_DDD_API/**'
   workflow_dispatch:
     inputs:
       deploy_production:
@@ -21,9 +19,6 @@ permissions:
 jobs:
   deploy-development:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: AWS_DDD_API
     env:
       AWS_REGION: ap-southeast-1
     steps:
@@ -46,7 +41,7 @@ jobs:
 
       - name: Install request authorizer dependencies
         run: npm install
-        working-directory: AWS_DDD_API/functions/request-authorizer
+        working-directory: functions/request-authorizer
 
       - name: Validate template
         run: sam validate --template-file template.yaml
@@ -61,9 +56,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_production == true
     needs: deploy-development
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: AWS_DDD_API
     env:
       AWS_REGION: ap-southeast-1
     steps:
@@ -86,7 +78,7 @@ jobs:
 
       - name: Install request authorizer dependencies
         run: npm install
-        working-directory: AWS_DDD_API/functions/request-authorizer
+        working-directory: functions/request-authorizer
 
       - name: Validate template
         run: sam validate --template-file template.yaml
