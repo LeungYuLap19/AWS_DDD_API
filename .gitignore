@@ -1,3 +1,10 @@
 .aws-sam/
 dist/
 node_modules/
+!layers/shared-runtime/
+!layers/shared-runtime/nodejs/
+!layers/shared-runtime/nodejs/node_modules/
+!layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/
+!layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/
+!layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.ts
+!layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/package.json

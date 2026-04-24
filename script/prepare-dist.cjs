@@ -29,23 +29,36 @@ copyFile(
   'dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/package.json'
 );
 
-const sharedSourcePath = path.join(
+const sharedSourceTsPath = path.join(
   repoRoot,
   'layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.ts'
+);
+const sharedSourceJsPath = path.join(
+  repoRoot,
+  'layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
 );
 const sharedTargetPath = path.join(
   repoRoot,
   'dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
 );
 
-const sharedSource = fs.readFileSync(sharedSourcePath, 'utf8');
-const transpiledShared = ts.transpileModule(sharedSource, {
-  compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.CommonJS,
-    esModuleInterop: true,
-  },
-});
-
 fs.mkdirSync(path.dirname(sharedTargetPath), { recursive: true });
-fs.writeFileSync(sharedTargetPath, transpiledShared.outputText);
+
+if (fs.existsSync(sharedSourceTsPath)) {
+  const sharedSource = fs.readFileSync(sharedSourceTsPath, 'utf8');
+  const transpiledShared = ts.transpileModule(sharedSource, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      esModuleInterop: true,
+    },
+  });
+
+  fs.writeFileSync(sharedTargetPath, transpiledShared.outputText);
+} else if (fs.existsSync(sharedSourceJsPath)) {
+  fs.copyFileSync(sharedSourceJsPath, sharedTargetPath);
+} else {
+  throw new Error(
+    'Shared runtime entry not found. Expected layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.ts or index.js'
+  );
+}
