@@ -21,18 +21,22 @@ Parameters:
     Default: /aws-ddd-api/development
   AllowedOrigins:
     Type: String
-    Default: '*'
-  AuthSharedTokenSecretId:
+    Default: http://localhost:3000
+  ExistingApiKeyId:
+    Type: String
+    Default: 44tq771b0m
+    Description: Existing API Gateway API key ID to attach to this API usage plan.
+  JwtSecretParameterPath:
     Type: String
     Default: ''
-    Description: Optional Secrets Manager secret id/name. If provided, the authorizer expects SecretString.token as the bearer token value.
+    Description: Optional SSM SecureString path for JWT_SECRET. Leave blank to use the local-safe default.
   AuthBypassParameterPath:
     Type: String
     Default: ''
     Description: Optional SSM SecureString path for AUTH_BYPASS. Leave blank to use the local-safe default.
 
 Conditions:
-  HasAuthSharedTokenSecret: !Not [!Equals [!Ref AuthSharedTokenSecretId, '']]
+  HasJwtSecretParameterPath: !Not [!Equals [!Ref JwtSecretParameterPath, '']]
   HasAuthBypassParameterPath: !Not [!Equals [!Ref AuthBypassParameterPath, '']]
 
 Globals: # shared default settings applied to all resources of a given type, unless a resource overrides them.
@@ -50,10 +54,10 @@ Globals: # shared default settings applied to all resources of a given type, unl
           - HasAuthBypassParameterPath
           - !Sub '{{resolve:ssm-secure:${AuthBypassParameterPath}}}'
           - 'false'
-        AUTH_SHARED_TOKEN: !If
-          - HasAuthSharedTokenSecret
-          - !Sub '{{resolve:secretsmanager:${AuthSharedTokenSecretId}:SecretString:token}}'
-          - 'local-dev-token'
+        JWT_SECRET: !If
+          - HasJwtSecretParameterPath
+          - !Sub '{{resolve:ssm-secure:${JwtSecretParameterPath}}}'
+          - 'local-dev-jwt-secret'
 
 Resources:
   RestApi:
@@ -62,10 +66,11 @@ Resources:
       Name: !Sub '${ProjectName}-${StageName}'
       StageName: !Ref StageName
       EndpointConfiguration: REGIONAL
+      ApiKeySourceType: HEADER
       Cors: # it will handle OPTIONS automatically, no OPTIONS needed in every path
         AllowOrigin: !Sub "'${AllowedOrigins}'"
         AllowHeaders: "'Content-Type,Authorization,X-Request-Id'"
-        AllowMethods: "'OPTIONS,GET,POST,PUT,DELETE'"
+        AllowMethods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
       Models: # request/response schemas, validates the request body before Lambda runs
         CreateWidgetRequest:
           type: object # body must be a JSON object
@@ -80,7 +85,12 @@ Resources:
             description:
               type: string
               maxLength: 500
+        GenericJsonObjectRequest:
+          type: object
+          additionalProperties: true
       Auth: # configure authorization behavior for the API or for a specific route
+        ApiKeyRequired: true
+        AddApiKeyRequiredToCorsPreflight: false
         DefaultAuthorizer: DddTokenAuthorizer
         AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
@@ -99,6 +109,24 @@ Resources:
       CompatibleRuntimes:
         - nodejs22.x
       RetentionPolicy: Retain
+
+  RestApiUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn:
+      - RestApiStage
+    Properties:
+      UsagePlanName: !Sub '${ProjectName}-${StageName}-usage-plan'
+      Description: !Sub 'Usage plan for ${ProjectName}-${StageName}'
+      ApiStages:
+        - ApiId: !Ref RestApi
+          Stage: !Ref StageName
+
+  RestApiUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref ExistingApiKeyId
+      KeyType: API_KEY
+      UsagePlanId: !Ref RestApiUsagePlan
 
   SharedFunctionRole: # default app Lambda permissions, 
     Type: AWS::IAM::Role
@@ -176,77 +204,1401 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       Events:
-        PipelineSmokeAny:
+        PipelineSmokeRootGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
             Path: /pipeline/smoke
-            Method: ANY
+            Method: GET
             Auth:
               Authorizer: NONE
+        PipelineSmokeRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pipeline/smoke
+            Method: DELETE
+            Auth:
+              Authorizer: NONE
+        PipelineSmokeRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pipeline/smoke
+            Method: POST
+            Auth:
+              Authorizer: NONE
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PipelineSmokeRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pipeline/smoke
+            Method: PUT
+            Auth:
+              Authorizer: NONE
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PipelineSmokeRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pipeline/smoke
+            Method: PATCH
+            Auth:
+              Authorizer: NONE
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
 
-  FrameworkProxyFunction: # API Gateway proxy integration example
-    # - path catch-all routing with {proxy+}
-    # - a public route family
-    # - thin Lambda route dispatch using event.httpMethod + event.resource
-    # - demonstrates catch-all routing with {proxy+}
-    # - demonstrates open routes without authorizer
+  AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${StageName}-framework-proxy'
-      CodeUri: functions/framework-proxy/
+      FunctionName: !Sub '${ProjectName}-${StageName}-auth'
+      CodeUri: functions/auth/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       Events:
-        FrameworkProxyRoot:
+        AuthRootGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /framework/proxy
+            Path: /auth
             Method: GET
-            Auth:
-              Authorizer: NONE # authorizer can be excluded per route
-        FrameworkProxyAny:
+        AuthRootDELETE:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /framework/proxy/{proxy+}
-            Method: ANY
-            Auth:
-              Authorizer: NONE # authorizer can be excluded per route
-
-  FrameworkProtectedFunction: # protected app-route example
-    # - demonstrates default authorizer usage
-    # - demonstrates request validation
-    # - demonstrates reading auth context
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub '${ProjectName}-${StageName}-framework-protected'
-      CodeUri: functions/framework-protected/
-      Handler: index.handler
-      Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
-      AutoPublishAlias: !Ref LambdaAliasName
-      Events:
-        ProtectedConfigGet:
+            Path: /auth
+            Method: DELETE
+        AuthRootPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /framework/protected/config
-            Method: GET
-        ProtectedWidgetCreate:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /framework/protected/widgets
+            Path: /auth
             Method: POST
             RequestModel:
-              Model: CreateWidgetRequest
-              Required: true
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/{proxy+}
+            Method: GET
+        AuthProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/{proxy+}
+            Method: DELETE
+        AuthProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  UserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-user'
+      CodeUri: functions/user/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        UserRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user
+            Method: GET
+        UserRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user
+            Method: DELETE
+        UserRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        UserRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        UserRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        UserProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user/{proxy+}
+            Method: GET
+        UserProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user/{proxy+}
+            Method: DELETE
+        UserProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        UserProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        UserProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  NgoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-ngo'
+      CodeUri: functions/ngo/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        NgoRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo
+            Method: GET
+        NgoRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo
+            Method: DELETE
+        NgoRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NgoRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NgoRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NgoProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo/{proxy+}
+            Method: GET
+        NgoProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo/{proxy+}
+            Method: DELETE
+        NgoProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NgoProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NgoProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
+      CodeUri: functions/pet-profile/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetProfileRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile
+            Method: GET
+        PetProfileRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile
+            Method: DELETE
+        PetProfileRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetProfileRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetProfileRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetProfileProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{proxy+}
+            Method: GET
+        PetProfileProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{proxy+}
+            Method: DELETE
+        PetProfileProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetProfileProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetProfileProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetSourceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-source'
+      CodeUri: functions/pet-source/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetSourceRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source
+            Method: GET
+        PetSourceRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source
+            Method: DELETE
+        PetSourceRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetSourceRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetSourceRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetSourceProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source/{proxy+}
+            Method: GET
+        PetSourceProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source/{proxy+}
+            Method: DELETE
+        PetSourceProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetSourceProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetSourceProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetTransferFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-transfer'
+      CodeUri: functions/pet-transfer/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetTransferRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer
+            Method: GET
+        PetTransferRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer
+            Method: DELETE
+        PetTransferRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetTransferRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetTransferRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetTransferProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer/{proxy+}
+            Method: GET
+        PetTransferProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer/{proxy+}
+            Method: DELETE
+        PetTransferProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetTransferProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetTransferProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetAdoptionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-adoption'
+      CodeUri: functions/pet-adoption/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetAdoptionRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption
+            Method: GET
+        PetAdoptionRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption
+            Method: DELETE
+        PetAdoptionRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAdoptionRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAdoptionRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAdoptionProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{proxy+}
+            Method: GET
+        PetAdoptionProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{proxy+}
+            Method: DELETE
+        PetAdoptionProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAdoptionProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAdoptionProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetMedicalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-medical'
+      CodeUri: functions/pet-medical/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetMedicalRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical
+            Method: GET
+        PetMedicalRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical
+            Method: DELETE
+        PetMedicalRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{proxy+}
+            Method: GET
+        PetMedicalProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{proxy+}
+            Method: DELETE
+        PetMedicalProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-analysis'
+      CodeUri: functions/pet-analysis/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetAnalysisRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis
+            Method: GET
+        PetAnalysisRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis
+            Method: DELETE
+        PetAnalysisRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAnalysisRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAnalysisRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAnalysisProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/{proxy+}
+            Method: GET
+        PetAnalysisProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/{proxy+}
+            Method: DELETE
+        PetAnalysisProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAnalysisProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAnalysisProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetRecoveryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-recovery'
+      CodeUri: functions/pet-recovery/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetRecoveryRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery
+            Method: GET
+        PetRecoveryRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery
+            Method: DELETE
+        PetRecoveryRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetRecoveryRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetRecoveryRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetRecoveryProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/{proxy+}
+            Method: GET
+        PetRecoveryProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/{proxy+}
+            Method: DELETE
+        PetRecoveryProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetRecoveryProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetRecoveryProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  PetBiometricFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-biometric'
+      CodeUri: functions/pet-biometric/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        PetBiometricRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric
+            Method: GET
+        PetBiometricRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric
+            Method: DELETE
+        PetBiometricRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetBiometricRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetBiometricRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetBiometricProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric/{proxy+}
+            Method: GET
+        PetBiometricProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric/{proxy+}
+            Method: DELETE
+        PetBiometricProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetBiometricProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetBiometricProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  NotificationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-notifications'
+      CodeUri: functions/notifications/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        NotificationsRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications
+            Method: GET
+        NotificationsRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications
+            Method: DELETE
+        NotificationsRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NotificationsRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NotificationsRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NotificationsProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/{proxy+}
+            Method: GET
+        NotificationsProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/{proxy+}
+            Method: DELETE
+        NotificationsProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NotificationsProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NotificationsProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  CommerceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-commerce'
+      CodeUri: functions/commerce/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        CommerceRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce
+            Method: GET
+        CommerceRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce
+            Method: DELETE
+        CommerceRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/{proxy+}
+            Method: GET
+        CommerceProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/{proxy+}
+            Method: DELETE
+        CommerceProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+
+  LogisticsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-logistics'
+      CodeUri: functions/logistics/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      Events:
+        LogisticsRootGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics
+            Method: GET
+        LogisticsRootDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics
+            Method: DELETE
+        LogisticsRootPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsRootPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsRootPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/{proxy+}
+            Method: GET
+        LogisticsProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/{proxy+}
+            Method: DELETE
+        LogisticsProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsProxyPUT:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/{proxy+}
+            Method: PUT
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
               ValidateBody: true
 
 Outputs: # expose useful values from the deployed stack after CloudFormation/SAM finishes

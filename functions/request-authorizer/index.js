@@ -1,10 +1,11 @@
 'use strict';
 
+const jwt = require('jsonwebtoken');
 const { buildPolicy, getBearerToken, isTrue } = require('@aws-ddd-api/shared');
 
 exports.handler = async (event) => {
   const methodArn = event.methodArn || '*';
-  const bypass = isTrue(process.env.AUTH_BYPASS, true);
+  const bypass = isTrue(process.env.AUTH_BYPASS, false);
 
   if (bypass) {
     return buildPolicy({
@@ -13,33 +14,68 @@ exports.handler = async (event) => {
       resource: methodArn,
       context: {
         authMode: 'bypass',
-        stage: process.env.STAGE_NAME || 'dev',
+        stage: process.env.STAGE_NAME || 'development',
+        userId: 'dev-user-id',
+        userEmail: 'dev@test.com',
+        userRole: 'developer',
       },
     });
   }
 
-  const presentedToken = getBearerToken(event.authorizationToken);
-  const expectedToken = process.env.AUTH_SHARED_TOKEN || '';
+  const token = getBearerToken(event.authorizationToken);
+  const jwtSecret = process.env.JWT_SECRET || '';
 
-  if (!presentedToken || !expectedToken || presentedToken !== expectedToken) {
+  if (!token || !jwtSecret) {
     return buildPolicy({
       principalId: 'unauthorized',
       effect: 'Deny',
       resource: methodArn,
       context: {
-        authMode: 'shared-token',
-        reason: 'token-mismatch',
+        authMode: 'jwt',
+        reason: !token ? 'missing-token' : 'missing-jwt-secret',
       },
     });
   }
 
-  return buildPolicy({
-    principalId: 'authorized-client',
-    effect: 'Allow',
-    resource: methodArn,
-    context: {
-      authMode: 'shared-token',
-      stage: process.env.STAGE_NAME || 'dev',
-    },
-  });
+  try {
+    const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
+    const userId = decoded.userId || decoded.sub;
+
+    if (!userId) {
+      return buildPolicy({
+        principalId: 'unauthorized',
+        effect: 'Deny',
+        resource: methodArn,
+        context: {
+          authMode: 'jwt',
+          reason: 'missing-user-claim',
+        },
+      });
+    }
+
+    return buildPolicy({
+      principalId: String(userId),
+      effect: 'Allow',
+      resource: methodArn,
+      context: {
+        authMode: 'jwt',
+        stage: process.env.STAGE_NAME || 'development',
+        userId,
+        userEmail: decoded.userEmail || decoded.email || '',
+        userRole: decoded.userRole || decoded.role || '',
+        ngoId: decoded.ngoId || '',
+        ngoName: decoded.ngoName || '',
+      },
+    });
+  } catch (_error) {
+    return buildPolicy({
+      principalId: 'unauthorized',
+      effect: 'Deny',
+      resource: methodArn,
+      context: {
+        authMode: 'jwt',
+        reason: 'jwt-verification-failed',
+      },
+    });
+  }
 };

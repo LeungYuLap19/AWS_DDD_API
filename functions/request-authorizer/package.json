@@ -1,0 +1,9 @@
+{
+  "name": "@aws-ddd-api/request-authorizer",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2"
+  }
+}
