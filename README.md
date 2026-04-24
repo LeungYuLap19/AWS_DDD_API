@@ -206,5 +206,5 @@ Add it as the GitHub repository secret:
 ## Notes
 
 - This template is a base framework, not the final domain deployment layout.
-- The smoke-test Lambda should stay small....
+- The smoke-test Lambda should stay small.
 - Real domain Lambdas can now be added into `functions/` on top of this baseline.
