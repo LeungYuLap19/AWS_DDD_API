@@ -51,6 +51,14 @@ jobs:
       - name: Deploy development
         run: sam deploy --config-env default
 
+      - name: Smoke test development
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name aws-ddd-api-development \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text)
+          curl --fail --silent --show-error "$API_URL/pipeline/smoke"
+
   deploy-production:
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_production == true
     needs: deploy-development
@@ -86,3 +94,11 @@ jobs:
 
       - name: Deploy production
         run: sam deploy --config-env production
+
+      - name: Smoke test production
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name aws-ddd-api-production \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text)
+          curl --fail --silent --show-error "$API_URL/pipeline/smoke"

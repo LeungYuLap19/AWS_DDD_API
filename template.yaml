@@ -216,6 +216,7 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
+              ApiKeyRequired: false
         PipelineSmokeRootDELETE:
           Type: Api
           Properties:
@@ -224,6 +225,7 @@ Resources:
             Method: DELETE
             Auth:
               Authorizer: NONE
+              ApiKeyRequired: false
         PipelineSmokeRootPOST:
           Type: Api
           Properties:
@@ -232,6 +234,7 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
+              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -244,6 +247,7 @@ Resources:
             Method: PUT
             Auth:
               Authorizer: NONE
+              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -256,6 +260,7 @@ Resources:
             Method: PATCH
             Auth:
               Authorizer: NONE
+              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false

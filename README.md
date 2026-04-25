@@ -305,7 +305,7 @@ trust policy 應限制到 repo：
 2. 每個 route 在 `zodSchema/` 補正式 schema
 3. `applications/` 開始承接 use case
 4. `services/` 承接 orchestration
-5. 再逐步把共用 helper 抽到 shared layer.
+5. 再逐步把共用 helper 抽到 shared layer
 
 ## 補充文件
 
