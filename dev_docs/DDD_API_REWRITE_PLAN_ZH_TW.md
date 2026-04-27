@@ -315,10 +315,8 @@
 也就是：
 
 - `index.ts`
-- `src/handler.ts`
 - `src/router.ts`
 - `src/config`
-- `src/middleware`
 - `src/services`
 - `src/models`
 - `src/utils`
@@ -337,16 +335,10 @@ functions/
     index.ts
     package.json
     src/
-      handler.ts
-      cors.js
       router.ts
       config/
         db.ts
         env.ts
-      middleware/
-        authJWT.ts
-        guard.ts
-        selfAccess.ts
       services/
         profile.ts
       applications/
@@ -364,7 +356,6 @@ functions/
         sanitize.ts
         validators.ts
         zod.ts
-        rateLimit.ts
       zodSchema/
         petProfileSchema.ts
       locales/
@@ -374,17 +365,23 @@ functions/
 
 ### 5.3 分層責任
 
-- `handler.ts`
+- `index.ts`
   - Lambda entry
-  - parse event
-  - auth context
-  - request dispatch
+  - `createApiGatewayHandler(routeRequest, { response })`
+  - shared handler adapter 會 parse body、attach `awsRequestId`、catch unexpected error
 
 - `router.ts`
   - `${httpMethod} ${resource}` 對應 use case
+  - `createRouter(routes, { response })`
+  - router 404/405 使用同一個 domain response singleton
 
-- `middleware/`
-  - auth, guard, ownership
+- `utils/`
+  - response singleton、sanitize、validators、domain helpers
+
+- domain guard / ownership
+  - 不做 JWT verify；JWT 已由 API Gateway Lambda authorizer 處理
+  - `/me` endpoint 從 authorizer context 取得 `userId` / `ngoId`
+  - `{petId}` 等 resource route 在 application/service 讀 DB 後做 ownership / role check
 
 - `services/`
   - route-facing orchestration
@@ -409,7 +406,43 @@ functions/
   - request validation schema
 
 - `utils/`
-  - response, logger, sanitize, validators, zod helper, rate limit
+  - `response.ts` 載入 domain locale 並建立 `createResponse({ domainTranslations })`
+  - logger, sanitize, validators, zod helper
+
+### 5.4 Shared response / i18n mental model
+
+- shared layer 內有 common locales
+- 每個 domain Lambda 有自己的 `src/locales/en.json`、`src/locales/zh.json`
+- 每個 domain 只建立一個 `src/utils/response.ts` singleton
+- `index.ts`、`router.ts`、application/service 都使用同一個 response singleton
+- raw `json`、`successResponse`、`errorResponse` 不作為 public shared API；只透過 `createResponse()` 取得
+- `/me` endpoint 不做 self-access path check，直接由 authorizer context 的 `userId` / `ngoId` scope data
+- `{petId}`、`{notificationId}` 等 resource route 要在讀 DB 後做 ownership / role / state check
+
+### 5.5 Shared Mongo rate limit model
+
+- API Gateway usage plan 負責 broad edge throttling
+- shared Mongo rate limiter 負責 business throttle，例如 login、challenge resend、upload、sensitive action cooldown
+- 每個 domain Lambda 的 `db.ts` 負責 Mongoose connection
+- shared helper 接收 domain 傳入的 Mongoose instance，不自己建立 DB connection
+- key 預設 hash，避免 raw email / phone / IP key material 存入 Mongo
+- 超限時會用 `statusCode = 429`，`errorKey = common.rateLimited`
+
+建議用法：
+
+```ts
+import { requireMongoRateLimit } from '@aws-ddd-api/shared';
+import mongoose from 'mongoose';
+
+await requireMongoRateLimit({
+  action: 'auth.challenge.email',
+  event,
+  identifier: normalizedEmail,
+  limit: 5,
+  mongoose,
+  windowSeconds: 900,
+});
+```
 
 ---
 
@@ -471,8 +504,8 @@ PetProfileFunction:
   Type: AWS::Serverless::Function
   Properties:
     FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
-    CodeUri: functions/pet-profile/
-    Handler: src/handler.handler
+    CodeUri: dist/functions/pet-profile/
+    Handler: index.handler
     Role: !GetAtt SharedFunctionRole.Arn
     Layers:
       - !Ref SharedRuntimeLayer

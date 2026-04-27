@@ -47,7 +47,9 @@
 source code 寫在：
 
 - `functions/**/**/*.ts`
-- `layers/shared-runtime/**/index.ts`
+- `layers/shared-runtime/**/*.ts`
+- `functions/**/src/locales/*.json`
+- `layers/shared-runtime/**/locales/*.json`
 
 部署前流程：
 
@@ -156,7 +158,7 @@ development stack 已在 AWS 上實測：
 
 ### 每個 domain Lambda
 
-目前沿用第一階段 modularization 風格，並額外加入 `applications/`：
+目前沿用第一階段 modularization 風格，但 entrypoint 已收斂成 shared handler adapter：
 
 ```text
 functions/<domain>/
@@ -164,8 +166,7 @@ functions/<domain>/
 └── src/
     ├── applications/
     ├── config/
-    ├── handler.ts
-    ├── middleware/
+    ├── locales/
     ├── models/
     ├── router.ts
     ├── services/
@@ -175,16 +176,20 @@ functions/<domain>/
 
 設計原則：
 
+- `index.ts`
+  - Lambda entry
+  - `createApiGatewayHandler(routeRequest, { response })`
 - `router.ts`
   - route matching
+- `utils/response.ts`
+  - 每個 domain 的 response singleton
+  - 載入 common locale + domain locale
 - `applications/`
   - use case function
 - `services/`
   - orchestration / domain-facing service
 - `zodSchema/`
   - request schema
-- `middleware/`
-  - optional thin guard layer
 
 因為現在：
 
@@ -192,19 +197,62 @@ functions/<domain>/
 - JWT checking 交給 API Gateway authorizer
 - body validation 有一層 API Gateway gate
 
-所以 Lambda 內 middleware 會比舊 repo 薄很多，主要保留：
+所以 Lambda 內不保留 per-domain JWT verification file。需要的 guard 直接放在 application/service 或 domain helper：
 
-- route guard
-- ownership / self-access
-- domain-level validation
+- role guard：用 shared `requireRole(event, roles)`
+- `/me` scope：用 shared `requireAuthContext(event)` 從 authorizer context 取 `userId` / `ngoId`
+- resource ownership：對 `{petId}`、`{notificationId}` 等 route，讀 DB 後檢查 owner / ngo / role
+- domain-level validation：Zod/API Gateway schema 之外的 business rule
 
 ## shared layer
 
-`layers/shared-runtime` 會提供：
+`layers/shared-runtime` 提供 `@aws-ddd-api/shared`。目前主要 public API：
 
-- `@aws-ddd-api/shared`
+- `createApiGatewayHandler(routeRequest, { response })`
+- `createRouter(routes, { response })`
+- `createResponse({ domainTranslations })`
+- `requireAuthContext(event)` / `getAuthContext(event)` / `requireRole(event, roles)`
+- `logInfo()` / `logWarn()` / `logError()`
+- Mongo-backed rate limit helper: `requireMongoRateLimit()`
+- `parseJsonBodyWithSchema()` and Zod issue helpers
+- i18n helpers such as `translate()` and `getRequestLocale()`
 
-目前骨架已經可被 Lambda 正常 import。
+Response model:
+
+- raw `json`, `successResponse`, and `errorResponse` are not public root exports
+- each domain imports its own `src/utils/response.ts` singleton
+- handler errors, router 404/405, and app responses use the same singleton
+
+i18n model:
+
+- shared common locales live inside the shared layer
+- domain locales live in `functions/<domain>/src/locales/en.json` and `zh.json`
+- `createResponse()` merges common + domain locales and caches the merged dictionaries in warm Lambda containers
+
+Rate limit model:
+
+- API Gateway / usage plan still owns broad edge throttling
+- shared Mongo rate-limit helpers are for business throttles such as login, challenge resend, upload, or action cooldowns
+- domain `db.ts` owns Mongoose connection setup
+- shared rate limiter accepts that Mongoose instance and does not create its own DB connection
+- rate-limit keys are hashed by default to avoid storing raw email/phone/IP key material
+- over-limit errors use `statusCode: 429` and `errorKey: common.rateLimited`
+
+Example:
+
+```ts
+import { requireMongoRateLimit } from '@aws-ddd-api/shared';
+import mongoose from 'mongoose';
+
+await requireMongoRateLimit({
+  action: 'auth.challenge.email',
+  event,
+  identifier: normalizedEmail,
+  limit: 5,
+  mongoose,
+  windowSeconds: 900,
+});
+```
 
 ## template.yaml
 
@@ -305,7 +353,7 @@ trust policy 應限制到 repo：
 2. 每個 route 在 `zodSchema/` 補正式 schema
 3. `applications/` 開始承接 use case
 4. `services/` 承接 orchestration
-5. 再逐步把共用 helper 抽到 shared layer
+5. 真實 route 需要時在 application/service 做 role、ownership、domain rule checks
 
 ## 補充文件
 

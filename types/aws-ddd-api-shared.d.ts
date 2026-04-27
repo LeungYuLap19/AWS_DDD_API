@@ -136,10 +136,6 @@ declare module '@aws-ddd-api/shared/auth/context' {
   export function requireAuthContext(event: APIGatewayProxyEvent): AuthContext;
   export function hasRole(event: APIGatewayProxyEvent, role: string): boolean;
   export function requireRole(event: APIGatewayProxyEvent, roles: string | string[]): AuthContext;
-  export function isSelf(
-    event: APIGatewayProxyEvent,
-    userId: string | number | null | undefined
-  ): boolean;
 }
 
 declare module '@aws-ddd-api/shared/logging/logger' {
@@ -213,6 +209,28 @@ declare module '@aws-ddd-api/shared/i18n' {
   ): (key: string, fallback?: string) => string;
 }
 
+declare module '@aws-ddd-api/shared/rate-limit/mongo' {
+  import type { APIGatewayProxyEvent } from 'aws-lambda';
+  import type { Mongoose } from 'mongoose';
+
+  export function requireMongoRateLimit(options: {
+    action: string;
+    collectionName?: string;
+    event: APIGatewayProxyEvent;
+    failOpen?: boolean;
+    hashKey?: boolean;
+    identifier?: string | number | null;
+    includeIp?: boolean;
+    keySalt?: string;
+    limit: number;
+    modelName?: string;
+    mongoose: Mongoose;
+    nowMs?: number;
+    ttlWindowMultiplier?: number;
+    windowSeconds: number;
+  }): Promise<void>;
+}
+
 declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/auth/bearer';
   export * from '@aws-ddd-api/shared/auth/context';
@@ -223,5 +241,6 @@ declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/http/router';
   export * from '@aws-ddd-api/shared/i18n';
   export * from '@aws-ddd-api/shared/logging/logger';
+  export * from '@aws-ddd-api/shared/rate-limit/mongo';
   export * from '@aws-ddd-api/shared/validation/zod';
 }

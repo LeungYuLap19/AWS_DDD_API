@@ -18,30 +18,171 @@ Parameters:
     AllowedPattern: '[a-zA-Z0-9-_]+'
   ConfigNamespace:
     Type: String
-    Default: /aws-ddd-api/development
+    Default: /petpetclub/aws-ddd-api/development
   AllowedOrigins:
     Type: String
-    Default: http://localhost:3000
+    Default: '*'
   ExistingApiKeyId:
     Type: String
     Default: 44tq771b0m
     Description: Existing API Gateway API key ID to attach to this API usage plan.
+  AuthBypass:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  MongoDbUri:
+    Type: String
+    Default: ''
+    NoEcho: true
   JwtSecret:
     Type: String
-    Default: 0YzXfGJprZG7vNA0TxSVSGgTvI0Goct4mYfpp988tSi
+    Default: ''
+    NoEcho: true
     Description: JWT secret used by the Lambda authorizer when no SSM parameter path is provided.
-  JwtSecretParameterPath:
+  RefreshTokenMaxAgeSec:
+    Type: String
+    Default: '1209600'
+  RefreshRateLimitLimit:
+    Type: String
+    Default: '20'
+  RefreshRateLimitWindowSec:
+    Type: String
+    Default: '300'
+  AuthSmtpHost:
     Type: String
     Default: ''
-    Description: Optional SSM SecureString path for JWT_SECRET. Leave blank to use the local-safe default.
-  AuthBypassParameterPath:
+    NoEcho: true
+  AuthSmtpPort:
+    Type: String
+    Default: '465'
+  AuthSmtpUser:
     Type: String
     Default: ''
-    Description: Optional SSM SecureString path for AUTH_BYPASS. Leave blank to use the local-safe default.
-
-Conditions:
-  HasJwtSecretParameterPath: !Not [!Equals [!Ref JwtSecretParameterPath, '']]
-  HasAuthBypassParameterPath: !Not [!Equals [!Ref AuthBypassParameterPath, '']]
+    NoEcho: true
+  AuthSmtpPass:
+    Type: String
+    Default: ''
+    NoEcho: true
+  AuthSmtpFrom:
+    Type: String
+    Default: ''
+    NoEcho: true
+  TwilioAccountSid:
+    Type: String
+    Default: ''
+    NoEcho: true
+  TwilioAuthToken:
+    Type: String
+    Default: ''
+    NoEcho: true
+  TwilioVerifyServiceSid:
+    Type: String
+    Default: ''
+    NoEcho: true
+  S3BucketName:
+    Type: String
+    Default: ''
+  S3BucketBaseUrl:
+    Type: String
+    Default: ''
+  S3BucketRegion:
+    Type: String
+    Default: ''
+  AdoptionMongoDbUri:
+    Type: String
+    Default: ''
+    NoEcho: true
+  PetAnalysisVmPublicIp:
+    Type: String
+    Default: ''
+  PetAnalysisDockerImage:
+    Type: String
+    Default: ''
+  PetAnalysisHeatmap:
+    Type: String
+    Default: ''
+  PetAnalysisVmBreedPublicIp:
+    Type: String
+    Default: ''
+  PetAnalysisBreedDockerImage:
+    Type: String
+    Default: ''
+  BusinessMongoDbUri:
+    Type: String
+    Default: ''
+    NoEcho: true
+  FaceIdApi:
+    Type: String
+    Default: ''
+    NoEcho: true
+  CommerceSmtpHost:
+    Type: String
+    Default: ''
+    NoEcho: true
+  CommerceSmtpPort:
+    Type: String
+    Default: '465'
+  CommerceSmtpUser:
+    Type: String
+    Default: ''
+    NoEcho: true
+  CommerceSmtpPass:
+    Type: String
+    Default: ''
+    NoEcho: true
+  CommerceSmtpFrom:
+    Type: String
+    Default: ''
+    NoEcho: true
+  WhatsappBearerToken:
+    Type: String
+    Default: ''
+    NoEcho: true
+  WhatsappPhoneNumberId:
+    Type: String
+    Default: ''
+    NoEcho: true
+  CuttlyApiKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+  SfCustomerCode:
+    Type: String
+    Default: ''
+    NoEcho: true
+  SfProductionCheckCode:
+    Type: String
+    Default: ''
+    NoEcho: true
+  SfSandboxCheckCode:
+    Type: String
+    Default: ''
+    NoEcho: true
+  SfAddressApiKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+  LogisticsSmtpHost:
+    Type: String
+    Default: ''
+    NoEcho: true
+  LogisticsSmtpPort:
+    Type: String
+    Default: '465'
+  LogisticsSmtpUser:
+    Type: String
+    Default: ''
+    NoEcho: true
+  LogisticsSmtpPass:
+    Type: String
+    Default: ''
+    NoEcho: true
+  LogisticsSmtpFrom:
+    Type: String
+    Default: ''
+    NoEcho: true
 
 Globals: # shared default settings applied to all resources of a given type, unless a resource overrides them.
   Function:
@@ -54,14 +195,11 @@ Globals: # shared default settings applied to all resources of a given type, unl
         STAGE_NAME: !Ref StageName
         LAMBDA_ALIAS_NAME: !Ref LambdaAliasName
         CONFIG_NAMESPACE: !Ref ConfigNamespace
-        AUTH_BYPASS: !If
-          - HasAuthBypassParameterPath
-          - !Sub '{{resolve:ssm-secure:${AuthBypassParameterPath}}}'
-          - 'false'
-        JWT_SECRET: !If
-          - HasJwtSecretParameterPath
-          - !Sub '{{resolve:ssm-secure:${JwtSecretParameterPath}}}'
-          - !Ref JwtSecret
+        NODE_ENV: !Ref StageName
+        ALLOWED_ORIGINS: !Ref AllowedOrigins
+        MONGODB_URI: !Ref MongoDbUri
+        AUTH_BYPASS: !Ref AuthBypass
+        JWT_SECRET: !Ref JwtSecret
 
 Resources:
   RestApi:
@@ -276,6 +414,19 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          REFRESH_TOKEN_MAX_AGE_SEC: !Ref RefreshTokenMaxAgeSec
+          REFRESH_RATE_LIMIT_LIMIT: !Ref RefreshRateLimitLimit
+          REFRESH_RATE_LIMIT_WINDOW_SEC: !Ref RefreshRateLimitWindowSec
+          SMTP_HOST: !Ref AuthSmtpHost
+          SMTP_PORT: !Ref AuthSmtpPort
+          SMTP_USER: !Ref AuthSmtpUser
+          SMTP_PASS: !Ref AuthSmtpPass
+          SMTP_FROM: !Ref AuthSmtpFrom
+          TWILIO_ACCOUNT_SID: !Ref TwilioAccountSid
+          TWILIO_AUTH_TOKEN: !Ref TwilioAuthToken
+          TWILIO_VERIFY_SERVICE_SID: !Ref TwilioVerifyServiceSid
       Events:
         AuthRootGET:
           Type: Api
@@ -564,6 +715,11 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
         PetProfileRootGET:
           Type: Api
@@ -852,6 +1008,9 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          ADOPTION_MONGODB_URI: !Ref AdoptionMongoDbUri
       Events:
         PetAdoptionRootGET:
           Type: Api
@@ -1044,6 +1203,16 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
+          VM_PUBLIC_IP: !Ref PetAnalysisVmPublicIp
+          DOCKER_IMAGE: !Ref PetAnalysisDockerImage
+          HEATMAP: !Ref PetAnalysisHeatmap
+          VM_BREED_PUBLIC_IP: !Ref PetAnalysisVmBreedPublicIp
+          BREED_DOCKER_IMAGE: !Ref PetAnalysisBreedDockerImage
       Events:
         PetAnalysisRootGET:
           Type: Api
@@ -1140,6 +1309,11 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
         PetRecoveryRootGET:
           Type: Api
@@ -1236,6 +1410,13 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          BUSINESS_MONGODB_URI: !Ref BusinessMongoDbUri
+          FACEID_API: !Ref FaceIdApi
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
         PetBiometricRootGET:
           Type: Api
@@ -1428,6 +1609,19 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
+          SMTP_HOST: !Ref CommerceSmtpHost
+          SMTP_PORT: !Ref CommerceSmtpPort
+          SMTP_USER: !Ref CommerceSmtpUser
+          SMTP_PASS: !Ref CommerceSmtpPass
+          SMTP_FROM: !Ref CommerceSmtpFrom
+          WHATSAPP_BEARER_TOKEN: !Ref WhatsappBearerToken
+          WHATSAPP_PHONE_NUMBER_ID: !Ref WhatsappPhoneNumberId
+          CUTTLY_API_KEY: !Ref CuttlyApiKey
       Events:
         CommerceRootGET:
           Type: Api
@@ -1524,6 +1718,17 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      Environment:
+        Variables:
+          SF_CUSTOMER_CODE: !Ref SfCustomerCode
+          SF_PRODUCTION_CHECK_CODE: !Ref SfProductionCheckCode
+          SF_SANDBOX_CHECK_CODE: !Ref SfSandboxCheckCode
+          SF_ADDRESS_API_KEY: !Ref SfAddressApiKey
+          SMTP_HOST: !Ref LogisticsSmtpHost
+          SMTP_PORT: !Ref LogisticsSmtpPort
+          SMTP_USER: !Ref LogisticsSmtpUser
+          SMTP_PASS: !Ref LogisticsSmtpPass
+          SMTP_FROM: !Ref LogisticsSmtpFrom
       Events:
         LogisticsRootGET:
           Type: Api
