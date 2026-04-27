@@ -74,7 +74,7 @@ function walkSharedFiles(dir = sharedSourceDir, prefix = '') {
 
     if (entry.name.endsWith('.ts')) {
       transpileSharedTs(relativePath);
-    } else if (entry.name.endsWith('.js')) {
+    } else if (entry.name.endsWith('.js') || entry.name.endsWith('.json')) {
       copySharedJs(relativePath);
     }
   }

@@ -1,5 +1,6 @@
-import type { APIGatewayProxyResult } from 'aws-lambda';
-import type { RouteContext, RouteHandler } from '../../../types/lambda';
+import { createRouter } from '@aws-ddd-api/shared';
+import type { RouteHandler } from '../../../types/lambda';
+import { response } from './utils/response';
 import { handleProxyAny, handleProxyRoot } from './services/transfer';
 
 const routes: Record<string, RouteHandler> = {
@@ -7,16 +8,4 @@ const routes: Record<string, RouteHandler> = {
   '/pet/transfer/{proxy+}': handleProxyAny,
 };
 
-export async function routeRequest(routeContext: RouteContext): Promise<APIGatewayProxyResult> {
-  const routeKey = `${routeContext.event.httpMethod} ${routeContext.event.resource}`;
-  const routeAction = routes[routeContext.event.resource] || routes[routeKey];
-
-  if (!routeAction) {
-    return routeContext.json(404, {
-      message: 'Route not found',
-      routeKey,
-    });
-  }
-
-  return routeAction(routeContext);
-}
+export const routeRequest = createRouter(routes, { response });
