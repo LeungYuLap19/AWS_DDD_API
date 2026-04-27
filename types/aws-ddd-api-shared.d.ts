@@ -172,6 +172,12 @@ declare module '@aws-ddd-api/shared/config/boolean' {
   export function isTrue(value: unknown, defaultValue?: boolean): boolean;
 }
 
+declare module '@aws-ddd-api/shared/config/env' {
+  import type { ZodType } from 'zod';
+
+  export function validateEnv<T>(envSchema: ZodType<T>, scope?: string): T;
+}
+
 declare module '@aws-ddd-api/shared/i18n' {
   import type { APIGatewayProxyEvent } from 'aws-lambda';
 
@@ -236,6 +242,7 @@ declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/auth/context';
   export * from '@aws-ddd-api/shared/auth/policy';
   export * from '@aws-ddd-api/shared/config/boolean';
+  export * from '@aws-ddd-api/shared/config/env';
   export * from '@aws-ddd-api/shared/http/handler';
   export * from '@aws-ddd-api/shared/http/response';
   export * from '@aws-ddd-api/shared/http/router';
