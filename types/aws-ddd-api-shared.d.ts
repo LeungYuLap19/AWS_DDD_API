@@ -1,5 +1,5 @@
 declare module '@aws-ddd-api/shared/http/response' {
-  import type { APIGatewayProxyResult } from 'aws-lambda';
+  import type { APIGatewayProxyEvent } from 'aws-lambda';
 
   export interface JsonResponse {
     statusCode: number;
@@ -7,53 +7,48 @@ declare module '@aws-ddd-api/shared/http/response' {
     body: string;
   }
 
-  export interface ErrorJsonOptions {
-    code?: string;
-    details?: unknown;
+  interface ResponseOptions {
+    domainTranslations?: import('@aws-ddd-api/shared/i18n').TranslationDictionaries;
     extraHeaders?: Record<string, string>;
+    locale?: string;
     requestId?: string;
   }
 
-  export interface CorsHeaderOptions {
-    origin?: string | null;
-    allowedOrigins?: string[];
-    allowCredentials?: boolean;
-    allowHeaders?: string;
-    allowMethods?: string;
+  interface EventResponseOptions extends ResponseOptions {
+    event?: APIGatewayProxyEvent & { awsRequestId?: string };
   }
 
-  export function json(
-    statusCode: number,
-    payload: unknown,
-    extraHeaders?: Record<string, string>
-  ): JsonResponse;
+  export interface CreateResponseOptions {
+    domainTranslations?: import('@aws-ddd-api/shared/i18n').TranslationDictionaries;
+  }
 
-  export function errorJson(
-    statusCode: number,
-    message?: string,
-    options?: ErrorJsonOptions
-  ): JsonResponse;
+  export interface ResponseHelpers {
+    errorResponse(
+      statusCode: number,
+      errorKey: string,
+      event: APIGatewayProxyEvent & { awsRequestId?: string },
+      extraHeaders?: Record<string, string>
+    ): JsonResponse;
+    successResponse(
+      statusCode: number,
+      event: APIGatewayProxyEvent & { awsRequestId?: string },
+      data?: Record<string, unknown>,
+      extraHeaders?: Record<string, string>
+    ): JsonResponse;
+  }
 
-  export function safeJsonParse(body: string | null | undefined): unknown;
-
-  export function withCorsHeaders<T extends APIGatewayProxyResult>(
-    response: T,
-    options?: CorsHeaderOptions
-  ): T;
+  export function createResponse(options?: CreateResponseOptions): ResponseHelpers;
 }
 
 declare module '@aws-ddd-api/shared/http/handler' {
   import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-  import type { json } from '@aws-ddd-api/shared/http/response';
-
-  export type JsonResponder = typeof json;
+  import type { ResponseHelpers } from '@aws-ddd-api/shared/http/response';
 
   export interface ApiRouteContext<
     TEvent extends APIGatewayProxyEvent = APIGatewayProxyEvent
   > {
     event: TEvent & { awsRequestId?: string };
     body: unknown;
-    json: JsonResponder;
   }
 
   export type ApiRouteRequest<
@@ -61,31 +56,33 @@ declare module '@aws-ddd-api/shared/http/handler' {
   > = (routeContext: ApiRouteContext<TEvent>) => Promise<APIGatewayProxyResult>;
 
   export interface CreateApiGatewayHandlerOptions {
-    includeErrorDetails?: boolean;
+    response: ResponseHelpers;
     onError?: (error: unknown, event: APIGatewayProxyEvent) => void | Promise<void>;
   }
 
   export function createApiGatewayHandler(
     routeRequest: ApiRouteRequest,
-    options?: CreateApiGatewayHandlerOptions
+    options: CreateApiGatewayHandlerOptions
   ): (event: APIGatewayProxyEvent, context: Context) => Promise<APIGatewayProxyResult>;
 }
 
 declare module '@aws-ddd-api/shared/http/router' {
   import type { APIGatewayProxyResult } from 'aws-lambda';
   import type { ApiRouteContext } from '@aws-ddd-api/shared/http/handler';
+  import type { ResponseHelpers } from '@aws-ddd-api/shared/http/response';
 
   export type RouteHandler = (routeContext: ApiRouteContext) => Promise<APIGatewayProxyResult>;
   export type RouteMap = Record<string, RouteHandler>;
 
   export interface CreateRouterOptions {
-    notFoundMessage?: string;
-    methodNotAllowedMessage?: string;
+    response: ResponseHelpers;
+    notFoundErrorKey?: string;
+    methodNotAllowedErrorKey?: string;
   }
 
   export function createRouter(
     routes: RouteMap,
-    options?: CreateRouterOptions
+    options: CreateRouterOptions
   ): (routeContext: ApiRouteContext) => Promise<APIGatewayProxyResult>;
 }
 
@@ -131,7 +128,8 @@ declare module '@aws-ddd-api/shared/auth/context' {
 
   export class AuthContextError extends Error {
     statusCode: number;
-    constructor(message: string, statusCode: number);
+    errorKey: string;
+    constructor(errorKey: string, statusCode: number);
   }
 
   export function getAuthContext(event: APIGatewayProxyEvent): AuthContext | null;
@@ -178,6 +176,43 @@ declare module '@aws-ddd-api/shared/config/boolean' {
   export function isTrue(value: unknown, defaultValue?: boolean): boolean;
 }
 
+declare module '@aws-ddd-api/shared/i18n' {
+  import type { APIGatewayProxyEvent } from 'aws-lambda';
+
+  export type SupportedLocale = 'en' | 'zh';
+  export type TranslationDictionary = Record<string, unknown>;
+  export type TranslationDictionaries = Partial<Record<SupportedLocale, TranslationDictionary>>;
+
+  export const SUPPORTED_LOCALES: SupportedLocale[];
+  export const FALLBACK_LOCALE: SupportedLocale;
+
+  export function normalizeLocale(value: unknown, fallback?: SupportedLocale): SupportedLocale;
+  export function getRequestLocale(
+    event: APIGatewayProxyEvent,
+    fallback?: SupportedLocale
+  ): SupportedLocale;
+  export function loadCommonTranslations(locale?: unknown): TranslationDictionary;
+  export function loadTranslations(
+    locale?: unknown,
+    domainTranslations?: TranslationDictionaries
+  ): TranslationDictionary;
+  export function getTranslation(
+    translations: TranslationDictionary,
+    key: string,
+    fallback?: string
+  ): string;
+  export function translate(
+    key: string,
+    locale?: unknown,
+    fallback?: string,
+    domainTranslations?: TranslationDictionaries
+  ): string;
+  export function createTranslator(
+    locale?: unknown,
+    domainTranslations?: TranslationDictionaries
+  ): (key: string, fallback?: string) => string;
+}
+
 declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/auth/bearer';
   export * from '@aws-ddd-api/shared/auth/context';
@@ -186,6 +221,7 @@ declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/http/handler';
   export * from '@aws-ddd-api/shared/http/response';
   export * from '@aws-ddd-api/shared/http/router';
+  export * from '@aws-ddd-api/shared/i18n';
   export * from '@aws-ddd-api/shared/logging/logger';
   export * from '@aws-ddd-api/shared/validation/zod';
 }

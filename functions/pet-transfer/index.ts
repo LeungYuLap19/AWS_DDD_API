@@ -1,5 +1,5 @@
-import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { handleRequest } from './src/handler';
+import { createApiGatewayHandler } from '@aws-ddd-api/shared';
+import { routeRequest } from './src/router';
+import { response } from './src/utils/response';
 
-export const handler = async (event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> =>
-  handleRequest(event, context);
+export const handler = createApiGatewayHandler(routeRequest, { response });
