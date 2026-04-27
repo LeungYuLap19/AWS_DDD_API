@@ -29,23 +29,19 @@ copyFile(
   'dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/package.json'
 );
 
-const sharedSourceTsPath = path.join(
+const sharedSourceDir = path.join(
   repoRoot,
-  'layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.ts'
+  'layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared'
 );
-const sharedSourceJsPath = path.join(
+const sharedTargetDir = path.join(
   repoRoot,
-  'layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
-);
-const sharedTargetPath = path.join(
-  repoRoot,
-  'dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
+  'dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared'
 );
 
-fs.mkdirSync(path.dirname(sharedTargetPath), { recursive: true });
-
-if (fs.existsSync(sharedSourceTsPath)) {
-  const sharedSource = fs.readFileSync(sharedSourceTsPath, 'utf8');
+function transpileSharedTs(relativePath) {
+  const sourcePath = path.join(sharedSourceDir, relativePath);
+  const targetPath = path.join(sharedTargetDir, relativePath.replace(/\.ts$/, '.js'));
+  const sharedSource = fs.readFileSync(sourcePath, 'utf8');
   const transpiledShared = ts.transpileModule(sharedSource, {
     compilerOptions: {
       target: ts.ScriptTarget.ES2022,
@@ -54,11 +50,34 @@ if (fs.existsSync(sharedSourceTsPath)) {
     },
   });
 
-  fs.writeFileSync(sharedTargetPath, transpiledShared.outputText);
-} else if (fs.existsSync(sharedSourceJsPath)) {
-  fs.copyFileSync(sharedSourceJsPath, sharedTargetPath);
-} else {
-  throw new Error(
-    'Shared runtime entry not found. Expected layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.ts or index.js'
-  );
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, transpiledShared.outputText);
 }
+
+function copySharedJs(relativePath) {
+  const sourcePath = path.join(sharedSourceDir, relativePath);
+  const targetPath = path.join(sharedTargetDir, relativePath);
+
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.copyFileSync(sourcePath, targetPath);
+}
+
+function walkSharedFiles(dir = sharedSourceDir, prefix = '') {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const relativePath = path.join(prefix, entry.name);
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      walkSharedFiles(fullPath, relativePath);
+      continue;
+    }
+
+    if (entry.name.endsWith('.ts')) {
+      transpileSharedTs(relativePath);
+    } else if (entry.name.endsWith('.js')) {
+      copySharedJs(relativePath);
+    }
+  }
+}
+
+walkSharedFiles();

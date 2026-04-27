@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { json } from '@aws-ddd-api/shared';
+import * as shared from '@aws-ddd-api/shared';
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  return json(200, {
+  return shared.json(200, {
     success: true,
     service: 'pipeline-smoke',
     project: process.env.PROJECT_NAME,
@@ -12,5 +12,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     alias: process.env.LAMBDA_ALIAS_NAME,
     requestId: event.requestContext?.requestId || null,
     timestamp: new Date().toISOString(),
+    sharedLayer: {
+      importOk: true,
+      exportedKeys: Object.keys(shared).sort(),
+    },
   });
 }
