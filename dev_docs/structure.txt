@@ -1,8 +1,9 @@
-handler
-middlewares
+index
 router
 services
 applications
+utils/response
+locales
 
 /auth
   POST /account/generate-email-code

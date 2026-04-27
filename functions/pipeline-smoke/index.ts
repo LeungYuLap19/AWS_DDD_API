@@ -9,7 +9,7 @@ const smokeTranslations = {
   },
   zh: {
     pipelineSmoke: {
-      ok: 'Pipeline smoke domain locale is available',
+      ok: 'Pipeline smoke domain 語系已成功載入',
     },
   },
 };
