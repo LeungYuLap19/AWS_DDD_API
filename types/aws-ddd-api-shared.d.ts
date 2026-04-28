@@ -40,6 +40,15 @@ declare module '@aws-ddd-api/shared/http/response' {
   export function createResponse(options?: CreateResponseOptions): ResponseHelpers;
 }
 
+declare module '@aws-ddd-api/shared/http/cors' {
+  import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+
+  export function corsHeaders(event: APIGatewayProxyEvent): Record<string, string>;
+  export function handleOptions(
+    event: APIGatewayProxyEvent & { awsRequestId?: string }
+  ): APIGatewayProxyResult | null;
+}
+
 declare module '@aws-ddd-api/shared/http/handler' {
   import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
   import type { ResponseHelpers } from '@aws-ddd-api/shared/http/response';
@@ -243,6 +252,7 @@ declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/auth/policy';
   export * from '@aws-ddd-api/shared/config/boolean';
   export * from '@aws-ddd-api/shared/config/env';
+  export * from '@aws-ddd-api/shared/http/cors';
   export * from '@aws-ddd-api/shared/http/handler';
   export * from '@aws-ddd-api/shared/http/response';
   export * from '@aws-ddd-api/shared/http/router';
