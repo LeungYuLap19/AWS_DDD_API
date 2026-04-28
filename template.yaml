@@ -209,10 +209,6 @@ Resources:
       StageName: !Ref StageName
       EndpointConfiguration: REGIONAL
       ApiKeySourceType: HEADER
-      Cors: # it will handle OPTIONS automatically, no OPTIONS needed in every path
-        AllowOrigin: !Sub "'${AllowedOrigins}'"
-        AllowHeaders: "'Content-Type,Authorization,X-Request-Id'"
-        AllowMethods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
       Models: # request/response schemas, validates the request body before Lambda runs
         CreateWidgetRequest:
           type: object # body must be a JSON object
