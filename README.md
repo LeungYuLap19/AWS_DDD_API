@@ -10,6 +10,7 @@
 - shared Lambda-managed CORS
 - API Gateway request body validation
 - Lambda JWT authorizer
+- global Lambda VPC networking via SAM `Globals.Function.VpcConfig`
 - API key requirement
 - GitHub Actions 透過 OIDC 自動 deploy `development`，並支援手動 deploy `production`
 
@@ -118,6 +119,15 @@ authorizer 會把 claims 放進 API Gateway authorizer context，後續 domain L
 - `ngoId`
 - `ngoName`
 
+補充：
+
+- `auth/challenges/verify` 這條 route 是 **optional auth**
+- API Gateway 層仍然是 public route（`Authorizer: NONE`）
+- 但 Lambda 內會在 verify flow 嘗試解析 `Authorization` header
+- 沒有 Bearer token：走 public verify/login/register path
+- Bearer token 有效：走 link email / phone path
+- Bearer token 存在但無效：直接 `401`
+
 ### API key
 
 API 目前要求 `x-api-key`。
@@ -145,6 +155,7 @@ development stack 已在 AWS 上實測：
 - request body validation：正常
 - JWT checking：正常
 - API key requirement：正常
+- VPC-attached Lambda networking：正常
 - GitHub Actions OIDC deploy：正常
 
 ## Deployment Flow
@@ -222,7 +233,6 @@ development stack 已在 AWS 上實測：
 functions/<domain>/
 ├── index.ts
 └── src/
-    ├── applications/
     ├── config/
     ├── locales/
     ├── models/
@@ -242,8 +252,6 @@ functions/<domain>/
 - `utils/response.ts`
   - 每個 domain 的 response singleton
   - 載入 common locale + domain locale
-- `applications/`
-  - use case function
 - `services/`
   - orchestration / domain-facing service
 - `zodSchema/`
@@ -319,7 +327,7 @@ await requireMongoRateLimit({
 `template.yaml` 現在負責：
 
 - REST API
-- CORS
+- global Lambda VPC config
 - request model validation
 - JWT authorizer
 - API key + usage plan
@@ -339,6 +347,26 @@ await requireMongoRateLimit({
 - production 有自己一套 API Gateway
 
 這不是同一個 API Gateway 下開兩個 stage 的模式。
+
+### Lambda VPC networking
+
+目前所有 Lambda 透過 `Globals.Function.VpcConfig` 進入既有 VPC：
+
+- private subnets:
+  - `subnet-0e83ebdff39d08623`
+  - `subnet-07775337a6470eee2`
+- security group:
+  - `sg-0fd68782d1963c6a3`
+
+對應 template parameters：
+
+- `LambdaSubnetIds`
+- `LambdaSecurityGroupIds`
+
+因為所有 Lambda 都繼承 `VpcConfig`，execution role 必須同時具備：
+
+- `AWSLambdaBasicExecutionRole`
+- `AWSLambdaVPCAccessExecutionRole`
 
 ## samconfig 與 deploy
 
@@ -405,18 +433,133 @@ trust policy 應限制到 repo：
 - 本地適合做 handler / route / zod 開發
 - 真正驗證 API Gateway policy、authorizer、API key，應以 AWS 為準
 
+## Harness Engineering Workflow
+
+這個 repo 的推薦實作方式不是單次叫 AI 直接改完，而是用 **migration LLM + audition LLM** 的遞迴流程。
+
+核心目標：
+
+- 降低 hallucination
+- 降低 context shift
+- 讓 migration 不只是結構重寫，而是真正保留 legacy behavior
+- 讓測試與安全檢查成為 migration 的固定一部分
+
+### 角色分工
+
+- `migration LLM`
+  - 負責把 legacy behavior 從 `AWS_API` 遷移到 `AWS_DDD_API`
+  - 參考 `functions/auth` 作為目前最佳 DDD 實作樣板
+  - 在功能完成後負責寫 tests
+
+- `audition LLM`
+  - 負責 cross-validation
+  - 驗證 migration 結果是否偏離 legacy behavior、infra truth、security expectation
+  - 專門用來抓 hallucination、漏 branch、漏 side effect、漏 auth/rate-limit/test case
+
+### 推薦遞迴流程
+
+1. 選一個明確的 target Lambda
+   - 例如 `auth`
+   - 例如 `user`
+   - 例如 `pet-medical`
+2. 交給 `migration LLM` 實作
+3. 交給 `audition LLM` 做 audit
+4. 把 findings 丟回 `migration LLM` 修正
+5. 持續重複，直到沒有 major findings
+6. 再讓 `migration LLM` 補 tests
+7. 再讓 `audition LLM` 專門 audit tests 與 coverage
+8. 持續修正直到 build / validate / tests 都穩定
+
+### 為什麼這樣做
+
+這個流程延續了 `AWS_API` 第一階段 modularization 時有效的做法，但在 `AWS_DDD_API` 需要更嚴格。
+
+因為這裡不只是 pattern refactor，而是同時對齊四種 truth：
+
+- DDD structure truth
+  - 以 `functions/auth` 為主要 live reference
+- domain and route truth
+  - 以 `dev_docs/developers/DDD_API_REWRITE_PLAN_ZH_TW.md` 為主
+- infra truth
+  - 以 `template.yaml` 為主
+- legacy behavior truth
+  - 以 `AWS_API` codebase 與 `AWS_API/dev_docs/REFACTORED_LAMBDA_ENDPOINT_STATUS.md` 為主
+
+如果只做結構模仿，很容易得到看起來乾淨，但 behavior 漏失的 Lambda。
+
+### Migration LLM 讀檔順序
+
+先讀：
+
+1. `dev_docs/llms/migration/ROLE.md`
+2. `dev_docs/llms/LLM_PROJECT_CONTEXT.md`
+3. `dev_docs/llms/DDD_IMPLEMENTATION_CHECKLIST.md`
+4. `dev_docs/llms/DDD_MIGRATION_HARNESS.md`
+5. `dev_docs/llms/DDD_TESTING_STANDARD.md`
+6. `dev_docs/developers/DDD_API_REWRITE_PLAN_ZH_TW.md`
+7. `template.yaml`
+8. `AWS_API/dev_docs/REFACTORED_LAMBDA_ENDPOINT_STATUS.md`
+
+再讀：
+
+- 對應的 legacy source files
+- 對應的 target Lambda files
+
+### Audition LLM 讀檔順序
+
+先讀：
+
+1. `dev_docs/llms/audition/ROLE.md`
+2. `dev_docs/llms/LLM_PROJECT_CONTEXT.md`
+3. `dev_docs/llms/DDD_IMPLEMENTATION_CHECKLIST.md`
+4. `dev_docs/llms/DDD_MIGRATION_HARNESS.md`
+5. `dev_docs/llms/DDD_TESTING_STANDARD.md`
+6. `dev_docs/developers/DDD_API_REWRITE_PLAN_ZH_TW.md`
+7. `template.yaml`
+8. `AWS_API/dev_docs/REFACTORED_LAMBDA_ENDPOINT_STATUS.md`
+9. migration LLM 的改動與驗證輸出
+
+再讀：
+
+- 對應的 legacy source files
+
+### Tests 的位置
+
+tests 不應該在一開始 Lambda migration 還不穩時就先大量生成。
+
+推薦順序：
+
+1. 先把整個 target Lambda 的行為穩定
+2. 再補 tests
+3. 再 audit tests
+4. 再修正直到通過
+
+tests 最少要覆蓋：
+
+- happy paths
+- sad paths
+- cyberattack / abuse cases
+
+### 實務原則
+
+- 一次只做一個 target Lambda，不要同一輪同時改多個 Lambda
+- 不要讓 LLM 盲讀整個 repo 再自己決定範圍
+- 每一輪都應該明確指定這個 Lambda 對應的 legacy source files 與 target files
+- route 與 service 是 Lambda 內部要完成的內容，不是 migration 的主邊界
+- compile success 不等於 migration 完成
+- 需要以 audition LLM 的 review 結果確認是否真的保留了 legacy behavior
+
 ## 後續實作建議
 
 接下來的正常方向是：
 
 1. 逐個 domain 把 proxy scaffold 換成真實 route map
 2. 每個 route 在 `zodSchema/` 補正式 schema
-3. `applications/` 開始承接 use case
-4. `services/` 承接 orchestration
-5. 真實 route 需要時在 application/service 做 role、ownership、domain rule checks
+3. `services/` 承接 orchestration 與主要 business flow
+4. 真實 route 需要時在 service 做 role、ownership、domain rule checks
 
 ## 補充文件
 
 詳細的 domain 規劃、endpoint graph、legacy mapping，請看：
 
-- `dev_docs/DDD_API_REWRITE_PLAN_ZH_TW.md`
+- `dev_docs/developers/DDD_API_REWRITE_PLAN_ZH_TW.md`

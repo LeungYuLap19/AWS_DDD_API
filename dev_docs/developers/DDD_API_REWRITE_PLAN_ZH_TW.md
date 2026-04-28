@@ -1,10 +1,15 @@
 # AWS DDD API 重構藍圖（繁中）
 
+Audience:
+
+- primary: developers
+- secondary: LLMs that need target route and domain context
+
 ## 1. 文件目的
 
 本文件根據以下兩份來源整理：
 
-- `AWS_DDD_API/dev_docs/structure.txt`
+- `AWS_DDD_API/dev_docs/developers/structure.txt`
 - `AWS_API/dev_docs/REFACTORED_LAMBDA_ENDPOINT_STATUS.md`
 
 目的不是單純把舊 API 重新命名，而是定義一套可落地的 **DDD + Lambda Domain Routing + SAM + GitHub Actions CI/CD** 重構方式，讓後續開發不再依賴：
@@ -323,12 +328,6 @@
 - `src/zodSchema`
 - `src/locales`
 
-在這套基礎上，**額外新增 `src/applications/`**：
-
-- `applications/` 放 use case function
-- `services/` 變成較薄的 orchestration layer
-- 讓商業邏輯能以純函式或接近純函式的方式被重用、測試、組合
-
 ```text
 functions/
   pet-profile/
@@ -341,13 +340,6 @@ functions/
         env.ts
       services/
         profile.ts
-      applications/
-        createPetProfile.ts
-        getPetProfile.ts
-        listMyPets.ts
-        getPetByTag.ts
-        updatePetProfile.ts
-        deletePetProfile.ts
       models/
         Pet.ts
       utils/
@@ -385,19 +377,9 @@ functions/
 
 - `services/`
   - route-facing orchestration
-  - 控制 request -> application -> response 的流程
-  - 避免把所有 business logic 都塞進 service
-
-- `applications/`
-  - use case function
-  - 儘量保持可測試、可重用、低副作用
-  - 例如：
-    - `createPetProfile()`
-    - `updateNgoProfile()`
-    - `listOrganizationMembers()`
-    - `dispatchNotification()`
-    - `createOrder()`
-  - service function 需要時可呼叫多個 application function
+  - 控制 request -> service flow
+  - 目前不強制新增 `applications/`
+  - 當 flow 真的複雜到 service 過厚時，再視需要拆出額外模組
 
 - `models/`
   - Mongoose schema definition
@@ -408,6 +390,28 @@ functions/
 - `utils/`
   - `response.ts` 載入 domain locale 並建立 `createResponse({ domainTranslations })`
   - logger, sanitize, validators, zod helper
+
+### 5.5 Auth verify optional JWT
+
+`POST /auth/challenges/verify` 目前是特殊 case：
+
+- API Gateway route 維持 public（`Authorizer: NONE`）
+- Lambda 內部會嘗試讀取 `Authorization: Bearer <jwt>`
+- 沒有 token：
+  - 走 public verify flow
+  - new user -> `isNewUser: true`
+  - existing user -> issue token + refresh cookie
+- token 有效：
+  - 走 link email / phone flow
+- token 存在但無效：
+  - 直接 `401`
+
+這樣做是因為 verify route 同時需要：
+
+- public verification / login / registration proof
+- already logged-in linking flow
+
+而 REST API 單一路由不適合直接用 API Gateway authorizer 表達 optional auth。
 
 ### 5.4 Shared response / i18n mental model
 
