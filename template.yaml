@@ -545,10 +545,6 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         AuthTokensRefreshOPTIONS:
           Type: Api
           Properties:
