@@ -246,6 +246,7 @@ Resources:
       ContentUri: dist/layers/shared-runtime/
       CompatibleRuntimes:
         - nodejs22.x
+      PublishLambdaVersion: true
       RetentionPolicy: Retain
 
   RestApiUsagePlan:
@@ -328,6 +329,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
 
   PipelineSmokeFunction: # CI/CD smoke test example
     # - proves deployment pipeline works
@@ -341,6 +343,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PipelineSmokeRootGET:
           Type: Api
@@ -399,6 +402,15 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PipelineSmokeRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pipeline/smoke
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   AuthFunction:
     Type: AWS::Serverless::Function
@@ -410,6 +422,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           REFRESH_TOKEN_MAX_AGE_SEC: !Ref RefreshTokenMaxAgeSec
@@ -508,6 +521,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        AuthRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        AuthProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   UserFunction:
     Type: AWS::Serverless::Function
@@ -519,6 +550,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         UserRootGET:
           Type: Api
@@ -604,6 +636,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        UserRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        UserProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /user/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   NgoFunction:
     Type: AWS::Serverless::Function
@@ -615,6 +665,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         NgoRootGET:
           Type: Api
@@ -700,6 +751,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        NgoRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        NgoProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /ngo/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetProfileFunction:
     Type: AWS::Serverless::Function
@@ -711,6 +780,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -801,6 +871,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetProfileRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetProfileProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetSourceFunction:
     Type: AWS::Serverless::Function
@@ -812,6 +900,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PetSourceRootGET:
           Type: Api
@@ -897,6 +986,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetSourceRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetSourceProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/source/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetTransferFunction:
     Type: AWS::Serverless::Function
@@ -908,6 +1015,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PetTransferRootGET:
           Type: Api
@@ -993,6 +1101,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetTransferRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetTransferProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetAdoptionFunction:
     Type: AWS::Serverless::Function
@@ -1004,6 +1130,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           ADOPTION_MONGODB_URI: !Ref AdoptionMongoDbUri
@@ -1092,6 +1219,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetAdoptionRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetAdoptionProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetMedicalFunction:
     Type: AWS::Serverless::Function
@@ -1103,6 +1248,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PetMedicalRootGET:
           Type: Api
@@ -1188,6 +1334,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetMedicalRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetAnalysisFunction:
     Type: AWS::Serverless::Function
@@ -1199,6 +1363,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1294,6 +1459,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetAnalysisRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetAnalysisProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetRecoveryFunction:
     Type: AWS::Serverless::Function
@@ -1305,6 +1488,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1395,6 +1579,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetRecoveryRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetRecoveryProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetBiometricFunction:
     Type: AWS::Serverless::Function
@@ -1406,6 +1608,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           BUSINESS_MONGODB_URI: !Ref BusinessMongoDbUri
@@ -1498,6 +1701,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        PetBiometricRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetBiometricProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   NotificationsFunction:
     Type: AWS::Serverless::Function
@@ -1509,6 +1730,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         NotificationsRootGET:
           Type: Api
@@ -1594,6 +1816,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        NotificationsRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        NotificationsProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   CommerceFunction:
     Type: AWS::Serverless::Function
@@ -1605,6 +1845,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1703,6 +1944,24 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        CommerceRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   LogisticsFunction:
     Type: AWS::Serverless::Function
@@ -1714,6 +1973,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           SF_CUSTOMER_CODE: !Ref SfCustomerCode
@@ -1810,9 +2070,27 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        LogisticsRootOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        LogisticsProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
 Outputs: # expose useful values from the deployed stack after CloudFormation/SAM finishes
-  # - “after deploy, show me these values”
+# - “after deploy, show me these values”
   ApiUrl:
     Description: Base URL for the deployed REST API stage.
     Value: !Sub 'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}'

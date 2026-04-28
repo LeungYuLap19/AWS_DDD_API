@@ -62,6 +62,13 @@ function copySharedJs(relativePath) {
   fs.copyFileSync(sourcePath, targetPath);
 }
 
+function copyDirectory(relativeFrom, relativeTo) {
+  const sourceDir = path.join(repoRoot, relativeFrom);
+  const targetDir = path.join(repoRoot, relativeTo);
+
+  fs.cpSync(sourceDir, targetDir, { recursive: true });
+}
+
 function walkSharedFiles(dir = sharedSourceDir, prefix = '') {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const relativePath = path.join(prefix, entry.name);
@@ -81,3 +88,8 @@ function walkSharedFiles(dir = sharedSourceDir, prefix = '') {
 }
 
 walkSharedFiles();
+
+copyDirectory(
+  'node_modules/zod',
+  'dist/layers/shared-runtime/nodejs/node_modules/zod'
+);

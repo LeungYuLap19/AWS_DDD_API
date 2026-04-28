@@ -1,6 +1,11 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import * as shared from '@aws-ddd-api/shared';
 
+type RuntimeEnv = Record<string, string | undefined>;
+type RequestEvent = APIGatewayProxyEvent & { awsRequestId?: string };
+
+const env = (globalThis as unknown as { process: { env: RuntimeEnv } }).process.env;
+
 const smokeTranslations = {
   en: {
     pipelineSmoke: {
@@ -33,36 +38,43 @@ const requiredEnvKeys = [
 ];
 
 function isDevelopmentCorsConfigured(): boolean {
-  return process.env.STAGE_NAME !== 'development' || process.env.ALLOWED_ORIGINS === '*';
+  return env.STAGE_NAME !== 'development' || env.ALLOWED_ORIGINS === '*';
 }
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  const missingEnv = requiredEnvKeys.filter((key) => !process.env[key]);
+  const requestEvent = event as RequestEvent;
+  const optionsResponse = shared.handleOptions(requestEvent);
+
+  if (optionsResponse) {
+    return optionsResponse;
+  }
+
+  const missingEnv = requiredEnvKeys.filter((key) => !env[key]);
 
   if (missingEnv.length > 0) {
-    return response.errorResponse(500, 'pipelineSmoke.envMissing', event, {
+    return response.errorResponse(500, 'pipelineSmoke.envMissing', requestEvent, {
       'x-missing-env-count': String(missingEnv.length),
     });
   }
 
   if (!isDevelopmentCorsConfigured()) {
-    return response.errorResponse(500, 'pipelineSmoke.envMissing', event, {
+    return response.errorResponse(500, 'pipelineSmoke.envMissing', requestEvent, {
       'x-env-error': 'development-cors-not-wildcard',
     });
   }
 
-  return response.successResponse(200, event, {
+  return response.successResponse(200, requestEvent, {
     message: 'pipelineSmoke.ok',
     service: 'pipeline-smoke',
-    project: process.env.PROJECT_NAME,
+    project: env.PROJECT_NAME,
     method: event.httpMethod,
     resource: event.resource,
-    stage: process.env.STAGE_NAME,
-    alias: process.env.LAMBDA_ALIAS_NAME,
+    stage: env.STAGE_NAME,
+    alias: env.LAMBDA_ALIAS_NAME,
     env: {
       requiredKeysPresent: true,
-      developmentCorsWildcard: process.env.STAGE_NAME === 'development'
-        ? process.env.ALLOWED_ORIGINS === '*'
+      developmentCorsWildcard: env.STAGE_NAME === 'development'
+        ? env.ALLOWED_ORIGINS === '*'
         : null,
       checkedKeys: requiredEnvKeys,
     },
