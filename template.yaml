@@ -290,6 +290,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns: 
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # basic Lambda logging
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole # required when Lambda attaches to a VPC
       Policies:
         - PolicyName: shared-config-read # reading config/secrets
           PolicyDocument:
@@ -316,6 +317,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: authorizer-config-read
           PolicyDocument:
