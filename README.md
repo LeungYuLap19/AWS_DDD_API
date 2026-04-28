@@ -2,7 +2,7 @@
 
 這個 repo 是新的 DDD serverless API 基礎骨架。
 
-目前已經落地的重點：
+目前已經落地的重點-：
 
 - AWS SAM 管理整個 API Gateway + Lambda + Layer + IAM
 - TypeScript source，編譯後從 `dist/` 部署
