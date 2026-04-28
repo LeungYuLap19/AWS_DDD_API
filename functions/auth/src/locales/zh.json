@@ -1,1 +1,5 @@
-{}
+{
+  "auth": {
+    "notImplemented": "Auth 路由尚未完成實作"
+  }
+}

@@ -20,6 +20,14 @@ declare module '@aws-ddd-api/shared/http/response' {
 
   export interface CreateResponseOptions {
     domainTranslations?: import('@aws-ddd-api/shared/i18n').TranslationDictionaries;
+    scope?: string;
+  }
+
+  export interface ResponseLogOptions {
+    error?: unknown;
+    extra?: Record<string, unknown>;
+    message?: string;
+    scope?: string;
   }
 
   export interface ResponseHelpers {
@@ -27,13 +35,21 @@ declare module '@aws-ddd-api/shared/http/response' {
       statusCode: number,
       errorKey: string,
       event: APIGatewayProxyEvent & { awsRequestId?: string },
-      extraHeaders?: Record<string, string>
+      extraHeaders?: Record<string, string>,
+      logOptions?: ResponseLogOptions
     ): JsonResponse;
     successResponse(
       statusCode: number,
       event: APIGatewayProxyEvent & { awsRequestId?: string },
       data?: Record<string, unknown>,
-      extraHeaders?: Record<string, string>
+      extraHeaders?: Record<string, string>,
+      logOptions?: ResponseLogOptions
+    ): JsonResponse;
+    noContentResponse(
+      statusCode: number,
+      event: APIGatewayProxyEvent & { awsRequestId?: string },
+      extraHeaders?: Record<string, string>,
+      logOptions?: ResponseLogOptions
     ): JsonResponse;
   }
 
@@ -42,10 +58,12 @@ declare module '@aws-ddd-api/shared/http/response' {
 
 declare module '@aws-ddd-api/shared/http/cors' {
   import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+  import type { ResponseHelpers } from '@aws-ddd-api/shared/http/response';
 
   export function corsHeaders(event: APIGatewayProxyEvent): Record<string, string>;
   export function handleOptions(
-    event: APIGatewayProxyEvent & { awsRequestId?: string }
+    event: APIGatewayProxyEvent & { awsRequestId?: string },
+    response: ResponseHelpers
   ): APIGatewayProxyResult | null;
 }
 

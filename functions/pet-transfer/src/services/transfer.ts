@@ -1,11 +1,11 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import type { RouteContext } from '../../../../types/lambda';
-import { proxyAny, proxyRoot } from '../applications/proxy';
+import { response } from '../utils/response';
 
 export async function handleProxyRoot(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  return proxyRoot({ ...ctx, domain: 'pet-transfer' });
+  return response.successResponse(200, ctx.event);
 }
 
 export async function handleProxyAny(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  return proxyAny({ ...ctx, domain: 'pet-transfer' });
+  return response.successResponse(200, ctx.event);
 }

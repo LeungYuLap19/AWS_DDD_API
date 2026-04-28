@@ -1,1 +1,5 @@
-{}
+{
+  "auth": {
+    "notImplemented": "Auth route is not implemented yet"
+  }
+}
