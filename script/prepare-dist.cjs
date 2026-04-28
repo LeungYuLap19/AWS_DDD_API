@@ -17,6 +17,11 @@ copyFile(
   'dist/functions/request-authorizer/package.json'
 );
 
+copyFile(
+  'functions/auth/package.json',
+  'dist/functions/auth/package.json'
+);
+
 if (fs.existsSync(path.join(repoRoot, 'functions/request-authorizer/package-lock.json'))) {
   copyFile(
     'functions/request-authorizer/package-lock.json',

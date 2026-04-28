@@ -1,10 +1,8 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { getFirstZodIssueMessage } from '@aws-ddd-api/shared';
 import mongoose from 'mongoose';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
-import { refreshTokenBodySchema } from '../zodSchema/refreshTokenBodySchema';
 import { response } from '../utils/response';
 import {
   buildRefreshCookie,
@@ -59,11 +57,6 @@ async function buildAccessTokenForUser(user: {
 }
 
 export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = refreshTokenBodySchema.safeParse(ctx.body ?? {});
-  if (!parsed.success) {
-    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
-  }
-
   await connectToMongoDB();
 
   const refreshTokenResult = readRefreshTokenFromEvent(ctx.event);

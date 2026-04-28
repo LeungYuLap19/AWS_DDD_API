@@ -22,6 +22,12 @@ Parameters:
   AllowedOrigins:
     Type: String
     Default: '*'
+  LambdaSubnetIds:
+    Type: CommaDelimitedList
+    Default: subnet-0e83ebdff39d08623,subnet-07775337a6470eee2
+  LambdaSecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: sg-0fd68782d1963c6a3
   ExistingApiKeyId:
     Type: String
     Default: 44tq771b0m
@@ -189,6 +195,9 @@ Globals: # shared default settings applied to all resources of a given type, unl
     Runtime: nodejs22.x
     Timeout: 10
     MemorySize: 256
+    VpcConfig:
+      SecurityGroupIds: !Ref LambdaSecurityGroupIds
+      SubnetIds: !Ref LambdaSubnetIds
     Environment:
       Variables:
         PROJECT_NAME: !Ref ProjectName
@@ -281,6 +290,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns: 
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # basic Lambda logging
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole # required when Lambda attaches to a VPC
       Policies:
         - PolicyName: shared-config-read # reading config/secrets
           PolicyDocument:
@@ -307,6 +317,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: authorizer-config-read
           PolicyDocument:
@@ -534,10 +545,6 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         AuthTokensRefreshOPTIONS:
           Type: Api
           Properties:
