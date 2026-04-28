@@ -20,14 +20,7 @@ export const NGOSchema = new mongoose.Schema(
       type: String,
     },
     address: {
-      street: String,
-      city: String,
-      state: String,
-      zipCode: String,
-      country: {
-        type: String,
-        default: 'Taiwan',
-      },
+      type: String,
     },
     registrationNumber: {
       type: String,

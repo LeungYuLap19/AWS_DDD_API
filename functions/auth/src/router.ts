@@ -3,17 +3,19 @@ import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
 import {
   handleCreateChallenge,
-  handleCreateNgoRegistration,
-  handleCreateUserRegistration,
-  handleRefreshToken,
   handleVerifyChallenge,
-} from './services/auth';
+} from './services/challenge';
+import {
+  handleNgoRegistration,
+  handleUserRegistration,
+} from './services/registration';
+import { handleRefreshToken } from './services/refresh';
 
 const routes: Record<string, RouteHandler> = {
   'POST /auth/challenges': handleCreateChallenge,
   'POST /auth/challenges/verify': handleVerifyChallenge,
-  'POST /auth/registrations/user': handleCreateUserRegistration,
-  'POST /auth/registrations/ngo': handleCreateNgoRegistration,
+  'POST /auth/registrations/user': handleUserRegistration,
+  'POST /auth/registrations/ngo': handleNgoRegistration,
   'POST /auth/tokens/refresh': handleRefreshToken,
 };
 

@@ -1,5 +1,34 @@
 {
   "auth": {
-    "notImplemented": "Auth 路由尚未完成實作"
+    "notImplemented": "Auth 路由尚未完成實作",
+    "challenge": {
+      "createSuccessful": "驗證碼生成成功",
+      "verifySuccessful": "驗證成功",
+      "verificationFailed": "驗證失敗。請檢查您的識別資料與驗證碼後再試一次。",
+      "emailServiceUnavailable": "電子郵件服務暫時無法使用",
+      "smsServiceUnavailable": "短訊服務暫時無法使用",
+      "emailAlreadyLinked": "此電子郵件已綁定到其他帳戶。",
+      "phoneAlreadyLinked": "此電話號碼已綁定到其他帳戶。",
+      "codeIncorrect": "驗證碼不正確，請再試一次。",
+      "codeExpired": "驗證碼已過期。"
+    },
+    "registration": {
+      "user": {
+        "createSuccessful": "註冊成功",
+        "verificationRequired": "註冊前必須先完成近期的電子郵件或電話驗證。",
+        "emailAlreadyRegistered": "此電子郵件已被註冊。",
+        "phoneAlreadyRegistered": "此電話號碼已被註冊。"
+      },
+      "ngo": {
+        "createSuccessful": "NGO 註冊成功",
+        "businessRegistrationAlreadyRegistered": "此商業登記號碼已被註冊。"
+      }
+    },
+    "refresh": {
+      "missingRefreshToken": "缺少 refresh token cookie",
+      "invalidRefreshTokenCookie": "refresh token cookie 格式無效",
+      "invalidSession": "Refresh token 已過期或無效",
+      "ngoApprovalRequired": "NGO 帳號尚未獲批，無法刷新工作階段"
+    }
   }
 }
