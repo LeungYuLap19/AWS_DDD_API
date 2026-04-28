@@ -1,11 +1,22 @@
 import { createRouter } from '@aws-ddd-api/shared';
 import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { handleProxyAny, handleProxyRoot } from './services/auth';
+import {
+  handleCreateChallenge,
+  handleVerifyChallenge,
+} from './services/challenge';
+import {
+  handleNgoRegistration,
+  handleUserRegistration,
+} from './services/registration';
+import { handleRefreshToken } from './services/refresh';
 
 const routes: Record<string, RouteHandler> = {
-  '/auth': handleProxyRoot,
-  '/auth/{proxy+}': handleProxyAny,
+  'POST /auth/challenges': handleCreateChallenge,
+  'POST /auth/challenges/verify': handleVerifyChallenge,
+  'POST /auth/registrations/user': handleUserRegistration,
+  'POST /auth/registrations/ngo': handleNgoRegistration,
+  'POST /auth/tokens/refresh': handleRefreshToken,
 };
 
 export const routeRequest = createRouter(routes, { response });

@@ -1,1 +1,34 @@
-{}
+{
+  "auth": {
+    "notImplemented": "Auth route is not implemented yet",
+    "challenge": {
+      "createSuccessful": "Verification code generated successfully",
+      "verifySuccessful": "Verification successful",
+      "verificationFailed": "Verification failed. Please check your identifier and code and try again.",
+      "emailServiceUnavailable": "Email service is temporarily unavailable",
+      "smsServiceUnavailable": "SMS service is temporarily unavailable",
+      "emailAlreadyLinked": "This email is already linked to another account.",
+      "phoneAlreadyLinked": "This phone number is already linked to another account.",
+      "codeIncorrect": "Verification code is incorrect, please try again.",
+      "codeExpired": "Verification code has expired."
+    },
+    "registration": {
+      "user": {
+        "createSuccessful": "Registration successful",
+        "verificationRequired": "Recent email or phone verification is required before registration.",
+        "emailAlreadyRegistered": "This email is already registered.",
+        "phoneAlreadyRegistered": "This phone number is already registered."
+      },
+      "ngo": {
+        "createSuccessful": "NGO registration successful",
+        "businessRegistrationAlreadyRegistered": "Business registration number is already registered."
+      }
+    },
+    "refresh": {
+      "missingRefreshToken": "Missing refresh token cookie",
+      "invalidRefreshTokenCookie": "Invalid refresh token cookie format",
+      "invalidSession": "Refresh token expired or invalid",
+      "ngoApprovalRequired": "NGO approval is required before refreshing the session"
+    }
+  }
+}

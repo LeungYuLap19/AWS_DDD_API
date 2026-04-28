@@ -437,104 +437,112 @@ Resources:
           TWILIO_AUTH_TOKEN: !Ref TwilioAuthToken
           TWILIO_VERIFY_SERVICE_SID: !Ref TwilioVerifyServiceSid
       Events:
-        AuthRootGET:
+        AuthChallengesPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /auth
-            Method: GET
-        AuthRootDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth
-            Method: DELETE
-        AuthRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth
+            Path: /auth/challenges
             Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        AuthRootPUT:
+        AuthChallengesOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /auth
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        AuthRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        AuthProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth/{proxy+}
-            Method: GET
-        AuthProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth/{proxy+}
-            Method: DELETE
-        AuthProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        AuthProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        AuthProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        AuthRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /auth
+            Path: /auth/challenges
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        AuthProxyOPTIONS:
+        AuthChallengesVerifyPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /auth/{proxy+}
+            Path: /auth/challenges/verify
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthChallengesVerifyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/challenges/verify
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        AuthRegistrationsUserPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/registrations/user
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthRegistrationsUserOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/registrations/user
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        AuthRegistrationsNgoPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/registrations/ngo
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthRegistrationsNgoOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/registrations/ngo
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        AuthTokensRefreshPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/tokens/refresh
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthTokensRefreshOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/tokens/refresh
             Method: OPTIONS
             Auth:
               Authorizer: NONE

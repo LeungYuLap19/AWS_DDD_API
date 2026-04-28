@@ -23,6 +23,7 @@ const smokeTranslations = {
 
 const response = shared.createResponse({
   domainTranslations: smokeTranslations,
+  scope: 'pipeline-smoke.response',
 });
 
 const requiredEnvKeys = [
@@ -43,7 +44,7 @@ function isDevelopmentCorsConfigured(): boolean {
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const requestEvent = event as RequestEvent;
-  const optionsResponse = shared.handleOptions(requestEvent);
+  const optionsResponse = shared.handleOptions(requestEvent, response);
 
   if (optionsResponse) {
     return optionsResponse;
