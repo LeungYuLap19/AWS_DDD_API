@@ -246,6 +246,7 @@ Resources:
       ContentUri: dist/layers/shared-runtime/
       CompatibleRuntimes:
         - nodejs22.x
+      PublishLambdaVersion: true
       RetentionPolicy: Retain
 
   RestApiUsagePlan:
@@ -328,6 +329,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
 
   PipelineSmokeFunction: # CI/CD smoke test example
     # - proves deployment pipeline works
@@ -341,6 +343,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PipelineSmokeRootGET:
           Type: Api
@@ -419,6 +422,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           REFRESH_TOKEN_MAX_AGE_SEC: !Ref RefreshTokenMaxAgeSec
@@ -546,6 +550,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         UserRootGET:
           Type: Api
@@ -660,6 +665,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         NgoRootGET:
           Type: Api
@@ -774,6 +780,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -893,6 +900,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PetSourceRootGET:
           Type: Api
@@ -1007,6 +1015,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PetTransferRootGET:
           Type: Api
@@ -1121,6 +1130,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           ADOPTION_MONGODB_URI: !Ref AdoptionMongoDbUri
@@ -1238,6 +1248,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         PetMedicalRootGET:
           Type: Api
@@ -1352,6 +1363,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1476,6 +1488,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1595,6 +1608,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           BUSINESS_MONGODB_URI: !Ref BusinessMongoDbUri
@@ -1716,6 +1730,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Events:
         NotificationsRootGET:
           Type: Api
@@ -1830,6 +1845,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1957,6 +1973,7 @@ Resources:
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
       Environment:
         Variables:
           SF_CUSTOMER_CODE: !Ref SfCustomerCode
