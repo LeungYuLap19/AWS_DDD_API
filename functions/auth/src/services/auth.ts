@@ -2,6 +2,9 @@ import type { APIGatewayProxyResult } from 'aws-lambda';
 import { getFirstZodIssueMessage } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { challengeBodySchema } from '../zodSchema/challengeBodySchema';
+import { ngoRegistrationBodySchema } from '../zodSchema/ngoRegistrationBodySchema';
+import { refreshTokenBodySchema } from '../zodSchema/refreshTokenBodySchema';
+import { userRegistrationBodySchema } from '../zodSchema/userRegistrationBodySchema';
 import { verifyChallengeBodySchema } from '../zodSchema/verifyChallengeBodySchema';
 import { response } from '../utils/response';
 
@@ -40,18 +43,29 @@ export async function handleVerifyChallenge(ctx: RouteContext): Promise<APIGatew
   return notImplemented(ctx.event, 'POST /auth/challenges/verify');
 }
 
-export async function handleCreateUserRegistration(
-  ctx: RouteContext
-): Promise<APIGatewayProxyResult> {
+export async function handleCreateUserRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  const parsed = userRegistrationBodySchema.safeParse(ctx.body);
+  if (!parsed.success) {
+    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  }
+
   return notImplemented(ctx.event, 'POST /auth/registrations/user');
 }
 
-export async function handleCreateNgoRegistration(
-  ctx: RouteContext
-): Promise<APIGatewayProxyResult> {
+export async function handleCreateNgoRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  const parsed = ngoRegistrationBodySchema.safeParse(ctx.body);
+  if (!parsed.success) {
+    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  }
+
   return notImplemented(ctx.event, 'POST /auth/registrations/ngo');
 }
 
 export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  const parsed = refreshTokenBodySchema.safeParse(ctx.body ?? {});
+  if (!parsed.success) {
+    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  }
+
   return notImplemented(ctx.event, 'POST /auth/tokens/refresh');
 }
