@@ -7,11 +7,11 @@
 - AWS SAM 管理整個 API Gateway + Lambda + Layer + IAM
 - TypeScript source，編譯後從 `dist/` 部署
 - 14 個 domain Lambda 骨架
-- API Gateway CORS
+- shared Lambda-managed CORS
 - API Gateway request body validation
 - Lambda JWT authorizer
 - API key requirement
-- GitHub Actions 透過 OIDC 自動 deploy `development`
+- GitHub Actions 透過 OIDC 自動 deploy `development`，並支援手動 deploy `production`
 
 這不是手動 upload zip 的 repo。部署主線已經是：
 
@@ -84,9 +84,21 @@ npm run local:api
 
 ### CORS
 
-`template.yaml` 已配置 CORS，目前只先允許：
+目前 CORS 不再由 API Gateway `Cors` block 處理，而是由 shared runtime 處理：
 
-- `http://localhost:3000`
+- `layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/http/cors.ts`
+- `createApiGatewayHandler()` 會先跑 `handleOptions(event)`
+- shared `createResponse()` 會在 normal success/error response 自動 merge `corsHeaders(event)`
+
+目前規則：
+
+- `development`
+  - 如果 `ALLOWED_ORIGINS='*'`，回傳 wildcard CORS
+- `production`
+  - 讀取 `ALLOWED_ORIGINS` comma-separated allowlist
+  - 只反射 exact matched origin
+
+`ALLOWED_ORIGINS` 是 Lambda env var，由 `template.yaml` 的 `AllowedOrigins` parameter 注入。
 
 ### JWT authorizer
 
@@ -134,6 +146,52 @@ development stack 已在 AWS 上實測：
 - JWT checking：正常
 - API key requirement：正常
 - GitHub Actions OIDC deploy：正常
+
+## Deployment Flow
+
+### development
+
+1. 更新 GitHub Actions secrets（如需要）
+   - `DEV_ALLOWED_ORIGINS`
+   - 其他 `DEV_*`
+2. push 到 `main`
+3. GitHub Actions 執行 `deploy-development`
+4. workflow 會跑：
+   - `npm ci`
+   - `npm run build`
+   - `sam deploy --config-env default --parameter-overrides ...`
+5. CloudFormation 會更新：
+   - Lambda code
+   - shared layer version
+   - Lambda published versions / `development` alias
+
+### production
+
+1. 更新 GitHub Actions secrets（如需要）
+   - `PROD_ALLOWED_ORIGINS`
+   - 其他 `PROD_*`
+2. 手動觸發 workflow dispatch，並設 `deploy_production=true`
+3. GitHub Actions 先 deploy `development`
+4. 成功後再執行 `deploy-production`
+5. workflow 會跑：
+   - `npm ci`
+   - `npm run build`
+   - `sam deploy --config-env production --parameter-overrides ...`
+6. CloudFormation 會更新：
+   - Lambda code
+   - shared layer version
+   - Lambda published versions / `production` alias
+
+### alias / layer 行為
+
+這個 repo 現在依賴以下 SAM 行為確保 layer 更新會推進到 alias：
+
+- `SharedRuntimeLayer.Properties.PublishLambdaVersion: true`
+- every aliased function:
+  - `AutoPublishAlias: !Ref LambdaAliasName`
+  - `AutoPublishAliasAllProperties: true`
+
+這樣 shared layer 改動時，function 會 publish 新 version，alias 也會跟著移動，不會停留在舊 layer version。
 
 ## 目錄結構
 
@@ -193,7 +251,7 @@ functions/<domain>/
 
 因為現在：
 
-- CORS 交給 API Gateway
+- CORS 交給 shared runtime
 - JWT checking 交給 API Gateway authorizer
 - body validation 有一層 API Gateway gate
 
@@ -211,6 +269,8 @@ functions/<domain>/
 - `createApiGatewayHandler(routeRequest, { response })`
 - `createRouter(routes, { response })`
 - `createResponse({ domainTranslations })`
+- `corsHeaders(event)` / `handleOptions(event)`
+- `validateEnv(envSchema)`
 - `requireAuthContext(event)` / `getAuthContext(event)` / `requireRole(event, roles)`
 - `logInfo()` / `logWarn()` / `logError()`
 - Mongo-backed rate limit helper: `requireMongoRateLimit()`
