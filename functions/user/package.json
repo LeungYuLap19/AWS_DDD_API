@@ -1,0 +1,9 @@
+{
+  "name": "@aws-ddd-api/user",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "mongoose": "^9.5.0"
+  }
+}

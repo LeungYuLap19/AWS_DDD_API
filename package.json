@@ -6,7 +6,8 @@
     "validate": "sam validate --template-file template.yaml",
     "build:ts": "tsc -p tsconfig.json && node script/prepare-dist.cjs",
     "build": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml",
-    "local:api": "sam local start-api --template template.yaml",
+    "local:api": "sam local start-api --template .aws-sam/build/template.yaml",
+    "local:api:warm": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml && sam local start-api --template .aws-sam/build/template.yaml --env-vars env.json --warm-containers EAGER",
     "local:smoke": "npm_config_cache=.npm-cache sam local invoke PipelineSmokeFunction --event events/pipeline-smoke-get.json --template template.yaml"
   },
   "dependencies": {

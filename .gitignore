@@ -2,6 +2,9 @@
 dist/
 node_modules/
 env.json
+env.local.json
+env.development.json
+env.production.json
 set-github-dev-secrets.local.sh
 !layers/shared-runtime/
 !layers/shared-runtime/nodejs/
