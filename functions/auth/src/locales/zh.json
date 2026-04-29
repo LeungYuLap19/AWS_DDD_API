@@ -1,6 +1,16 @@
 {
   "auth": {
-    "notImplemented": "Auth 路由尚未完成實作",
+    "login": {
+      "ngo": {
+        "successful": "登入成功",
+        "paramsMissing": "必須提供電子郵件和密碼",
+        "invalidEmailFormat": "電子郵件格式無效",
+        "invalidUserCredential": "使用者憑證無效",
+        "userNGONotFound": "未找到 NGO 使用者存取權限",
+        "NGONotFound": "未找到非政府組織",
+        "ngoApprovalRequired": "NGO 帳號尚未獲批，暫時無法登入。"
+      }
+    },
     "challenge": {
       "createSuccessful": "驗證碼生成成功",
       "verifySuccessful": "驗證成功",

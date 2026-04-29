@@ -2,9 +2,11 @@ const path = require('path');
 const dns = require('dns');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 const envConfig = require('../env.json');
 
 const handlerModulePath = path.resolve(__dirname, '../dist/functions/ngo/index.js');
+const authHandlerModulePath = path.resolve(__dirname, '../dist/functions/auth/index.js');
 const BASE_URL = process.env.NGO_UAT_BASE_URL || 'http://127.0.0.1:3000';
 const TEST_TS = Date.now();
 const RUN_ID = `ddd-ngo-${TEST_TS}`;
@@ -97,6 +99,17 @@ function resetEnv() {
   process.env.AUTH_BYPASS = 'false';
   process.env.JWT_SECRET = 'test-secret';
   delete process.env.AWS_SAM_LOCAL;
+  process.env.REFRESH_TOKEN_MAX_AGE_SEC = '1209600';
+  process.env.REFRESH_RATE_LIMIT_LIMIT = '20';
+  process.env.REFRESH_RATE_LIMIT_WINDOW_SEC = '300';
+  process.env.SMTP_HOST = 'smtp.test';
+  process.env.SMTP_PORT = '465';
+  process.env.SMTP_USER = 'smtp-user';
+  process.env.SMTP_PASS = 'smtp-pass';
+  process.env.SMTP_FROM = 'no-reply@test.com';
+  process.env.TWILIO_ACCOUNT_SID = 'sid';
+  process.env.TWILIO_AUTH_TOKEN = 'token';
+  process.env.TWILIO_VERIFY_SERVICE_SID = 'verify-sid';
 }
 
 function loadHandlerWithMocks({
@@ -225,6 +238,109 @@ function loadHandlerWithMocks({
     },
     session,
     aggregate,
+  };
+}
+
+function loadAuthHandlerWithMocks({
+  userDoc = null,
+  ngoDoc = null,
+  ngoAccessDoc = null,
+  refreshTokenSave = jest.fn().mockResolvedValue(undefined),
+} = {}) {
+  jest.resetModules();
+  jest.clearAllMocks();
+  resetEnv();
+
+  const actualMongoose = jest.requireActual('mongoose');
+  const userFindOne = jest.fn(() => createLeanResult(userDoc));
+  const ngoFindOne = jest.fn(() => createLeanResult(ngoDoc));
+  const ngoUserAccessFindOne = jest.fn(() => createLeanResult(ngoAccessDoc));
+
+  function RefreshTokenModel(doc) {
+    Object.assign(this, doc);
+  }
+  RefreshTokenModel.prototype.save = refreshTokenSave;
+
+  const mongooseMock = {
+    Schema: actualMongoose.Schema,
+    Types: actualMongoose.Types,
+    connection: { readyState: 1 },
+    connect: jest.fn().mockResolvedValue({}),
+    models: {},
+    model: jest.fn((name) => {
+      if (name === 'User') return { findOne: userFindOne };
+      if (name === 'NgoUserAccess') return { findOne: ngoUserAccessFindOne };
+      if (name === 'NGO') return { findOne: ngoFindOne };
+      if (name === 'RefreshToken') return RefreshTokenModel;
+      if (name === 'EmailVerificationCode') return { findOneAndUpdate: jest.fn(), findOne: jest.fn(), deleteOne: jest.fn() };
+      if (name === 'SmsVerificationCode') return { findOne: jest.fn(), deleteOne: jest.fn() };
+      if (name === 'NgoCounters') return {};
+      return {};
+    }),
+  };
+
+  jest.doMock('mongoose', () => ({
+    __esModule: true,
+    default: mongooseMock,
+  }));
+
+  jest.doMock(
+    '@aws-ddd-api/shared',
+    () =>
+      require(path.resolve(
+        __dirname,
+        '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
+      )),
+    { virtual: true }
+  );
+
+  jest.doMock('bcrypt', () => ({
+    __esModule: true,
+    default: {
+      compare: jest.fn(async (plain, hashed) => plain === 'Password123!' && hashed === 'hashed-password'),
+      hash: jest.fn(async () => 'hashed-password'),
+    },
+  }));
+
+  jest.doMock('../dist/functions/auth/src/config/twilio.js', () => ({
+    __esModule: true,
+    createSmsVerification: jest.fn(),
+    checkSmsVerification: jest.fn(),
+    twilioClient: {
+      verify: {
+        v2: {
+          services: jest.fn(() => ({
+            verifications: { create: jest.fn() },
+            verificationChecks: { create: jest.fn() },
+          })),
+        },
+      },
+    },
+  }));
+
+  jest.doMock('../dist/functions/auth/src/config/mail.js', () => ({
+    __esModule: true,
+    sendMail: jest.fn(),
+    smtpTransporter: {
+      sendMail: jest.fn(),
+    },
+  }));
+
+  jest.doMock('../dist/functions/auth/src/utils/rateLimit.js', () => ({
+    __esModule: true,
+    applyRateLimit: jest.fn(async () => null),
+  }));
+
+  const { handler } = require(authHandlerModulePath);
+
+  return {
+    handler,
+    models: {
+      userFindOne,
+      ngoFindOne,
+      ngoUserAccessFindOne,
+    },
+    refreshTokenSave,
   };
 }
 
@@ -526,6 +642,107 @@ afterAll(async () => {
 });
 
 describe('Tier 2 - ngo handler integration', () => {
+  test('POST /auth/login/ngo returns an NGO token and refresh cookie for valid NGO credentials', async () => {
+    const { handler } = loadAuthHandlerWithMocks({
+      userDoc: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        email: 'ngo@test.com',
+        password: 'hashed-password',
+        role: 'ngo',
+        verified: true,
+      },
+      ngoAccessDoc: {
+        ngoId: '507f1f77bcf86cd799439012',
+      },
+      ngoDoc: {
+        _id: '507f1f77bcf86cd799439012',
+        name: 'Helping Paws',
+        isActive: true,
+        isVerified: true,
+      },
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/auth/login/ngo',
+        resource: '/auth/login/ngo',
+        body: JSON.stringify({
+          email: 'ngo@test.com',
+          password: 'Password123!',
+        }),
+      }),
+      createContext()
+    );
+
+    const body = JSON.parse(res.body);
+    expect(res.statusCode).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.role).toBe('ngo');
+    expect(body.ngoId).toBe('507f1f77bcf86cd799439012');
+    expect(body.token).toBeTruthy();
+    expect(res.headers['Set-Cookie']).toContain('refreshToken=');
+  });
+
+  test('POST /auth/login/ngo rejects invalid credentials', async () => {
+    const { handler } = loadAuthHandlerWithMocks({
+      userDoc: null,
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/auth/login/ngo',
+        resource: '/auth/login/ngo',
+        body: JSON.stringify({
+          email: 'ngo@test.com',
+          password: 'WrongPassword!',
+        }),
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body).errorKey).toBe('auth.login.ngo.invalidUserCredential');
+  });
+
+  test('POST /auth/login/ngo rejects unapproved NGOs', async () => {
+    const { handler } = loadAuthHandlerWithMocks({
+      userDoc: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        email: 'ngo@test.com',
+        password: 'hashed-password',
+        role: 'ngo',
+        verified: true,
+      },
+      ngoAccessDoc: {
+        ngoId: '507f1f77bcf86cd799439012',
+      },
+      ngoDoc: {
+        _id: '507f1f77bcf86cd799439012',
+        name: 'Helping Paws',
+        isActive: false,
+        isVerified: true,
+      },
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/auth/login/ngo',
+        resource: '/auth/login/ngo',
+        body: JSON.stringify({
+          email: 'ngo@test.com',
+          password: 'Password123!',
+        }),
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).errorKey).toBe('auth.login.ngo.ngoApprovalRequired');
+  });
+
   test('GET /ngo/me returns the sanitized NGO self profile and merged pet placement options', async () => {
     const { handler } = loadHandlerWithMocks({
       userDoc: {
@@ -1043,6 +1260,38 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
   });
 
   describe('happy paths', () => {
+    test('POST /auth/login/ngo signs in an existing NGO and returns a usable NGO token', async () => {
+      if (!(await ensureSamOrSkip())) return;
+      if (!(await ensureDbOrSkip())) return;
+      const fixture = await registerNgoFixture({ label: 'login-existing-ngo' });
+      expect(fixture.res.status).toBe(201);
+
+      const res = await req(
+        'POST',
+        '/auth/login/ngo',
+        {
+          email: fixture.payload.email,
+          password: fixture.payload.password,
+        },
+        {
+          origin: VALID_ORIGIN,
+          'x-forwarded-for': nextForwardedIp(),
+        }
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.role).toBe('ngo');
+      expect(res.body.ngoId).toBe(fixture.ngoId);
+      expect(res.body.token).toBeTruthy();
+      expect(res.headers['set-cookie']).toContain('refreshToken=');
+
+      const getRes = await req('GET', '/ngo/me', undefined, authHeaders(res.body.token));
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.ngoProfile.name).toBe(fixture.payload.ngoName);
+      expect(getRes.body.userProfile.email).toBe(fixture.payload.email);
+    });
+
     test('POST /auth/registrations/ngo persists a structured address object and returns an NGO token', async () => {
       if (!(await ensureSamOrSkip())) return;
       if (!(await ensureDbOrSkip())) return;
@@ -1248,6 +1497,29 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
   });
 
   describe('business logic - 4xx', () => {
+    test('POST /auth/login/ngo rejects a wrong password', async () => {
+      if (!(await ensureSamOrSkip())) return;
+      if (!(await ensureDbOrSkip())) return;
+      const fixture = await registerNgoFixture({ label: 'login-wrong-password' });
+      expect(fixture.res.status).toBe(201);
+
+      const res = await req(
+        'POST',
+        '/auth/login/ngo',
+        {
+          email: fixture.payload.email,
+          password: 'WrongPassword!',
+        },
+        {
+          origin: VALID_ORIGIN,
+          'x-forwarded-for': nextForwardedIp(),
+        }
+      );
+
+      expect(res.status).toBe(401);
+      expect(res.body.errorKey).toBe('auth.login.ngo.invalidUserCredential');
+    });
+
     test('POST /auth/registrations/ngo rejects duplicate business registration numbers', async () => {
       if (!(await ensureSamOrSkip())) return;
       if (!(await ensureDbOrSkip())) return;
@@ -1290,6 +1562,25 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
   });
 
   describe('authentication and authorisation', () => {
+    test('POST /auth/login/ngo rejects an invalid body', async () => {
+      if (!(await ensureSamOrSkip())) return;
+      const res = await req(
+        'POST',
+        '/auth/login/ngo',
+        {
+          email: 'not-an-email',
+          password: '',
+        },
+        {
+          origin: VALID_ORIGIN,
+          'x-forwarded-for': nextForwardedIp(),
+        }
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
     test('GET /ngo/me rejects missing Authorization header', async () => {
       if (!(await ensureSamOrSkip())) return;
       const res = await req('GET', '/ngo/me', undefined, {
@@ -1384,6 +1675,37 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
   });
 
   describe('cyberattacks and sequential security state changes', () => {
+    test('POST /auth/login/ngo blocks login after NGO access revocation', async () => {
+      if (!(await ensureSamOrSkip())) return;
+      if (!(await ensureDbOrSkip())) return;
+      const fixture = await registerNgoFixture({ label: 'login-revoked-access' });
+      expect(fixture.res.status).toBe(201);
+
+      await ngoUserAccessCol().updateOne(
+        {
+          userId: new mongoose.Types.ObjectId(fixture.userId),
+          ngoId: new mongoose.Types.ObjectId(fixture.ngoId),
+        },
+        { $set: { isActive: false } }
+      );
+
+      const res = await req(
+        'POST',
+        '/auth/login/ngo',
+        {
+          email: fixture.payload.email,
+          password: fixture.payload.password,
+        },
+        {
+          origin: VALID_ORIGIN,
+          'x-forwarded-for': nextForwardedIp(),
+        }
+      );
+
+      expect(res.status).toBe(403);
+      expect(res.body.errorKey).toBe('auth.login.ngo.userNGONotFound');
+    });
+
     test('PATCH /ngo/me strips mass-assignment fields and preserves protected NGO and access state', async () => {
       if (!(await ensureSamOrSkip())) return;
       if (!(await ensureDbOrSkip())) return;
@@ -1679,6 +2001,28 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
   });
 
   describe('runtime boundary behavior', () => {
+    test('POST /auth/login/ngo is routed by the live SAM API', async () => {
+      if (!(await ensureSamOrSkip())) return;
+      if (!(await ensureDbOrSkip())) return;
+      const fixture = await registerNgoFixture({ label: 'login-route-smoke' });
+      expect(fixture.res.status).toBe(201);
+
+      const res = await req(
+        'POST',
+        '/auth/login/ngo',
+        {
+          email: fixture.payload.email,
+          password: fixture.payload.password,
+        },
+        {
+          origin: VALID_ORIGIN,
+          'x-forwarded-for': nextForwardedIp(),
+        }
+      );
+
+      expect(res.status).toBe(200);
+    });
+
     test('OPTIONS /ngo/me returns a successful preflight for the dev wildcard origin policy', async () => {
       if (!(await ensureSamOrSkip())) return;
       const res = await req('OPTIONS', '/ngo/me', undefined, {
