@@ -567,104 +567,33 @@ Resources:
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       Events:
-        UserRootGET:
+        UserMeGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /user
+            Path: /user/me
             Method: GET
-        UserRootDELETE:
+        UserMeDELETE:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /user
+            Path: /user/me
             Method: DELETE
-        UserRootPOST:
+        UserMePATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /user
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        UserRootPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        UserRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user
+            Path: /user/me
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        UserProxyGET:
+        UserMeOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /user/{proxy+}
-            Method: GET
-        UserProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user/{proxy+}
-            Method: DELETE
-        UserProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        UserProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        UserProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        UserRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user
-            Method: OPTIONS
-            Auth:
-              Authorizer: NONE
-              ApiKeyRequired: false
-        UserProxyOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /user/{proxy+}
+            Path: /user/me
             Method: OPTIONS
             Auth:
               Authorizer: NONE

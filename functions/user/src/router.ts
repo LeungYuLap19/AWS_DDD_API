@@ -1,11 +1,12 @@
 import { createRouter } from '@aws-ddd-api/shared';
 import type { RouteHandler } from '../../../types/lambda';
+import { handleDeleteMe, handleGetMe, handlePatchMe } from './services/user';
 import { response } from './utils/response';
-import { handleProxyAny, handleProxyRoot } from './services/user';
 
 const routes: Record<string, RouteHandler> = {
-  '/user': handleProxyRoot,
-  '/user/{proxy+}': handleProxyAny,
+  'GET /user/me': handleGetMe,
+  'PATCH /user/me': handlePatchMe,
+  'DELETE /user/me': handleDeleteMe,
 };
 
 export const routeRequest = createRouter(routes, { response });

@@ -148,7 +148,7 @@ Every domain Lambda in `AWS_DDD_API` should converge toward this shape:
 ```text
 functions/<domain>/
   index.ts
-  package.json                  # only when function-local runtime deps are needed
+  package.json                  # required for deploy packaging; include runtime deps used by this lambda
   src/
     router.ts
     config/
@@ -316,13 +316,35 @@ Examples:
 
 ### 4.9 Packaging
 
-If a Lambda imports runtime dependencies that are not only provided by the shared layer, it must have a function-local `package.json`.
+Each Lambda should have a function-local `package.json`.
+
+This is not only for dependency declaration.
+
+It is also part of the deploy packaging contract for `dist/`.
 
 Current example:
 
 - `functions/auth/package.json`
+- `functions/user/package.json`
 
-This prevents deployment-time missing module errors.
+Required rule:
+
+- when creating a new Lambda under `functions/<domain>/`, also create `functions/<domain>/package.json`
+- add a matching copy step in `script/prepare-dist.cjs`
+- if that Lambda has a function-local lockfile that is needed for packaging workflow parity, copy that as well
+
+Reason:
+
+- `sam build` packages from `dist/`, not directly from the source function folder
+- `script/prepare-dist.cjs` is responsible for copying Lambda-local package manifests into `dist/functions/<domain>/`
+- if the Lambda package manifest is missing from source or not copied into `dist/`, deployment can fail or package the wrong runtime dependency set
+
+The minimum expectation is:
+
+- source manifest exists at `functions/<domain>/package.json`
+- `prepare-dist.cjs` copies it to `dist/functions/<domain>/package.json`
+
+If a Lambda truly has no function-local runtime dependencies, keep the manifest minimal rather than omitting it.
 
 ---
 
@@ -394,13 +416,13 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 
 - [ ] Create `index.ts`
 - [ ] Create `router.ts`
+- [ ] Create function-local `package.json`
 - [ ] Create `src/config/env.ts`
 - [ ] Create `src/zodSchema/envSchema.ts`
 - [ ] Create `src/utils/response.ts`
 - [ ] Create `src/services/*.ts`
 - [ ] Create `src/models/*.ts` as needed
 - [ ] Create `src/locales/en.json` and `zh.json`
-- [ ] Add function-local `package.json` if runtime deps require packaging
 
 ### Phase D — Runtime Wiring
 
@@ -409,7 +431,8 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 - [ ] Decide whether route uses default authorizer, `NONE`, or optional local auth
 - [ ] Add env parameters / function env wiring
 - [ ] Confirm VPC/global infra assumptions are compatible
-- [ ] Confirm deployment packaging for function-local dependencies
+- [ ] Add Lambda `package.json` copy step to `script/prepare-dist.cjs`
+- [ ] Confirm deployment packaging for function-local dependencies in `dist/`
 
 ### Phase E — Behavior Implementation
 

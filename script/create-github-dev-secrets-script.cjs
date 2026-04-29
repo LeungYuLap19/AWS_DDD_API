@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const env = JSON.parse(fs.readFileSync('env.json', 'utf8'));
+const env = JSON.parse(fs.readFileSync('env.development.json', 'utf8'));
 
 const values = {
   DEV_ALLOWED_ORIGINS: env.Parameters.ALLOWED_ORIGINS,
