@@ -1,8 +1,6 @@
 {
-  "userRoutes": {
+  "user": {
     "errors": {
-      "getUserNotFound": "User not found",
-      "putUserNotFound": "User not found",
       "emailExists": "Email already exists",
       "phoneExists": "Phone number already exists"
     }

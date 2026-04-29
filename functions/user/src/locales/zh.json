@@ -1,8 +1,6 @@
 {
-  "userRoutes": {
+  "user": {
     "errors": {
-      "getUserNotFound": "找不到用戶",
-      "putUserNotFound": "找不到用戶",
       "emailExists": "電子郵件已存在",
       "phoneExists": "電話號碼已存在"
     }

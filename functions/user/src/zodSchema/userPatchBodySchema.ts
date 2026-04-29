@@ -9,7 +9,7 @@ export const userPatchBodySchema = z.object({
     .optional(),
   email: z
     .string()
-    .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()), { message: 'common.invalidEmailFormat' })
+    .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()), { message: 'common.invalidBodyParams' })
     .optional(),
   district: z.string().optional(),
   image: z
@@ -25,7 +25,7 @@ export const userPatchBodySchema = z.object({
     .optional(),
   phoneNumber: z
     .string()
-    .refine((value) => /^\+[1-9]\d{1,14}$/.test(value.trim()), { message: 'common.invalidPhoneFormat' })
+    .refine((value) => /^\+[1-9]\d{1,14}$/.test(value.trim()), { message: 'common.invalidBodyParams' })
     .optional(),
 });
 

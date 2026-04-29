@@ -1,1 +1,10 @@
-{}
+{
+  "ngo": {
+    "errors": {
+      "notFound": "找不到 NGO",
+      "emailExists": "電子郵件已存在",
+      "phoneExists": "電話號碼已存在",
+      "registrationNumberExists": "商業登記號碼已存在"
+    }
+  }
+}

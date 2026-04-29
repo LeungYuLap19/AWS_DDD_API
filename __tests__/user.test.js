@@ -589,7 +589,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('common.invalidEmailFormat');
+      expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
     test('PATCH /user/me rejects invalid phone format', async () => {
@@ -603,7 +603,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('common.invalidPhoneFormat');
+      expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
     test('PATCH /user/me rejects invalid birthday format', async () => {
@@ -663,7 +663,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(409);
-      expect(res.body.errorKey).toBe('userRoutes.errors.emailExists');
+      expect(res.body.errorKey).toBe('user.errors.emailExists');
     });
 
     test('PATCH /user/me rejects duplicate phone conflicts', async () => {
@@ -677,7 +677,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(409);
-      expect(res.body.errorKey).toBe('userRoutes.errors.phoneExists');
+      expect(res.body.errorKey).toBe('user.errors.phoneExists');
     });
 
     test('repeat delete returns not found on the second request', async () => {
@@ -901,7 +901,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
 
       const getAfterDelete = await req('GET', '/user/me', undefined, authHeaders(state.primaryToken));
       expect(getAfterDelete.status).toBe(404);
-      expect(getAfterDelete.body.errorKey).toBe('userRoutes.errors.getUserNotFound');
+      expect(getAfterDelete.body.errorKey).toBe('common.notFound');
 
       const patchAfterDelete = await req(
         'PATCH',
@@ -910,7 +910,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.122.${(TEST_TS % 200) + 1}` })
       );
       expect(patchAfterDelete.status).toBe(404);
-      expect(patchAfterDelete.body.errorKey).toBe('userRoutes.errors.putUserNotFound');
+      expect(patchAfterDelete.body.errorKey).toBe('common.notFound');
 
       const refreshAfterDelete = await req(
         'POST',

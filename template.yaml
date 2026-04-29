@@ -611,104 +611,42 @@ Resources:
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       Events:
-        NgoRootGET:
+        NgoMeGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /ngo
+            Path: /ngo/me
             Method: GET
-        NgoRootDELETE:
+        NgoMePATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /ngo
-            Method: DELETE
-        NgoRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /ngo
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NgoRootPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /ngo
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NgoRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /ngo
+            Path: /ngo/me
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        NgoProxyGET:
+        NgoMembersGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /ngo/{proxy+}
+            Path: /ngo/me/members
             Method: GET
-        NgoProxyDELETE:
+        NgoMeOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /ngo/{proxy+}
-            Method: DELETE
-        NgoProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /ngo/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NgoProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /ngo/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NgoProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /ngo/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NgoRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /ngo
+            Path: /ngo/me
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        NgoProxyOPTIONS:
+        NgoMembersOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /ngo/{proxy+}
+            Path: /ngo/me/members
             Method: OPTIONS
             Auth:
               Authorizer: NONE

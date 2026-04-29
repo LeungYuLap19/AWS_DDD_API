@@ -33,11 +33,11 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
 
   const user = await findActiveUserById(authContext.userId);
   if (!user) {
-    return response.errorResponse(404, 'userRoutes.errors.getUserNotFound', ctx.event);
+    return response.errorResponse(404, 'common.notFound', ctx.event);
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'Success',
+    message: 'success.retrieved',
     user: sanitizeUser(user),
   });
 }
@@ -78,8 +78,8 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
     if (conflict) {
       const errorKey =
         normalizedEmail && conflict.email === normalizedEmail
-          ? 'userRoutes.errors.emailExists'
-          : 'userRoutes.errors.phoneExists';
+          ? 'user.errors.emailExists'
+          : 'user.errors.phoneExists';
 
       return response.errorResponse(409, errorKey, ctx.event);
     }
@@ -101,11 +101,11 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   )) as UserDocument | null;
 
   if (!updatedUser) {
-    return response.errorResponse(404, 'userRoutes.errors.putUserNotFound', ctx.event);
+    return response.errorResponse(404, 'common.notFound', ctx.event);
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'Success',
+    message: 'success.updated',
     user: sanitizeUser(updatedUser),
   });
 }
@@ -119,7 +119,7 @@ export async function handleDeleteMe(ctx: RouteContext): Promise<APIGatewayProxy
   const user = await findActiveUserById(authContext.userId);
 
   if (!user) {
-    return response.errorResponse(404, 'userRoutes.errors.getUserNotFound', ctx.event);
+    return response.errorResponse(404, 'common.notFound', ctx.event);
   }
 
   await Promise.all([
@@ -128,7 +128,7 @@ export async function handleDeleteMe(ctx: RouteContext): Promise<APIGatewayProxy
   ]);
 
   return response.successResponse(200, ctx.event, {
-    message: 'User deleted successfully',
+    message: 'success.deleted',
     userId: user._id,
   });
 }

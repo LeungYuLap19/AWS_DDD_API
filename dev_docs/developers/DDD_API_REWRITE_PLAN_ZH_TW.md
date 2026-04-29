@@ -670,7 +670,7 @@ sam deploy --config-env production
 
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |
-| `GET /ngo/me` | `GET /v2/account/edit-ngo/{ngoId}` | `UserRoutes` | 取得 NGO profile、admin profile、access 設定、counter 等整體資料。 |
+| `GET /ngo/me` | `GET /v2/account/edit-ngo/{ngoId}`、`GET /v2/account/edit-ngo/{ngoId}/pet-placement-options` | `UserRoutes` | 取得 NGO profile、admin profile、access 設定、counter 等整體資料，並包含 pet placement options。 |
 | `PATCH /ngo/me` | `PUT /v2/account/edit-ngo/{ngoId}` | `UserRoutes` | 更新 NGO profile、admin user、counter、access 設定。 |
 | `GET /ngo/me/members` | `GET /v2/account/user-list` | `UserRoutes` | 取得 NGO 成員列表，含 joined user/ngo/counter 資料。 |
 
