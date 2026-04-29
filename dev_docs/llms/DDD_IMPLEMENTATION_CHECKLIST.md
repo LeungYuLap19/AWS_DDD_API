@@ -305,6 +305,16 @@ Current useful generic keys:
 - `common.invalidPathParam`
 - `common.missingPathParams`
 
+Locale-key consistency rules:
+
+- reuse shared `common.*` keys when the message is structurally generic
+- reuse shared `success.*` keys when the message is a generic retrieved/created/updated/deleted outcome
+- do not invent a domain key if an equivalent shared key already exists
+- domain locale files should only own domain-specific keys that are not already present in shared locales
+- do not leave raw English success/error strings in services when a locale key should be used
+- before finishing a lambda, verify every locale key referenced in code exists in either the shared locales or that lambda's domain locales
+- remove stale domain locale keys that are no longer referenced after refactors
+
 ### 4.8 Provider Config
 
 If a service depends on a provider, client/config setup belongs in `config/`, not in the service file.
@@ -423,6 +433,7 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 - [ ] Create `src/services/*.ts`
 - [ ] Create `src/models/*.ts` as needed
 - [ ] Create `src/locales/en.json` and `zh.json`
+- [ ] Reuse shared locale keys first; keep only domain-owned keys in function locales
 
 ### Phase D — Runtime Wiring
 

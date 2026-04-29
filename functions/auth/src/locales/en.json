@@ -1,6 +1,5 @@
 {
   "auth": {
-    "notImplemented": "Auth route is not implemented yet",
     "challenge": {
       "createSuccessful": "Verification code generated successfully",
       "verifySuccessful": "Verification successful",

@@ -2,6 +2,13 @@ import { z } from 'zod';
 
 const optionalBooleanish = z.union([z.boolean(), z.string()]).optional();
 const optionalNullableString = z.string().trim().optional().nullable().or(z.literal(''));
+const ngoAddressSchema = z.object({
+  street: z.string().optional().default(''),
+  city: z.string().optional().default(''),
+  state: z.string().optional().default(''),
+  zipCode: z.string().optional().default(''),
+  country: z.string().optional().default(''),
+});
 
 export const ngoRegistrationBodySchema = z
   .object({
@@ -42,10 +49,7 @@ export const ngoRegistrationBodySchema = z
       .string({ message: 'common.missingBodyParams' })
       .trim()
       .min(1, { message: 'common.missingBodyParams' }),
-    address: z
-      .string({ message: 'common.missingBodyParams' })
-      .trim()
-      .min(1, { message: 'common.missingBodyParams' }),
+    address: ngoAddressSchema,
     description: optionalNullableString,
     website: optionalNullableString,
     subscribe: optionalBooleanish,

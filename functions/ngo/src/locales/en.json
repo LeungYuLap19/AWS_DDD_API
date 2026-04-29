@@ -1,1 +1,10 @@
-{}
+{
+  "ngo": {
+    "errors": {
+      "notFound": "NGO not found",
+      "emailExists": "Email already exists",
+      "phoneExists": "Phone number already exists",
+      "registrationNumberExists": "Business registration number already exists"
+    }
+  }
+}
