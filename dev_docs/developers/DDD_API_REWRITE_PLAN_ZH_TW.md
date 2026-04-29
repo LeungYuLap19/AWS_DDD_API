@@ -101,6 +101,9 @@ Audience:
       POST
     /ngo
       POST
+  /login
+    /ngo
+      POST
   /tokens
     /refresh
       POST
