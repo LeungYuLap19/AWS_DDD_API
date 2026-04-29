@@ -1,5 +1,16 @@
 {
   "auth": {
+    "login": {
+      "ngo": {
+        "successful": "Login successful",
+        "paramsMissing": "Email and password are required",
+        "invalidEmailFormat": "Invalid email format",
+        "invalidUserCredential": "Invalid user credentials",
+        "userNGONotFound": "NGO user access rights not found",
+        "NGONotFound": "No NGO found",
+        "ngoApprovalRequired": "NGO approval is required before login."
+      }
+    },
     "challenge": {
       "createSuccessful": "Verification code generated successfully",
       "verifySuccessful": "Verification successful",

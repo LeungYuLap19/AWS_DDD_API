@@ -654,6 +654,7 @@ sam deploy --config-env production
 | --- | --- | --- | --- |
 | `POST /auth/challenges` | `POST /account/generate-email-code`、`POST /account/generate-sms-code` | `EmailVerification`、`UserRoutes` | 建立 email / SMS 驗證 challenge。 |
 | `POST /auth/challenges/verify` | `POST /account/verify-email-code`、`POST /account/verify-sms-code` | `EmailVerification`、`UserRoutes` | 驗證 email / SMS code，產生登入或註冊前置 proof。 |
+| `POST /auth/login/ngo` | 無直接沿用的 DDD route；補回 NGO password login 能力，承接 legacy NGO credential login intent | `UserRoutes` | 以 email + password 登入既有 NGO 帳號，檢查 active NgoUserAccess 與 NGO approval 後發出 NGO token。 |
 | `POST /auth/registrations/user` | `POST /account/register` | `UserRoutes` | 建立一般使用者帳號。 |
 | `POST /auth/registrations/ngo` | `POST /v2/account/register-ngo` | `UserRoutes` | 建立 NGO admin、NGO profile、access mapping、counter。 |
 | `POST /auth/tokens/refresh` | `POST /auth/refresh` | `AuthRoute` | 以 refresh token 換 access token。 |

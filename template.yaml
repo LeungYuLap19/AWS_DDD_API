@@ -492,6 +492,28 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
+        AuthLoginNgoPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/login/ngo
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        AuthLoginNgoOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /auth/login/ngo
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
         AuthRegistrationsUserPOST:
           Type: Api
           Properties:
