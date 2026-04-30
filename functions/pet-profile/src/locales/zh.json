@@ -1,1 +1,44 @@
-{}
+{
+  "petProfile": {
+    "success": {
+      "created": "成功建立寵物檔案",
+      "retrieved": "成功取得寵物檔案",
+      "updated": "成功更新寵物檔案",
+      "deleted": "成功刪除寵物檔案",
+      "listRetrieved": "成功取得寵物列表",
+      "tagLookupProcessed": "成功查詢寵物晶片標籤"
+    },
+    "errors": {
+      "petNotFound": "找不到寵物資料",
+      "petAlreadyDeleted": "寵物已被刪除",
+      "invalidPetId": "寵物編號格式錯誤",
+      "missingTagId": "缺少標籤編號",
+      "noPetsFound": "找不到寵物資料",
+      "userNotFound": "找不到使用者資料",
+      "duplicatePetTag": "此寵物標籤已綁定其他寵物",
+      "duplicateNgoPetId": "此 NGO 寵物編號已綁定其他寵物",
+      "ngoRoleRequired": "需要 NGO 身分",
+      "ngoIdClaimRequired": "缺少 NGO ID 身分資訊",
+      "nameRequired": "請填寫寵物名稱",
+      "birthdayRequired": "請填寫寵物生日",
+      "sexRequired": "請填寫寵物性別",
+      "animalRequired": "請填寫寵物種類",
+      "invalidDateFormat": "日期格式錯誤",
+      "invalidImageUrl": "圖片網址格式錯誤",
+      "invalidBodyParams": "請求內容參數不正確",
+      "invalidBirthdayFormat": "生日格式錯誤",
+      "invalidWeightType": "體重欄位格式錯誤",
+      "invalidSterilizationType": "絕育欄位格式錯誤",
+      "invalidSterilizationDateFormat": "絕育日期格式錯誤",
+      "invalidOwnerContact1Type": "聯絡電話一欄位格式錯誤",
+      "invalidOwnerContact2Type": "聯絡電話二欄位格式錯誤",
+      "invalidContact1ShowType": "聯絡電話一顯示設定格式錯誤",
+      "invalidContact2ShowType": "聯絡電話二顯示設定格式錯誤",
+      "invalidReceivedDateFormat": "接收日期格式錯誤",
+      "invalidParentDateFormat": "父母生日格式錯誤",
+      "invalidMotherParity": "母犬產次格式錯誤",
+      "invalidRemovedIndices": "移除圖片索引格式錯誤",
+      "fieldTooLong": "一個或多個欄位超出允許長度"
+    }
+  }
+}

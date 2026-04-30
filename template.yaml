@@ -292,6 +292,32 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # basic Lambda logging
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole # required when Lambda attaches to a VPC
 
+  PetProfileFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-pet-profile-s3-upload'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
+
   AuthorizerFunctionRole: # the IAM role for the authorizer Lambda only - RequestAuthorizerFunction
     Type: AWS::IAM::Role
     Properties:
@@ -652,7 +678,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
       CodeUri: dist/functions/pet-profile/
       Handler: index.handler
-      Role: !GetAtt SharedFunctionRole.Arn
+      Role: !GetAtt PetProfileFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
@@ -663,19 +689,7 @@ Resources:
           AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
           AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
-        PetProfileRootGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile
-            Method: GET
-        PetProfileRootDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile
-            Method: DELETE
-        PetProfileRootPOST:
+        PetProfileCreatePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
@@ -685,69 +699,7 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetProfileRootPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetProfileRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetProfileProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile/{proxy+}
-            Method: GET
-        PetProfileProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile/{proxy+}
-            Method: DELETE
-        PetProfileProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetProfileProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetProfileProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/profile/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetProfileRootOPTIONS:
+        PetProfileCreateOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
@@ -756,11 +708,66 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetProfileProxyOPTIONS:
+        PetProfileByIdGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/profile/{proxy+}
+            Path: /pet/profile/{petId}
+            Method: GET
+        PetProfileByIdPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{petId}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetProfileByIdDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{petId}
+            Method: DELETE
+        PetProfileByIdOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/{petId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetProfileMeGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/me
+            Method: GET
+        PetProfileMeOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/me
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetProfileByTagGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/by-tag/{tagId}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetProfileByTagOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/profile/by-tag/{tagId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE

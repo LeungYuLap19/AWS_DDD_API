@@ -1,5 +1,20 @@
 # TODO
-- mongodb indexing issues*
+
+- mongodb indexing issues
+
+- error keys standardization
+
+- schema
+  - userRegistrationBodySchema: subscribe, promotion, district, image, birthday, gender should not accepted on register
+
+- sanitize PRIVATE_DETAIL_FIELDS in pet-profile need narrower the return fields
+
+- consider on demand response body fields (pre defined return fields vs. client picked return fields)
+
+- pet basic info vs detailed info
+  - GET /pet/profile/{petId}?view=basic
+  - GET /pet/profile/{petId}?view=detail
+  - GET /pet/profile/{petId}?view=full
 
 - Replace current basic rate limiting with layered rate limiting:
   Add per-IP, per-identifier, and per-account limits.

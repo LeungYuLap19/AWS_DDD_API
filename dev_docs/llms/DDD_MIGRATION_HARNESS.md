@@ -181,6 +181,9 @@ Typical acceptable deltas:
 - error key rename
 - response message modernization
 - internal module split
+- response payload narrowing that removes redundant/internal/sensitive fields
+- contract cleanup that improves frontend DX without removing required service functionality
+- transport simplification that improves performance without changing the service outcome
 
 Typical dangerous unlogged deltas:
 
@@ -189,6 +192,17 @@ Typical dangerous unlogged deltas:
 - public/protected change
 - response-field removal
 - skipped side effect
+
+When evaluating deltas, separate:
+
+- service functionality
+- transport contract shape
+
+The default rule is:
+
+- preserve required service functionality
+- preserve security-critical behavior
+- allow contract hardening/cleanup when it is explicit, safe, and justified
 
 ---
 
@@ -238,3 +252,10 @@ When driving an AI migration run, provide:
    - what must remain behaviorally identical
    - what may be modernized
    - what validation evidence is expected
+
+When filling "what may be modernized", include whether the run is allowed to:
+
+- narrow/sanitize response payloads
+- remove redundant/internal fields
+- optimize status/detail payloads for frontend DX
+- improve transport efficiency without removing required behavior

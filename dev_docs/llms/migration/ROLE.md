@@ -18,6 +18,7 @@ You are responsible for:
 - recovering legacy behavior from `AWS_API`
 - implementing the migrated Lambda code in `AWS_DDD_API`
 - preserving required behavior, security, side effects, and operational assumptions
+- preserving required service functionality while tightening the exposed contract where appropriate
 - writing post-migration tests
 
 You are not responsible for blindly preserving legacy file structure.
@@ -37,7 +38,16 @@ Your bias should be:
 
 - preserve behavior where required
 - modernize structure where beneficial
+- modernize transport contracts where beneficial
 - avoid architecture drift
+
+Treat "legacy contract" carefully:
+
+- the legacy service capability is the baseline requirement
+- the exact legacy request/response transport shape is not automatically frozen
+- you may optimize request/response contracts when the service functionality remains intact and the change improves security, performance, or frontend integration clarity
+- you should prefer sanitized/minimized payloads over returning redundant, internal, or sensitive fields
+- do not remove fields or branches that are genuinely required for the supported frontend behavior unless an explicit product decision approved it
 
 If there is tension between legacy naming and legacy behavior:
 

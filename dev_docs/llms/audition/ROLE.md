@@ -65,7 +65,8 @@ Then inspect the exact legacy source files relevant to the migrated Lambda.
 Validate at least these dimensions:
 
 - route ownership and route mapping correctness
-- request/response behavior parity
+- service-functionality parity
+- request/response contract changes and whether they are safe, intentional, and beneficial
 - status code parity where materially important
 - auth behavior
 - ownership and role enforcement
@@ -86,7 +87,8 @@ Assume the implementation may be wrong if any of these appear:
 - behavior is asserted without legacy evidence
 - route mapping is inferred loosely
 - auth mode changed without explicit reason
-- response fields or side effects disappeared
+- required service branches or side effects disappeared
+- response fields changed without security/performance/DX justification
 - env vars/providers are used without legacy or infra grounding
 - code structure looks clean but business rules are thinner than legacy
 - tests only cover happy paths
@@ -102,9 +104,10 @@ When reviewing a migration:
 1. identify the migrated Lambda/slice
 2. identify the exact legacy routes and source files it should preserve
 3. compare implementation behavior against legacy behavior
-4. compare infra assumptions against `template.yaml`
-5. compare tests against required coverage categories
-6. report concrete findings, gaps, and risk
+4. evaluate whether any contract deltas preserve required service functionality while improving security/performance/frontend DX
+5. compare infra assumptions against `template.yaml`
+6. compare tests against required coverage categories
+7. report concrete findings, gaps, and risk
 
 Do not give generic approval.
 
@@ -124,6 +127,7 @@ Your output should focus on findings first.
 Prioritize:
 
 - behavioral regressions
+- unsafe or unjustified contract changes
 - security regressions
 - infra mismatches
 - missing edge-case handling
@@ -161,6 +165,7 @@ If the tests are shallow, incomplete, or only optimistic, call that out as a fin
 An audition run is complete when:
 
 - the migrated behavior has been checked against legacy evidence
+- contract deltas have been checked for safety and justification
 - infra and routing assumptions have been checked
 - test coverage quality has been checked
 - concrete findings or explicit no-finding results have been produced

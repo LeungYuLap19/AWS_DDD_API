@@ -67,6 +67,13 @@ The DDD target should keep behavior where needed, but improve:
 - VPC/networking consistency
 - shared runtime reuse
 
+Interpret this as:
+
+- preserve the service functionality that legacy already proves the product needs
+- do not assume the full legacy transport contract is frozen
+- you may tighten request/response contracts when that improves security, performance, consistency, or frontend DX without removing required behavior
+- prefer sanitized, minimal response payloads over legacy payload bloat
+
 ---
 
 ## 1. Current Reference Lambda
@@ -128,6 +135,8 @@ Specifically, these may intentionally change in DDD:
 - internal file structure
 - auth transport shape
 - CORS implementation location
+- safe request/response shaping
+- response field projection and sanitization
 
 What must be preserved when required:
 
@@ -138,6 +147,13 @@ What must be preserved when required:
 - ownership semantics
 - duplicate/conflict behavior
 - rate-limit behavior
+
+What may be optimized when justified:
+
+- request contract strictness
+- response payload size and projection
+- removal of redundant/internal/sensitive fields
+- naming/structure that makes frontend integration clearer
 
 ---
 
@@ -421,6 +437,9 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 - [ ] Recover success and failure status codes
 - [ ] Decide what stays behaviorally identical
 - [ ] Decide what naming is intentionally modernized
+- [ ] Decide which contract fields are truly required for service functionality
+- [ ] Decide which legacy fields are redundant/internal/sensitive and should be removed or narrowed
+- [ ] Record why each intentional contract delta is safer, faster, or better for frontend DX
 
 ### Phase C — DDD Scaffolding
 
@@ -464,6 +483,7 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 - [ ] Check rate limits on public/sensitive flows
 - [ ] Check internal field exposure in response
 - [ ] Check sensitive fields absent from client schemas
+- [ ] Check that contract narrowing did not remove required functional data
 - [ ] Check duplicate conflict handling
 - [ ] Check refresh/session rotation behavior
 - [ ] Check VPC / provider / env runtime assumptions
@@ -536,6 +556,7 @@ Then modernize:
 - route names
 - error key names
 - module boundaries
+- response contracts when the service functionality stays the same and the new contract is safer/leaner
 
 ### Do keep services pragmatic
 
@@ -604,6 +625,8 @@ Recommended instruction shape:
 Use AWS_DDD_API/functions/auth as the structural reference.
 Use AWS_API only as legacy behavior/RAG material.
 Preserve behavior unless I explicitly approve a change.
+Preserve required service functionality, not legacy payload bloat.
+You may narrow/sanitize request and response contracts when that improves security, performance, consistency, or frontend DX without removing required behavior.
 Do not add extra layers unless they simplify the code.
 Keep shared-runtime usage aligned with the current repo.
 Audit template/env/VPC/packaging impact, not just service code.
