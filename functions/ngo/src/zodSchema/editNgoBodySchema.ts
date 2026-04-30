@@ -9,7 +9,10 @@ const userProfileSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   email: z.string().email('common.invalidBodyParams').optional(),
-  phoneNumber: z.string().optional(),
+  phoneNumber: z
+    .string()
+    .refine((value) => /^\+[1-9]\d{1,14}$/.test(value.trim()), { message: 'common.invalidBodyParams' })
+    .optional(),
   gender: z.string().optional(),
 });
 

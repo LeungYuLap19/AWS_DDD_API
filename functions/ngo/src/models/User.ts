@@ -81,4 +81,28 @@ export const UserSchema = new Schema(
   }
 );
 
+UserSchema.index(
+  { email: 1 },
+  {
+    name: 'email_active_unique',
+    unique: true,
+    partialFilterExpression: {
+      deleted: false,
+      email: { $exists: true, $type: 'string', $gt: '' },
+    },
+  }
+);
+
+UserSchema.index(
+  { phoneNumber: 1 },
+  {
+    name: 'phone_active_unique',
+    unique: true,
+    partialFilterExpression: {
+      deleted: false,
+      phoneNumber: { $exists: true, $type: 'string', $gt: '' },
+    },
+  }
+);
+
 export default UserSchema;

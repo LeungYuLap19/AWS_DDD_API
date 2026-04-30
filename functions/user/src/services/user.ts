@@ -94,11 +94,34 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   if (phoneNumber !== undefined) updateFields.phoneNumber = normalizedPhoneNumber;
   if (birthday !== undefined) updateFields.birthday = birthday ? new Date(birthday) : null;
 
-  const updatedUser = (await User.findOneAndUpdate(
-    { _id: authContext.userId, deleted: false },
-    { $set: updateFields },
-    { returnDocument: 'after', lean: true }
-  )) as UserDocument | null;
+  let updatedUser: UserDocument | null;
+  try {
+    updatedUser = (await User.findOneAndUpdate(
+      { _id: authContext.userId, deleted: false },
+      { $set: updateFields },
+      { returnDocument: 'after', lean: true }
+    )) as UserDocument | null;
+  } catch (error) {
+    const mongoError = error as {
+      code?: number;
+      keyValue?: Record<string, unknown>;
+      keyPattern?: Record<string, unknown>;
+    };
+
+    if (mongoError.code === 11000) {
+      const duplicateField = Object.keys(mongoError.keyPattern || {})[0];
+      const duplicateKeyValue = Object.values(mongoError.keyValue || {})[0];
+      const errorKey =
+        duplicateField === 'phoneNumber' ||
+        (typeof duplicateKeyValue === 'string' && duplicateKeyValue === normalizedPhoneNumber)
+          ? 'user.errors.phoneExists'
+          : 'user.errors.emailExists';
+
+      return response.errorResponse(409, errorKey, ctx.event);
+    }
+
+    throw error;
+  }
 
   if (!updatedUser) {
     return response.errorResponse(404, 'common.notFound', ctx.event);

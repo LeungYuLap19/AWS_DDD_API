@@ -13,6 +13,7 @@ import {
   type NgoAuthContext,
 } from '../utils/access';
 import { buildNgoMemberList } from '../utils/memberList';
+import { normalizeEmail, normalizePhone } from '../utils/normalize';
 import { escapeRegex, flattenToDot, hasKeys, pickAllowed } from '../utils/object';
 import { response } from '../utils/response';
 import {
@@ -131,6 +132,9 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   const NGO = mongoose.model('NGO');
   const NgoCounters = mongoose.model('NgoCounters');
   const NgoUserAccess = mongoose.model('NgoUserAccess');
+  let duplicateCheckEmail: string | undefined;
+  let duplicateCheckPhoneNumber: string | undefined;
+  let duplicateCheckRegistrationNumber: string | undefined;
 
   try {
     const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
@@ -172,6 +176,19 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
       ACCESS_ALLOWED
     );
     const isAdmin = hasNgoAdminAccess(authorizedNgo.ngoUserAccess);
+
+    if (typeof userDot.email === 'string') {
+      userDot.email = normalizeEmail(userDot.email);
+    }
+
+    if (typeof userDot.phoneNumber === 'string') {
+      userDot.phoneNumber = normalizePhone(userDot.phoneNumber);
+    }
+
+    duplicateCheckEmail = typeof userDot.email === 'string' ? userDot.email : undefined;
+    duplicateCheckPhoneNumber = typeof userDot.phoneNumber === 'string' ? userDot.phoneNumber : undefined;
+    duplicateCheckRegistrationNumber =
+      typeof ngoDot.registrationNumber === 'string' ? ngoDot.registrationNumber : undefined;
 
     if (!isAdmin && (hasKeys(ngoDot) || hasKeys(countersDot) || hasKeys(accessDot))) {
       return response.errorResponse(403, 'common.unauthorized', ctx.event);
@@ -276,7 +293,40 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
       await session.abortTransaction();
     }
 
-    if ((error as { name?: string }).name === 'ValidationError') {
+    const mongoError = error as {
+      code?: number;
+      keyValue?: Record<string, unknown>;
+      keyPattern?: Record<string, unknown>;
+      name?: string;
+    };
+
+    if (mongoError.code === 11000) {
+      const duplicateField = Object.keys(mongoError.keyPattern || {})[0];
+      const duplicateKeyValue = Object.values(mongoError.keyValue || {})[0];
+
+      if (
+        duplicateField === 'phoneNumber' ||
+        (typeof duplicateKeyValue === 'string' && duplicateKeyValue === duplicateCheckPhoneNumber)
+      ) {
+        return response.errorResponse(409, 'ngo.errors.phoneExists', ctx.event);
+      }
+
+      if (
+        duplicateField === 'email' ||
+        (typeof duplicateKeyValue === 'string' && duplicateKeyValue === duplicateCheckEmail)
+      ) {
+        return response.errorResponse(409, 'ngo.errors.emailExists', ctx.event);
+      }
+
+      if (
+        duplicateField === 'registrationNumber' ||
+        (typeof duplicateKeyValue === 'string' && duplicateKeyValue === duplicateCheckRegistrationNumber)
+      ) {
+        return response.errorResponse(409, 'ngo.errors.registrationNumberExists', ctx.event);
+      }
+    }
+
+    if (mongoError.name === 'ValidationError') {
       return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
     }
 
