@@ -5,18 +5,31 @@ import mongoose from 'mongoose';
 import { connectToMongoDB } from '../config/db';
 import { loadAuthorizedPet } from '../utils/auth';
 import { response } from '../utils/response';
-import { sanitizePetDetail, sanitizePetListSummary, sanitizePublicTagLookupPet } from '../utils/sanitize';
+import { sanitizePetBasic, sanitizePetFull, sanitizePetLineage, sanitizePetListSummary, sanitizePublicTagLookupPet } from '../utils/sanitize';
 import { PUBLIC_TAG_PROJECTION, handleKnownError } from './profileHelpers';
+
+const PET_VIEWS = new Set(['basic', 'detail', 'full']);
 
 export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
   await connectToMongoDB();
 
+  const view = ctx.event.queryStringParameters?.view || 'full';
+  if (!PET_VIEWS.has(view)) {
+    return response.errorResponse(400, 'petProfile.errors.invalidView', ctx.event);
+  }
+
   try {
     const pet = await loadAuthorizedPet(ctx.event);
+    const form =
+      view === 'basic' ? sanitizePetBasic(pet) :
+      view === 'detail' ? sanitizePetLineage(pet) :
+      sanitizePetFull(pet);
+
     return response.successResponse(200, ctx.event, {
       message: 'petProfile.success.retrieved',
-      form: sanitizePetDetail(pet),
+      view,
+      form,
       id: pet._id,
     });
   } catch (error) {
@@ -122,7 +135,7 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
 
   return response.successResponse(200, ctx.event, {
     message: 'petProfile.success.listRetrieved',
-    form: sanitizePetListSummary(pets),
+    pets: sanitizePetListSummary(pets),
     total: totalNumber,
   });
 }

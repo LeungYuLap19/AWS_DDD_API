@@ -1,6 +1,6 @@
 type AnyRecord = Record<string, unknown>;
 
-const PRIVATE_DETAIL_FIELDS = [
+const BASIC_FIELDS = [
   'userId',
   'name',
   'breedimage',
@@ -30,10 +30,12 @@ const PRIVATE_DETAIL_FIELDS = [
   'updatedAt',
   'locationName',
   'position',
+];
+
+// Lineage and transfer records — legacy PetDetailInfo equivalent.
+const LINEAGE_FIELDS = [
   'chipId',
   'placeOfBirth',
-  'transfer',
-  'transferNGO',
   'motherName',
   'motherBreed',
   'motherDOB',
@@ -45,7 +47,11 @@ const PRIVATE_DETAIL_FIELDS = [
   'fatherDOB',
   'fatherChip',
   'fatherPlaceOfBirth',
+  'transfer',
+  'transferNGO',
 ];
+
+const FULL_FIELDS = [...BASIC_FIELDS, ...LINEAGE_FIELDS];
 
 const LIST_SUMMARY_FIELDS = [
   'name',
@@ -86,8 +92,13 @@ function asPlainRecord(value: unknown): AnyRecord | null {
     return null;
   }
 
-  if (typeof value === 'object' && value !== null && 'toObject' in value && typeof (value as { toObject?: unknown }).toObject === 'function') {
-    return ((value as { toObject(): AnyRecord }).toObject());
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toObject' in value &&
+    typeof (value as { toObject?: unknown }).toObject === 'function'
+  ) {
+    return (value as { toObject(): AnyRecord }).toObject();
   }
 
   return value as AnyRecord;
@@ -110,13 +121,27 @@ function pickPetFields(raw: AnyRecord, fields: string[]): AnyRecord {
   return sanitized;
 }
 
-export function sanitizePetDetail(pet: unknown): AnyRecord | null {
+export function sanitizePetBasic(pet: unknown): AnyRecord | null {
   const raw = asPlainRecord(pet);
-  if (!raw) {
-    return null;
-  }
+  if (!raw) return null;
+  return pickPetFields(raw, BASIC_FIELDS);
+}
 
-  return pickPetFields(raw, PRIVATE_DETAIL_FIELDS);
+export function sanitizePetLineage(pet: unknown): AnyRecord | null {
+  const raw = asPlainRecord(pet);
+  if (!raw) return null;
+  return pickPetFields(raw, LINEAGE_FIELDS);
+}
+
+export function sanitizePetFull(pet: unknown): AnyRecord | null {
+  const raw = asPlainRecord(pet);
+  if (!raw) return null;
+  return pickPetFields(raw, FULL_FIELDS);
+}
+
+// Kept for patch response — always returns the full owner view.
+export function sanitizePetDetail(pet: unknown): AnyRecord | null {
+  return sanitizePetFull(pet);
 }
 
 export function sanitizePetListSummary(pets: unknown[]): AnyRecord[] {

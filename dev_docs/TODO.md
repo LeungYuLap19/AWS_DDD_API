@@ -9,12 +9,16 @@
 
 - sanitize PRIVATE_DETAIL_FIELDS in pet-profile need narrower the return fields
 
-- consider on demand response body fields (pre defined return fields vs. client picked return fields)
+- ***collapse create / patch from multiparts, json to one only***
 
-- pet basic info vs detailed info
+- ***pet basic info vs detailed info***
   - GET /pet/profile/{petId}?view=basic
   - GET /pet/profile/{petId}?view=detail
   - GET /pet/profile/{petId}?view=full
+
+- consider on demand response body fields (pre defined return fields vs. client picked return fields)
+
+- consider move PATCH pet profile by {petId} to /pet-profile/me
 
 - Replace current basic rate limiting with layered rate limiting:
   Add per-IP, per-identifier, and per-account limits.
