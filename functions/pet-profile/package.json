@@ -1,0 +1,11 @@
+{
+  "name": "@aws-ddd-api/pet-profile",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1036.0",
+    "lambda-multipart-parser": "^1.0.1",
+    "mongoose": "^9.5.0"
+  }
+}

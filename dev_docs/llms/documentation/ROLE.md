@@ -46,6 +46,13 @@ If code and legacy docs disagree:
 - prefer current implemented behavior in `AWS_DDD_API` if it is clearly wired and intentional
 - otherwise surface the conflict and do not guess
 
+When documenting migrated APIs:
+
+- treat legacy service functionality as the baseline requirement
+- do not assume the exact legacy transport contract must be preserved field-for-field
+- document the current DDD contract as authoritative when it intentionally tightens security, removes redundant/sensitive fields, improves performance, or improves frontend DX
+- call out any material contract delta that a frontend integrator must know
+
 If behavior is unclear:
 
 - do not smooth over it with vague wording
@@ -143,6 +150,7 @@ Optimize for:
 - exact status codes
 - exact response keys
 - explicit branching behavior
+- explicit notes when the DDD contract intentionally returns a narrower or safer payload than legacy
 
 When a flow branches, spell out the branch conditions explicitly.
 

@@ -32,6 +32,11 @@ copyFile(
   'dist/functions/ngo/package.json'
 );
 
+copyFile(
+  'functions/pet-profile/package.json',
+  'dist/functions/pet-profile/package.json'
+);
+
 if (fs.existsSync(path.join(repoRoot, 'functions/request-authorizer/package-lock.json'))) {
   copyFile(
     'functions/request-authorizer/package-lock.json',

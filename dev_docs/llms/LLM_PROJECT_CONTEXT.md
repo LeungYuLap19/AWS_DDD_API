@@ -59,6 +59,13 @@ That means:
 - improve module boundaries, runtime consistency, env handling, and infra clarity
 - reduce architecture drift caused by ad hoc Lambda edits and AWS Console-only changes
 
+The practical rule is:
+
+- assume the legacy service functionality is what the product still needs
+- do not assume every legacy transport detail must be preserved exactly
+- contract changes are allowed when they keep the same service outcome while improving security, performance, consistency, or frontend DX
+- prefer sanitization and explicit projection over returning redundant, internal, or sensitive fields
+
 The migration target is:
 
 - behavior continuity where required
@@ -70,6 +77,7 @@ The rewrite is allowed to modernize:
 - module structure
 - response/error key naming
 - internal service organization
+- request/response contract shape when safely tightened
 
 But it should not casually change:
 
@@ -79,6 +87,7 @@ But it should not casually change:
 - duplicate/conflict behavior
 - side effects
 - token or refresh semantics
+- required functional branches the frontend depends on
 
 ---
 
@@ -142,6 +151,7 @@ Good uses of `AWS_API`:
 - recover required env vars
 - recover provider/API integrations
 - recover test expectations and documented edge cases
+- recover which fields are functionally required versus historical payload baggage
 
 Bad uses of `AWS_API`:
 
@@ -153,6 +163,8 @@ Bad uses of `AWS_API`:
 Short version:
 
 - preserve legacy behavior when needed
+- preserve legacy service functionality first
+- allow safe contract tightening when justified
 - do not preserve legacy architecture by default
 
 ---

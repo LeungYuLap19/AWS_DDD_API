@@ -454,6 +454,18 @@ trust policy 應限制到 repo：
 - 讓 migration 不只是結構重寫，而是真正保留 legacy behavior
 - 讓測試與安全檢查成為 migration 的固定一部分
 
+這裡的「保留 legacy behavior」要明確區分兩件事：
+
+- 要保留的是 legacy 已提供的 service functionality
+- 不一定要原封不動保留 legacy transport contract
+
+只要不移除前端真正需要的功能與分支，contract 可以做有意識的優化，例如：
+
+- 收斂 request/response shape
+- 移除 redundant / internal / sensitive fields
+- 強化 sanitization
+- 改善 security、performance、frontend DX
+
 ### 角色分工
 
 - `migration LLM`
