@@ -409,6 +409,12 @@ functions/
 - token 存在但無效：
   - 直接 `401`
 
+補充：
+
+- 目前 runtime contract 已加入 API Gateway `x-api-key` requirement
+- `/auth/challenges/verify` 雖然維持 `Authorizer: NONE`，但 non-OPTIONS request 仍然需要 `x-api-key`
+- 最新 request / response contract、sanitization、`warnings` payload 等以 `dev_docs/api_docs/development/*.md` 為準
+
 這樣做是因為 verify route 同時需要：
 
 - public verification / login / registration proof
@@ -661,6 +667,11 @@ sam deploy --config-env production
 | `POST /auth/registrations/user` | `POST /account/register` | `UserRoutes` | 建立一般使用者帳號。 |
 | `POST /auth/registrations/ngo` | `POST /v2/account/register-ngo` | `UserRoutes` | 建立 NGO admin、NGO profile、access mapping、counter。 |
 | `POST /auth/tokens/refresh` | `POST /auth/refresh` | `AuthRoute` | 以 refresh token 換 access token。 |
+
+註：
+
+- 本章節主要描述 legacy 對應與功能拆分
+- 最新 deployed contract（例如 `x-api-key` requirement、sanitized response、NGO `warnings` response）請以 `dev_docs/api_docs/development/AUTH.md`、`USER.md`、`NGO.md` 為準
 
 ### 7.2 User
 

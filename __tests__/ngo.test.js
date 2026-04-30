@@ -15,6 +15,10 @@ const JWT_SECRET =
   envConfig.NgoFunction?.JWT_SECRET ||
   envConfig.AuthFunction?.JWT_SECRET ||
   'PPCSecret';
+const API_KEY =
+  process.env.NGO_TEST_API_KEY ||
+  envConfig.Parameters?.ExistingApiKeyId ||
+  'test-api-key';
 const MONGODB_URI =
   envConfig.NgoFunction?.MONGODB_URI ||
   envConfig.AuthFunction?.MONGODB_URI ||
@@ -125,6 +129,8 @@ function loadHandlerWithMocks({
   updatedCounter = null,
   updatedAccess = null,
   ngoFindError = null,
+  userGetError = null,
+  ngoCounterGetError = null,
 } = {}) {
   jest.resetModules();
   jest.clearAllMocks();
@@ -146,6 +152,10 @@ function loadHandlerWithMocks({
       return createLeanResult(duplicateUser);
     }
 
+    if (query._id && query.deleted === false && userGetError) {
+      return createLeanResult(null, userGetError);
+    }
+
     return createLeanResult(userDoc);
   });
 
@@ -162,7 +172,9 @@ function loadHandlerWithMocks({
   });
 
   const ngoUserAccessFindOne = jest.fn(() => createLeanResult(ngoAccessDoc));
-  const ngoCountersFindOne = jest.fn(() => createLeanResult(ngoCounterDoc));
+  const ngoCountersFindOne = jest.fn(() =>
+    ngoCounterGetError ? createLeanResult(null, ngoCounterGetError) : createLeanResult(ngoCounterDoc)
+  );
 
   const userFindOneAndUpdate = jest.fn().mockResolvedValue(updatedUser);
   const ngoFindOneAndUpdate = jest.fn().mockResolvedValue(updatedNgo);
@@ -352,6 +364,7 @@ function nextForwardedIp() {
 function authHeaders(token, extra = {}) {
   return {
     Authorization: `Bearer ${token}`,
+    'x-api-key': API_KEY,
     origin: VALID_ORIGIN,
     'x-forwarded-for': nextForwardedIp(),
     ...extra,
@@ -410,6 +423,7 @@ async function req(method, requestPath, body, headers = {}) {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...(method === 'OPTIONS' ? {} : { 'x-api-key': API_KEY }),
       ...headers,
     },
     body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
@@ -1229,6 +1243,70 @@ describe('Tier 2 - ngo handler integration', () => {
 
     expect(res.statusCode).toBe(204);
     expect(res.headers['Access-Control-Allow-Origin']).toBe('*');
+    expect(res.headers['Access-Control-Allow-Headers']).toContain('x-api-key');
+  });
+
+  test('GET /ngo/me returns 200 with warnings when a non-critical section lookup fails', async () => {
+    const { handler } = loadHandlerWithMocks({
+      userDoc: {
+        _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439011'),
+        email: 'ngo@test.com',
+        password: 'hashed-password',
+        deleted: false,
+        credit: 300,
+        createdAt: new Date('2025-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2025-01-02T00:00:00.000Z'),
+      },
+      ngoDoc: {
+        _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439012'),
+        name: 'Helping Paws',
+        isActive: true,
+        isVerified: true,
+        createdAt: new Date('2025-01-03T00:00:00.000Z'),
+      },
+      ngoAccessDoc: {
+        _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439013'),
+        ngoId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439012'),
+        userId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439011'),
+        roleInNgo: 'admin',
+        isActive: true,
+        menuConfig: { canManageUsers: true },
+        createdAt: new Date('2025-01-04T00:00:00.000Z'),
+      },
+      ngoCounterDoc: {
+        _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439014'),
+        ngoId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439012'),
+        counterType: 'ngopet',
+        ngoPrefix: 'HP',
+        seq: 7,
+      },
+      userGetError: new Error('user profile lookup failed'),
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'GET',
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'ngo@test.com',
+          userRole: 'ngo',
+          ngoId: '507f1f77bcf86cd799439012',
+        },
+      }),
+      createContext()
+    );
+
+    const body = JSON.parse(res.body);
+    expect(res.statusCode).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.userProfile).toBeNull();
+    expect(body.ngoProfile.name).toBe('Helping Paws');
+    expect(body.ngoProfile.createdAt).toBeUndefined();
+    expect(body.ngoUserAccessProfile.roleInNgo).toBe('admin');
+    expect(body.ngoUserAccessProfile.createdAt).toBeUndefined();
+    expect(body.ngoCounters.ngoPrefix).toBe('HP');
+    expect(body.warnings.userProfile).toBe('ngo.warnings.temporarilyUnavailable');
+    expect(body.warnings.ngoCounters).toBeNull();
   });
 
   test('unexpected persistence failures are normalized to a safe 500 response', async () => {
@@ -1333,7 +1411,8 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
       expect(res.body.ngoProfile.address).toEqual(fixture.payload.address);
       expect(res.body.ngoUserAccessProfile.roleInNgo).toBe('admin');
       expect(res.body.ngoCounters.ngoPrefix).toBe(fixture.payload.ngoPrefix.toUpperCase());
-      expect(res.body.errors.ngoUserAccessProfile).toBeNull();
+      expect(res.body.warnings.userProfile).toBeNull();
+      expect(res.body.warnings.ngoCounters).toBeNull();
     });
 
     test('PATCH /ngo/me persists nested address changes and follow-up GET sees the new state', async () => {

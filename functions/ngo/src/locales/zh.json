@@ -5,6 +5,9 @@
       "emailExists": "電子郵件已存在",
       "phoneExists": "電話號碼已存在",
       "registrationNumberExists": "商業登記號碼已存在"
+    },
+    "warnings": {
+      "temporarilyUnavailable": "此區塊暫時無法使用。"
     }
   }
 }

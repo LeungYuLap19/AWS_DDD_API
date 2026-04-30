@@ -1,14 +1,22 @@
 # TODO
+- mongodb indexing issues*
 
-- Align soft-delete registration semantics with MongoDB indexes for `users.email` and `users.phoneNumber`.
-  Current app logic ignores soft-deleted users during duplicate checks, so re-registration after soft delete is intended to be allowed.
-  Live development behavior still returns `auth.registration.user.emailAlreadyRegistered`, which likely means the `users` collection still has global unique indexes that block reuse after soft delete.
-  Fix later by reviewing `db.users.getIndexes()` and replacing plain unique indexes with partial unique indexes scoped to `deleted: false` if that is the intended production behavior.
+- Replace current basic rate limiting with layered rate limiting:
+  Add per-IP, per-identifier, and per-account limits.
+  Add separate failure counters/cooldowns for login, OTP verify, refresh abuse, and destructive routes.
+  Consider WAF rate-based rules later if infra scope allows.
 
-- Reconfirm NGO login/auth flow with frontend and implement the missing login path for existing NGO accounts.
-  Current state: `POST /auth/registrations/ngo` returns an NGO token, but existing NGO accounts do not have a confirmed fresh-login path.
-  `POST /auth/challenges/verify` currently issues a normal user token for existing users, so an NGO logging in through the shared challenge flow may receive a token without `ngoId` / `ngoName` and fail NGO-protected routes.
-  Need frontend confirmation on the intended UX:
-  either NGO should use password-based login,
-  or NGO should share the same challenge-based auth flow as normal users but receive an NGO token shape on successful verify.
-  After frontend confirms, align backend auth behavior and add explicit manual/test coverage for existing NGO login.
+- Add security regression tests:
+  Broken authentication: protected routes must fail without valid JWT.
+  IDOR / horizontal privilege escalation: cannot read/write another user's or NGO's data.
+  Unauthorized delete: cannot delete accounts/pets without ownership checks.
+  Account takeover: registration/auth flows must not issue tokens for the wrong identity.
+  Enumeration: public auth endpoints should not leak whether user/phone/entity exists.
+  Brute-force / automation abuse: login, registration, OTP, refresh, destructive routes need abuse tests.
+  JWT tampering: expired token, bad signature, wrong secret, `alg:none`.
+  Mass assignment: reject writes to governance fields like `role`, `deleted`, `owner`, `ngoId`, `tagId`.
+  Sensitive data exposure: responses must not leak password hash, deleted flag, internal state, or raw documents.
+  NoSQL-style payload abuse: object/operator payloads must be rejected for scalar fields.
+  Session persistence after delete: old refresh/access tokens must stop working after account deletion.
+  Cross-origin exposure: verify CORS behavior for allowed and disallowed origins.
+  Raw error leakage: unhandled exceptions and validation failures must not expose internals.

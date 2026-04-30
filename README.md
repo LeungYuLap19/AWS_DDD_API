@@ -132,10 +132,20 @@ authorizer 會把 claims 放進 API Gateway authorizer context，後續 domain L
 
 API 目前要求 `x-api-key`。
 
-也就是 protected route 需要同時通過：
+目前 route 大致分兩類：
 
-- `x-api-key`
-- `Authorization: Bearer <jwt>`
+- protected route：需要同時通過
+  - `x-api-key`
+  - `Authorization: Bearer <jwt>`
+- auth public flow route（例如 `/auth/challenges`、`/auth/challenges/verify`、`/auth/registrations/*`、`/auth/login/ngo`、`/auth/tokens/refresh`）：
+  - 也需要 `x-api-key`
+  - 但不一定需要 Bearer JWT
+
+其中 `POST /auth/challenges/verify` 仍然是 optional auth：
+
+- 有 `x-api-key` 但沒有 Bearer token：走 public verify flow
+- 有 `x-api-key` 且 Bearer token 有效：走 link email / phone flow
+- Bearer token 存在但無效：直接 `401`
 
 ### request body validation
 
