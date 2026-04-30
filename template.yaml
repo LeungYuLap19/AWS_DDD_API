@@ -291,17 +291,6 @@ Resources:
       ManagedPolicyArns: 
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # basic Lambda logging
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole # required when Lambda attaches to a VPC
-      Policies:
-        - PolicyName: shared-config-read # reading config/secrets
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ssm:GetParameter 
-                  - ssm:GetParameters
-                  - secretsmanager:GetSecretValue
-                Resource: '*'
 
   AuthorizerFunctionRole: # the IAM role for the authorizer Lambda only - RequestAuthorizerFunction
     Type: AWS::IAM::Role
@@ -318,17 +307,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: authorizer-config-read
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ssm:GetParameter
-                  - ssm:GetParameters
-                  - secretsmanager:GetSecretValue
-                Resource: '*'
 
   RequestAuthorizerFunction:
     Type: AWS::Serverless::Function
@@ -456,7 +434,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -478,7 +455,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -500,7 +476,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -522,7 +497,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -544,7 +518,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -566,7 +539,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
         AuthTokensRefreshOPTIONS:
           Type: Api
           Properties:

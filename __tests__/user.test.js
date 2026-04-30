@@ -10,6 +10,7 @@ const BASE_URL = process.env.USER_UAT_BASE_URL || 'http://127.0.0.1:3000';
 const TEST_TS = Date.now();
 const RUN_ID = `ddd-user-${TEST_TS}`;
 const JWT_SECRET = process.env.USER_TEST_JWT_SECRET || 'PPCSecret';
+const API_KEY = process.env.USER_TEST_API_KEY || envConfig.Parameters?.ExistingApiKeyId || 'test-api-key';
 const MONGODB_URI =
   envConfig.UserFunction?.MONGODB_URI ||
   envConfig.Parameters?.MONGODB_URI ||
@@ -170,6 +171,7 @@ function loadHandlerWithMocks({
 function authHeaders(token, extra = {}) {
   return {
     Authorization: `Bearer ${token}`,
+    'x-api-key': API_KEY,
     origin: VALID_ORIGIN,
     'x-forwarded-for': `198.51.100.${(TEST_TS % 200) + 1}`,
     ...extra,
@@ -211,6 +213,7 @@ async function req(method, path, body, headers = {}) {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...(method === 'OPTIONS' ? {} : { 'x-api-key': API_KEY }),
       ...headers,
     },
     body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
@@ -928,14 +931,15 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
   });
 
   describe('runtime boundary behavior', () => {
-    test('OPTIONS /user/me returns a successful preflight for the dev wildcard origin policy', async () => {
-      const res = await req('OPTIONS', '/user/me', undefined, {
-        origin: VALID_ORIGIN,
-      });
-
-      expect(res.status).toBe(204);
-      expect(res.headers['access-control-allow-origin']).toBe('*');
+  test('OPTIONS /user/me returns a successful preflight for the dev wildcard origin policy', async () => {
+    const res = await req('OPTIONS', '/user/me', undefined, {
+      origin: VALID_ORIGIN,
     });
+
+    expect(res.status).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.headers['access-control-allow-headers']).toContain('x-api-key');
+  });
 
     test('POST /user/me is not routed by the live SAM API', async () => {
       const res = await req(

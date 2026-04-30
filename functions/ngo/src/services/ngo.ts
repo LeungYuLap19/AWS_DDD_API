@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import {
   AuthContextError,
+  logWarn,
   requireAuthContext,
 } from '@aws-ddd-api/shared';
 import mongoose from 'mongoose';
@@ -14,7 +15,12 @@ import {
 import { buildNgoMemberList } from '../utils/memberList';
 import { escapeRegex, flattenToDot, hasKeys, pickAllowed } from '../utils/object';
 import { response } from '../utils/response';
-import { sanitizeUser } from '../utils/sanitize';
+import {
+  sanitizeNgo,
+  sanitizeNgoCounters,
+  sanitizeNgoUserAccess,
+  sanitizeUser,
+} from '../utils/sanitize';
 import { editNgoBodySchema } from '../zodSchema/editNgoBodySchema';
 
 type UserDocument = {
@@ -56,20 +62,32 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
     results[index]?.status === 'fulfilled'
       ? (results[index] as PromiseFulfilledResult<unknown>).value
       : null;
-  const errStatus = (index: number) =>
-    results[index]?.status === 'rejected'
-      ? String((results[index] as PromiseRejectedResult).reason?.message || (results[index] as PromiseRejectedResult).reason)
-      : null;
+  const warningKey = (index: number, section: 'userProfile' | 'ngoCounters') => {
+    const result = results[index];
+    if (result?.status !== 'rejected') {
+      return null;
+    }
+
+    logWarn('NGO profile section unavailable during partial success response', {
+      event: ctx.event,
+      error: result.reason,
+      scope: 'ngo.services.ngo',
+      extra: {
+        section,
+      },
+    });
+
+    return 'ngo.warnings.temporarilyUnavailable';
+  };
 
   return response.successResponse(200, ctx.event, {
     userProfile: sanitizeUser(pick(0) as UserDocument | null),
-    ngoProfile: authorizedNgo.ngo,
-    ngoUserAccessProfile: authorizedNgo.ngoUserAccess,
-    ngoCounters: pick(1),
-    errors: {
-      userProfile: errStatus(0),
-      ngoUserAccessProfile: null,
-      ngoCounters: errStatus(1),
+    ngoProfile: sanitizeNgo(authorizedNgo.ngo),
+    ngoUserAccessProfile: sanitizeNgoUserAccess(authorizedNgo.ngoUserAccess),
+    ngoCounters: sanitizeNgoCounters(pick(1) as Record<string, unknown> | null),
+    warnings: {
+      userProfile: warningKey(0, 'userProfile'),
+      ngoCounters: warningKey(1, 'ngoCounters'),
     },
   });
 }
@@ -209,29 +227,29 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
     if (hasKeys(ngoDot)) {
       hasUpdates = true;
-      responseData.ngoProfile = await NGO.findOneAndUpdate(
+      responseData.ngoProfile = sanitizeNgo(await NGO.findOneAndUpdate(
         { _id: authContext.ngoId },
         { $set: ngoDot },
         { session, new: true, runValidators: true, lean: true }
-      );
+      ));
     }
 
     if (hasKeys(countersDot)) {
       hasUpdates = true;
-      responseData.ngoCounters = await NgoCounters.findOneAndUpdate(
+      responseData.ngoCounters = sanitizeNgoCounters(await NgoCounters.findOneAndUpdate(
         { ngoId: authContext.ngoId },
         { $set: countersDot },
         { session, new: true, runValidators: true, lean: true }
-      );
+      ));
     }
 
     if (hasKeys(accessDot)) {
       hasUpdates = true;
-      responseData.ngoUserAccessProfile = await NgoUserAccess.findOneAndUpdate(
+      responseData.ngoUserAccessProfile = sanitizeNgoUserAccess(await NgoUserAccess.findOneAndUpdate(
         { ngoId: authContext.ngoId, userId: authContext.userId, isActive: true },
         { $set: accessDot },
         { session, new: true, runValidators: true, lean: true }
-      );
+      ));
 
       if (!responseData.ngoUserAccessProfile) {
         await session.abortTransaction();

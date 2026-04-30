@@ -5,6 +5,9 @@
       "emailExists": "Email already exists",
       "phoneExists": "Phone number already exists",
       "registrationNumberExists": "Business registration number already exists"
+    },
+    "warnings": {
+      "temporarilyUnavailable": "This section is temporarily unavailable."
     }
   }
 }

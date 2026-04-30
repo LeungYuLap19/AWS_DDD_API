@@ -10,6 +10,17 @@ export function sanitizeUser(user: SanitizableUser) {
   }
 
   const rawUser = typeof user.toObject === 'function' ? user.toObject() : user;
-  const { password, ...safeUser } = rawUser;
+  const {
+    password,
+    deleted,
+    credit,
+    vetCredit,
+    eyeAnalysisCredit,
+    bloodAnalysisCredit,
+    __v,
+    createdAt,
+    updatedAt,
+    ...safeUser
+  } = rawUser;
   return safeUser;
 }
