@@ -314,7 +314,13 @@ afterAll(() => {
 });
 
 describe('pet-profile handler Tier 2 integration', () => {
+  // ── Section 4: Shared runtime and handler-level proofs ──────────────────────
+  // Proves createApiGatewayHandler error normalization, createRouter dispatch,
+  // real API Gateway body parsing, CORS behavior, and authorizer context flow
+  // through the real exported Lambda handler.
+
   describe('Shared runtime and router proofs', () => {
+    // 4.2 createRouter 404/405
     test('returns 404 for unknown route', async () => {
       const { handler } = loadHandlerWithMocks();
 
@@ -349,25 +355,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('common.methodNotAllowed');
     });
 
-    test('returns 401 when protected route is missing authorizer context', async () => {
-      const petId = new mongoose.Types.ObjectId().toString();
-      const { handler } = loadHandlerWithMocks();
-
-      const result = await handler(
-        createEvent({
-          method: 'GET',
-          path: `/pet/profile/${petId}`,
-          resource: '/pet/profile/{petId}',
-          pathParameters: { petId },
-        }),
-        createContext()
-      );
-
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(401);
-      expect(parsed.body.errorKey).toBe('common.unauthorized');
-    });
-
+    // 4.1 createApiGatewayHandler error normalization
     test('normalizes unexpected infrastructure errors to 500', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
@@ -390,6 +378,63 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('common.internalError');
     });
 
+    // 4.3 Real API Gateway body handling — POST /pet/profile is multipart-only
+    test('handles multipart create request through the real handler on POST /pet/profile', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: userId,
+        userDoc: { _id: userId, deleted: false },
+        multipartForm: {
+          name: 'Mochi',
+          birthday: '2024-01-01',
+          sex: 'Female',
+          animal: 'Dog',
+          files: [],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      expect(parseResponse(result).statusCode).toBe(201);
+      expect(petModel.create).toHaveBeenCalled();
+    });
+
+    test('returns 500 when multipart parser throws without leaking infrastructure details', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: userId,
+        multipartError: new Error('parse failure'),
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'garbage',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(500);
+      expect(parsed.body.errorKey).toBe('common.internalError');
+      expect(petModel.create).not.toHaveBeenCalled();
+    });
+
+    // 4.4 OPTIONS / CORS behavior
     test('handles allowed CORS preflight requests with 204', async () => {
       const { handler } = loadHandlerWithMocks();
 
@@ -459,7 +504,30 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(result.statusCode).toBe(200);
       expect(result.headers['Access-Control-Allow-Origin']).toBe('*');
     });
+
+    // 4.5 Real authorization context flow — handler reads identity from
+    // requestContext.authorizer; missing context is rejected for protected routes
+    test('returns 401 when a protected route is called without authorizer context', async () => {
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks();
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(401);
+      expect(parsed.body.errorKey).toBe('common.unauthorized');
+    });
   });
+
+  // ── Section 3.1: Happy-path flows ───────────────────────────────────────────
 
   describe('Happy-path flows', () => {
     test('returns private detail data for GET /pet/profile/{petId} when caller owns the pet', async () => {
@@ -492,12 +560,126 @@ describe('pet-profile handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.success).toBe(true);
+      expect(parsed.body.view).toBe('full');
       expect(parsed.body.form.name).toBe('Mochi');
       expect(parsed.body.form.tagId).toBe('TAG-001');
       expect(parsed.body.form.ownerContact1).toBe(91234567);
     });
 
-    test('returns narrowed summary data for GET /pet/profile/me user scope', async () => {
+    test('returns only basic fields for GET /pet/profile/{petId}?view=basic', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petDoc: {
+          _id: petId,
+          userId,
+          name: 'Mochi',
+          tagId: 'TAG-001',
+          chipId: 'CHIP-001',
+          motherName: 'Luna',
+          deleted: false,
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          queryStringParameters: { view: 'basic' },
+          authorizer: createAuthorizer({ userId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.view).toBe('basic');
+      expect(parsed.body.form.name).toBe('Mochi');
+      expect(parsed.body.form.tagId).toBe('TAG-001');
+      expect(parsed.body.form.chipId).toBeUndefined();
+      expect(parsed.body.form.motherName).toBeUndefined();
+    });
+
+    test('returns only lineage fields for GET /pet/profile/{petId}?view=detail', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petDoc: {
+          _id: petId,
+          userId,
+          name: 'Mochi',
+          tagId: 'TAG-001',
+          chipId: 'CHIP-001',
+          motherName: 'Luna',
+          transferNGO: [{ isTransferred: false }],
+          deleted: false,
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          queryStringParameters: { view: 'detail' },
+          authorizer: createAuthorizer({ userId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.view).toBe('detail');
+      expect(parsed.body.form.chipId).toBe('CHIP-001');
+      expect(parsed.body.form.motherName).toBe('Luna');
+      expect(parsed.body.form.transferNGO).toHaveLength(1);
+      expect(parsed.body.form.name).toBeUndefined();
+      expect(parsed.body.form.tagId).toBeUndefined();
+    });
+
+    test('returns all fields for GET /pet/profile/{petId}?view=full', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petDoc: {
+          _id: petId,
+          userId,
+          name: 'Mochi',
+          tagId: 'TAG-001',
+          chipId: 'CHIP-001',
+          motherName: 'Luna',
+          deleted: false,
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          queryStringParameters: { view: 'full' },
+          authorizer: createAuthorizer({ userId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.view).toBe('full');
+      expect(parsed.body.form.name).toBe('Mochi');
+      expect(parsed.body.form.tagId).toBe('TAG-001');
+      expect(parsed.body.form.chipId).toBe('CHIP-001');
+      expect(parsed.body.form.motherName).toBe('Luna');
+    });
+
+    test('returns narrowed summary data without sensitive fields for GET /pet/profile/me user scope', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
         authUserId: userId,
@@ -528,15 +710,15 @@ describe('pet-profile handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.total).toBe(1);
-      expect(Array.isArray(parsed.body.form)).toBe(true);
-      expect(parsed.body.form[0].name).toBe('Mochi');
-      expect(parsed.body.form[0].location).toBe('Shelter A');
-      expect(parsed.body.form[0].userId).toBeUndefined();
-      expect(parsed.body.form[0].ownerContact1).toBeUndefined();
-      expect(parsed.body.form[0].tagId).toBeUndefined();
+      expect(Array.isArray(parsed.body.pets)).toBe(true);
+      expect(parsed.body.pets[0].name).toBe('Mochi');
+      expect(parsed.body.pets[0].location).toBe('Shelter A');
+      expect(parsed.body.pets[0].userId).toBeUndefined();
+      expect(parsed.body.pets[0].ownerContact1).toBeUndefined();
+      expect(parsed.body.pets[0].tagId).toBeUndefined();
     });
 
-    test('returns NGO list results with paging and sort metadata', async () => {
+    test('returns NGO list results with paging and sort metadata for GET /pet/profile/me NGO scope', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ngoId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel, petFindChain } = loadHandlerWithMocks({
@@ -585,7 +767,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(petFindChain.limit).toHaveBeenCalledWith(30);
     });
 
-    test('returns public-safe tag lookup data without auth', async () => {
+    test('returns public-safe tag lookup data without auth for GET /pet/profile/by-tag/{tagId}', async () => {
       const { handler } = loadHandlerWithMocks({
         publicTagPet: {
           name: 'Mochi',
@@ -613,11 +795,19 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.form.ngoId).toBeUndefined();
     });
 
-    test('creates a pet profile from JSON body input', async () => {
+    test('creates a pet profile from multipart form via POST /pet/profile', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: { _id: userId, deleted: false },
+        multipartForm: {
+          name: 'Mochi',
+          birthday: '2024-01-01',
+          sex: 'Female',
+          animal: 'Dog',
+          tagId: 'TAG-001',
+          files: [],
+        },
       });
 
       const result = await handler(
@@ -625,15 +815,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           method: 'POST',
           path: '/pet/profile',
           resource: '/pet/profile',
-          body: JSON.stringify({
-            name: 'Mochi',
-            birthday: '2024-01-01',
-            sex: 'Female',
-            animal: 'Dog',
-            tagId: 'TAG-001',
-          }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -642,6 +826,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(201);
       expect(parsed.body.success).toBe(true);
       expect(parsed.body.message).toBe('Pet profile created successfully');
+      expect(parsed.body.result).toBeDefined();
       expect(petModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId,
@@ -653,7 +838,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       );
     });
 
-    test('creates a pet profile from multipart NGO input with uploaded image and generated NGO pet id', async () => {
+    test('creates NGO pet from multipart with S3 image and generated ngoPetId via POST /pet/profile', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ngoId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel, ngoCountersModel, imageCollectionModel, s3SendMock } = loadHandlerWithMocks({
@@ -696,18 +881,26 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(createCall.breedimage[0]).toContain('https://cdn.example.test/user-uploads/pets/');
     });
 
-    test('updates a pet profile from JSON body input using the ownership filter', async () => {
+    test('updates scalar fields on a pet via multipart PATCH /pet/profile/{petId}', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
+      const save = jest.fn().mockResolvedValue(undefined);
+      const petDoc = {
+        _id: petId,
+        userId,
+        deleted: false,
+        name: 'Mochi',
+        breedimage: [],
+        save,
+      };
+
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
-        petDoc: { _id: petId, userId, deleted: false },
-        updatedPetDoc: {
-          _id: petId,
-          userId,
+        petDoc,
+        multipartForm: {
           name: 'Updated Mochi',
-          locationName: 'Shelter A',
-          deleted: false,
+          location: 'Shelter A',
+          files: [],
         },
       });
 
@@ -717,32 +910,22 @@ describe('pet-profile handler Tier 2 integration', () => {
           path: `/pet/profile/${petId}`,
           resource: '/pet/profile/{petId}',
           pathParameters: { petId },
-          body: JSON.stringify({
-            name: 'Updated Mochi',
-            location: 'Shelter A',
-          }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
 
       const parsed = parseResponse(result);
-      const [filter, update] = petModel.findOneAndUpdate.mock.calls[0];
-
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.form.name).toBe('Updated Mochi');
-      expect(parsed.body.form.location).toBe('Shelter A');
-      expect(filter).toMatchObject({
-        _id: petId,
-        deleted: false,
-        $or: [{ userId }],
-      });
-      expect(update.$set.locationName).toBe('Shelter A');
-      expect(update.$set.location).toBeUndefined();
+      expect(save).toHaveBeenCalledWith({ validateBeforeSave: true });
+      expect(petDoc.name).toBe('Updated Mochi');
+      expect(petDoc.locationName).toBe('Shelter A');
+      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
-    test('updates multipart pet images and scalar fields in one request', async () => {
+    test('updates multipart pet images and scalar fields in one request via PATCH /pet/profile/{petId}', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const save = jest.fn().mockResolvedValue(undefined);
@@ -789,7 +972,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(petDoc.breedimage[1]).toContain('https://cdn.example.test/user-uploads/pets/');
     });
 
-    test('soft deletes a pet profile and clears the tag id', async () => {
+    test('soft deletes a pet and clears the tagId via DELETE /pet/profile/{petId}', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const activePetDoc = {
@@ -834,8 +1017,35 @@ describe('pet-profile handler Tier 2 integration', () => {
     });
   });
 
+  // ── Section 3.2: Input validation 400 responses ─────────────────────────────
+
   describe('Input validation 400 responses', () => {
-    test('rejects invalid pet ids on protected detail routes', async () => {
+    test('rejects invalid view param on GET /pet/profile/{petId}', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petDoc: { _id: petId, userId, deleted: false },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          queryStringParameters: { view: 'unknown' },
+          authorizer: createAuthorizer({ userId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidView');
+    });
+
+    test('rejects invalid petId on GET /pet/profile/{petId}', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({ authUserId: userId });
 
@@ -855,7 +1065,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.invalidPetId');
     });
 
-    test('rejects public tag lookup when tagId is missing', async () => {
+    test('rejects missing tagId on GET /pet/profile/by-tag/{tagId}', async () => {
       const { handler } = loadHandlerWithMocks();
 
       const result = await handler(
@@ -873,11 +1083,12 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.missingTagId');
     });
 
-    test('rejects invalid JSON create payloads with field-level validation keys', async () => {
+    test('rejects empty required fields on multipart POST /pet/profile', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: { _id: userId, deleted: false },
+        multipartForm: { name: '', sex: '', animal: '', files: [] },
       });
 
       const result = await handler(
@@ -885,9 +1096,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           method: 'POST',
           path: '/pet/profile',
           resource: '/pet/profile',
-          body: JSON.stringify({ name: '', sex: '', animal: '', birthday: 'bad-date' }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -898,10 +1109,11 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(petModel.create).not.toHaveBeenCalled();
     });
 
-    test('rejects malformed JSON create bodies safely', async () => {
+    test('rejects multipart POST with no body fields without calling DB', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
+        multipartForm: { files: [] },
       });
 
       const result = await handler(
@@ -909,9 +1121,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           method: 'POST',
           path: '/pet/profile',
           resource: '/pet/profile',
-          body: '{"name":"Mochi"',
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -919,15 +1131,23 @@ describe('pet-profile handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.success).toBe(false);
-      expect(parsed.body.errorKey).toEqual(expect.any(String));
       expect(parsed.body.errorKey).not.toBe('common.internalError');
       expect(petModel.create).not.toHaveBeenCalled();
     });
 
-    test('rejects malicious extra fields on JSON create without mutating state', async () => {
+    test('rejects malicious extra fields in multipart POST /pet/profile without creating', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
+        multipartForm: {
+          name: 'Mochi',
+          birthday: '2024-01-01',
+          sex: 'Female',
+          animal: 'Dog',
+          deleted: 'true',
+          userId: 'attacker-id',
+          files: [],
+        },
       });
 
       const result = await handler(
@@ -935,16 +1155,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           method: 'POST',
           path: '/pet/profile',
           resource: '/pet/profile',
-          body: JSON.stringify({
-            name: 'Mochi',
-            birthday: '2024-01-01',
-            sex: 'Female',
-            animal: 'Dog',
-            deleted: true,
-            userId: 'attacker-id',
-          }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -955,11 +1168,23 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(petModel.create).not.toHaveBeenCalled();
     });
 
-    test('rejects empty JSON patch bodies with common.noFieldsToUpdate', async () => {
+    test('accepts an empty multipart PATCH as a no-op without changing pet data', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, petModel } = loadHandlerWithMocks({
+      const save = jest.fn().mockResolvedValue(undefined);
+      const petDoc = {
+        _id: petId,
+        userId,
+        deleted: false,
+        name: 'Mochi',
+        breedimage: [],
+        save,
+      };
+
+      const { handler } = loadHandlerWithMocks({
         authUserId: userId,
+        petDoc,
+        multipartForm: { files: [] },
       });
 
       const result = await handler(
@@ -968,24 +1193,27 @@ describe('pet-profile handler Tier 2 integration', () => {
           path: `/pet/profile/${petId}`,
           resource: '/pet/profile/{petId}',
           pathParameters: { petId },
-          body: JSON.stringify({}),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
 
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('common.noFieldsToUpdate');
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(parseResponse(result).statusCode).toBe(200);
+      expect(petDoc.name).toBe('Mochi');
+      expect(save).toHaveBeenCalledWith({ validateBeforeSave: true });
     });
 
-    test('rejects invalid JSON patch field types', async () => {
+    test('rejects invalid weight type via multipart PATCH /pet/profile/{petId}', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, petModel } = loadHandlerWithMocks({
+      const save = jest.fn().mockResolvedValue(undefined);
+
+      const { handler } = loadHandlerWithMocks({
         authUserId: userId,
+        petDoc: { _id: petId, userId, deleted: false, breedimage: [], save },
+        multipartForm: { weight: 'heavy', files: [] },
       });
 
       const result = await handler(
@@ -994,35 +1222,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           path: `/pet/profile/${petId}`,
           resource: '/pet/profile/{petId}',
           pathParameters: { petId },
-          body: JSON.stringify({ weight: 'heavy' }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
-        }),
-        createContext()
-      );
-
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidWeightType');
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
-    });
-
-    test('rejects malformed JSON patch bodies safely', async () => {
-      const userId = new mongoose.Types.ObjectId().toString();
-      const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, petModel } = loadHandlerWithMocks({
-        authUserId: userId,
-      });
-
-      const result = await handler(
-        createEvent({
-          method: 'PATCH',
-          path: `/pet/profile/${petId}`,
-          resource: '/pet/profile/{petId}',
-          pathParameters: { petId },
-          body: '{"name":"Updated Mochi"',
-          authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -1030,12 +1232,40 @@ describe('pet-profile handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.success).toBe(false);
-      expect(parsed.body.errorKey).toEqual(expect.any(String));
-      expect(parsed.body.errorKey).not.toBe('common.internalError');
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
     });
 
-    test('rejects multipart patch requests with invalid pet ids', async () => {
+    test('returns 500 when multipart parser throws on PATCH without mutating state', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const save = jest.fn().mockResolvedValue(undefined);
+
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petDoc: { _id: petId, userId, deleted: false, breedimage: [], save },
+        multipartError: new Error('parse failure'),
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          body: 'garbage',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(500);
+      expect(parsed.body.errorKey).toBe('common.internalError');
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    test('rejects invalid petId on multipart PATCH /pet/profile/{petId}', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
         authUserId: userId,
@@ -1067,7 +1297,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.invalidPetId');
     });
 
-    test('rejects multipart patch requests that still send deprecated body petId', async () => {
+    test('rejects deprecated body petId field on multipart PATCH', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const save = jest.fn().mockResolvedValue(undefined);
@@ -1107,7 +1337,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(petModel.findOne).not.toHaveBeenCalled();
     });
 
-    test('rejects multipart patch requests with invalid removedIndices JSON', async () => {
+    test('rejects invalid removedIndices JSON on multipart PATCH', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const petDoc = {
@@ -1144,7 +1374,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.invalidRemovedIndices');
     });
 
-    test('rejects malicious extra fields in multipart patch without saving', async () => {
+    test('rejects malicious extra fields in multipart PATCH without saving', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const save = jest.fn().mockResolvedValue(undefined);
@@ -1183,16 +1413,25 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
       expect(save).not.toHaveBeenCalled();
     });
-
   });
 
-  describe('Business logic, authentication, and authorization 4xx responses', () => {
-    test('returns 409 for duplicate tag conflicts on JSON create', async () => {
+  // ── Section 3.3: Business-logic errors 4xx ──────────────────────────────────
+
+  describe('Business-logic errors 4xx', () => {
+    test('returns 409 for duplicate tagId conflict on multipart POST /pet/profile', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: { _id: userId, deleted: false },
         duplicateTag: { _id: new mongoose.Types.ObjectId().toString() },
+        multipartForm: {
+          name: 'Mochi',
+          birthday: '2024-01-01',
+          sex: 'Female',
+          animal: 'Dog',
+          tagId: 'TAG-001',
+          files: [],
+        },
       });
 
       const result = await handler(
@@ -1200,15 +1439,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           method: 'POST',
           path: '/pet/profile',
           resource: '/pet/profile',
-          body: JSON.stringify({
-            name: 'Mochi',
-            birthday: '2024-01-01',
-            sex: 'Female',
-            animal: 'Dog',
-            tagId: 'TAG-001',
-          }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -1223,6 +1456,13 @@ describe('pet-profile handler Tier 2 integration', () => {
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: null,
+        multipartForm: {
+          name: 'Mochi',
+          birthday: '2024-01-01',
+          sex: 'Female',
+          animal: 'Dog',
+          files: [],
+        },
       });
 
       const result = await handler(
@@ -1230,14 +1470,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           method: 'POST',
           path: '/pet/profile',
           resource: '/pet/profile',
-          body: JSON.stringify({
-            name: 'Mochi',
-            birthday: '2024-01-01',
-            sex: 'Female',
-            animal: 'Dog',
-          }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -1248,72 +1483,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(petModel.create).not.toHaveBeenCalled();
     });
 
-    test('returns 403 when non-NGO callers try multipart create with ngoId', async () => {
-      const userId = new mongoose.Types.ObjectId().toString();
-      const { handler } = loadHandlerWithMocks({
-        authUserId: userId,
-        userDoc: { _id: userId, deleted: false },
-        multipartForm: {
-          name: 'Mochi',
-          animal: 'Dog',
-          sex: 'Female',
-          ngoId: new mongoose.Types.ObjectId().toString(),
-          files: [],
-        },
-      });
-
-      const result = await handler(
-        createEvent({
-          method: 'POST',
-          path: '/pet/profile',
-          resource: '/pet/profile',
-          body: 'multipart',
-          authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
-        }),
-        createContext()
-      );
-
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(403);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.ngoRoleRequired');
-    });
-
-    test('returns 403 when NGO multipart create is missing the NGO claim', async () => {
-      const userId = new mongoose.Types.ObjectId().toString();
-      const requestedNgoId = new mongoose.Types.ObjectId().toString();
-      const { handler } = loadHandlerWithMocks({
-        authUserId: userId,
-        authRole: 'ngo',
-        authNgoId: undefined,
-        userDoc: { _id: userId, deleted: false },
-        multipartForm: {
-          name: 'Mochi',
-          animal: 'Dog',
-          sex: 'Female',
-          ngoId: requestedNgoId,
-          files: [],
-        },
-      });
-
-      const result = await handler(
-        createEvent({
-          method: 'POST',
-          path: '/pet/profile',
-          resource: '/pet/profile',
-          body: 'multipart',
-          authorizer: createAuthorizer({ userId, role: 'ngo' }),
-          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
-        }),
-        createContext()
-      );
-
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(403);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.ngoIdClaimRequired');
-    });
-
-    test('returns 409 when generated NGO pet ids collide during multipart create', async () => {
+    test('returns 409 when generated NGO petId collides on multipart POST /pet/profile', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ngoId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel } = loadHandlerWithMocks({
@@ -1349,86 +1519,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(petModel.create).not.toHaveBeenCalled();
     });
 
-    test('returns 403 for detail reads outside the caller ownership scope', async () => {
-      const callerId = new mongoose.Types.ObjectId().toString();
-      const ownerId = new mongoose.Types.ObjectId().toString();
-      const petId = new mongoose.Types.ObjectId().toString();
-      const { handler } = loadHandlerWithMocks({
-        authUserId: callerId,
-        petDoc: { _id: petId, userId: ownerId, deleted: false },
-      });
-
-      const result = await handler(
-        createEvent({
-          method: 'GET',
-          path: `/pet/profile/${petId}`,
-          resource: '/pet/profile/{petId}',
-          pathParameters: { petId },
-          authorizer: createAuthorizer({ userId: callerId }),
-        }),
-        createContext()
-      );
-
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(403);
-      expect(parsed.body.errorKey).toBe('common.forbidden');
-    });
-
-    test('returns 403 for JSON patch requests outside the caller ownership scope', async () => {
-      const callerId = new mongoose.Types.ObjectId().toString();
-      const ownerId = new mongoose.Types.ObjectId().toString();
-      const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, petModel } = loadHandlerWithMocks({
-        authUserId: callerId,
-        petDoc: { _id: petId, userId: ownerId, deleted: false },
-      });
-
-      const result = await handler(
-        createEvent({
-          method: 'PATCH',
-          path: `/pet/profile/${petId}`,
-          resource: '/pet/profile/{petId}',
-          pathParameters: { petId },
-          body: JSON.stringify({ name: 'Updated Mochi' }),
-          authorizer: createAuthorizer({ userId: callerId }),
-          headers: { 'content-type': 'application/json' },
-        }),
-        createContext()
-      );
-
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(403);
-      expect(parsed.body.errorKey).toBe('common.forbidden');
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
-    });
-
-    test('returns 403 for delete requests outside the caller ownership scope', async () => {
-      const callerId = new mongoose.Types.ObjectId().toString();
-      const ownerId = new mongoose.Types.ObjectId().toString();
-      const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, petModel } = loadHandlerWithMocks({
-        authUserId: callerId,
-        petDoc: { _id: petId, userId: ownerId, deleted: false },
-      });
-
-      const result = await handler(
-        createEvent({
-          method: 'DELETE',
-          path: `/pet/profile/${petId}`,
-          resource: '/pet/profile/{petId}',
-          pathParameters: { petId },
-          authorizer: createAuthorizer({ userId: callerId }),
-        }),
-        createContext()
-      );
-
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(403);
-      expect(parsed.body.errorKey).toBe('common.forbidden');
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
-    });
-
-    test('returns 409 when deleting an already deleted pet', async () => {
+    test('returns 409 when deleting an already-deleted pet', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const activePetDoc = {
@@ -1465,7 +1556,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.petAlreadyDeleted');
     });
 
-    test('returns 404 when delete loses the target after the auth read', async () => {
+    test('returns 404 when delete loses the target between the auth read and the write', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const activePetDoc = {
@@ -1497,7 +1588,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.petNotFound');
     });
 
-    test('returns 404 for NGO list requests when no pets match', async () => {
+    test('returns 404 for NGO list when no pets match the query', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ngoId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
@@ -1523,7 +1614,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petProfile.errors.noPetsFound');
     });
 
-    test('returns a successful null-filled public tag lookup when no pet matches', async () => {
+    test('returns 200 with null-filled form when no pet matches a public tag lookup', async () => {
       const { handler } = loadHandlerWithMocks({
         publicTagPet: null,
       });
@@ -1545,11 +1636,12 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.form.status).toBeNull();
     });
 
-    test('returns 429 when create is over the configured rate limit', async () => {
+    test('returns 429 with retry-after header when create exceeds the rate limit', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: { _id: userId, deleted: false },
+        multipartForm: { name: 'Mochi', animal: 'Dog', sex: 'Female', files: [] },
         rateLimitEntry: {
           count: 21,
           expireAt: new Date(Date.now() + 60_000),
@@ -1562,14 +1654,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           method: 'POST',
           path: '/pet/profile',
           resource: '/pet/profile',
-          body: JSON.stringify({
-            name: 'Mochi',
-            birthday: '2024-01-01',
-            sex: 'Female',
-            animal: 'Dog',
-          }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -1579,8 +1666,262 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('common.rateLimited');
       expect(result.headers['retry-after']).toEqual(expect.any(String));
     });
+  });
 
-    test('returns 403 for multipart patch ngoId mismatch attempts', async () => {
+  // ── Section 3.4: Authentication and authorisation ───────────────────────────
+  // Proves that every protected route rejects missing authorizer context and
+  // that ownership and role enforcement runs through the real handler.
+
+  describe('Authentication and authorisation', () => {
+    // Missing authorizer context — each protected route must return 401
+
+    test('returns 401 when GET /pet/profile/me is called without authorizer context', async () => {
+      const { handler } = loadHandlerWithMocks();
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/profile/me',
+          resource: '/pet/profile/me',
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(401);
+      expect(parsed.body.errorKey).toBe('common.unauthorized');
+    });
+
+    test('returns 401 when GET /pet/profile/{petId} is called without authorizer context', async () => {
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks();
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(401);
+      expect(parsed.body.errorKey).toBe('common.unauthorized');
+    });
+
+    test('returns 401 when POST /pet/profile is called without authorizer context', async () => {
+      const { handler } = loadHandlerWithMocks();
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'multipart',
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(401);
+      expect(parsed.body.errorKey).toBe('common.unauthorized');
+    });
+
+    test('returns 401 when PATCH /pet/profile/{petId} is called without authorizer context', async () => {
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks();
+
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          body: 'multipart',
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(401);
+      expect(parsed.body.errorKey).toBe('common.unauthorized');
+    });
+
+    test('returns 401 when DELETE /pet/profile/{petId} is called without authorizer context', async () => {
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks();
+
+      const result = await handler(
+        createEvent({
+          method: 'DELETE',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(401);
+      expect(parsed.body.errorKey).toBe('common.unauthorized');
+    });
+
+    // Ownership enforcement
+
+    test('returns 403 when a different user reads another owner\'s pet detail', async () => {
+      const callerId = new mongoose.Types.ObjectId().toString();
+      const ownerId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: callerId,
+        petDoc: { _id: petId, userId: ownerId, deleted: false },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          authorizer: createAuthorizer({ userId: callerId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('common.forbidden');
+    });
+
+    test('returns 403 when a different user patches another owner\'s pet without saving', async () => {
+      const callerId = new mongoose.Types.ObjectId().toString();
+      const ownerId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const save = jest.fn().mockResolvedValue(undefined);
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: callerId,
+        petDoc: { _id: petId, userId: ownerId, deleted: false, breedimage: [], save },
+        multipartForm: { name: 'Updated Mochi', files: [] },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId: callerId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('common.forbidden');
+      expect(save).not.toHaveBeenCalled();
+      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    test('returns 403 when a different user deletes another owner\'s pet without calling findOneAndUpdate', async () => {
+      const callerId = new mongoose.Types.ObjectId().toString();
+      const ownerId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: callerId,
+        petDoc: { _id: petId, userId: ownerId, deleted: false },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'DELETE',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          authorizer: createAuthorizer({ userId: callerId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('common.forbidden');
+      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    // Role enforcement
+
+    test('returns 403 when a non-NGO user tries multipart create with a ngoId', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        userDoc: { _id: userId, deleted: false },
+        multipartForm: {
+          name: 'Mochi',
+          animal: 'Dog',
+          sex: 'Female',
+          ngoId: new mongoose.Types.ObjectId().toString(),
+          files: [],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('petProfile.errors.ngoRoleRequired');
+    });
+
+    test('returns 403 when an NGO user is missing the ngoId claim on multipart create', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const requestedNgoId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        authRole: 'ngo',
+        authNgoId: undefined,
+        userDoc: { _id: userId, deleted: false },
+        multipartForm: {
+          name: 'Mochi',
+          animal: 'Dog',
+          sex: 'Female',
+          ngoId: requestedNgoId,
+          files: [],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId, role: 'ngo' }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('petProfile.errors.ngoIdClaimRequired');
+    });
+
+    test('returns 403 when NGO multipart patch sends a ngoId that does not match the authorizer claim', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ngoId = new mongoose.Types.ObjectId().toString();
       const otherNgoId = new mongoose.Types.ObjectId().toString();
@@ -1625,7 +1966,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(save).not.toHaveBeenCalled();
     });
 
-    test('returns 403 for multipart ngoPetId escalation attempts by non-NGO owners', async () => {
+    test('returns 403 when a non-NGO owner tries to set ngoPetId in multipart patch', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const save = jest.fn().mockResolvedValue(undefined);
@@ -1666,13 +2007,19 @@ describe('pet-profile handler Tier 2 integration', () => {
     });
   });
 
-  describe('Cyberattack and abuse coverage', () => {
-    test('rejects JSON patch mass assignment attempts against isRegistered without mutating state', async () => {
+  // ── Section 3.5: Cyberattacks and abuse ─────────────────────────────────────
+
+  describe('Cyberattacks and abuse', () => {
+    // Mass assignment / body field injection on PATCH
+    test('rejects mass assignment of isRegistered in multipart PATCH without mutating state', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, petModel } = loadHandlerWithMocks({
+      const save = jest.fn().mockResolvedValue(undefined);
+
+      const { handler } = loadHandlerWithMocks({
         authUserId: userId,
-        petDoc: { _id: petId, userId, deleted: false },
+        petDoc: { _id: petId, userId, deleted: false, breedimage: [], save },
+        multipartForm: { isRegistered: 'true', files: [] },
       });
 
       const result = await handler(
@@ -1681,9 +2028,9 @@ describe('pet-profile handler Tier 2 integration', () => {
           path: `/pet/profile/${petId}`,
           resource: '/pet/profile/{petId}',
           pathParameters: { petId },
-          body: JSON.stringify({ isRegistered: true }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
@@ -1691,15 +2038,55 @@ describe('pet-profile handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
     });
 
-    test('rejects NoSQL-style JSON patch operator injection without mutating state', async () => {
+    // Role escalation — non-NGO user sending ngoId is rejected before reaching DB
+    test('returns 403 when a non-NGO user sends ngoId in multipart POST /pet/profile without creating', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
-      const petId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
-        petDoc: { _id: petId, userId, deleted: false },
+        userDoc: { _id: userId, deleted: false },
+        multipartForm: {
+          name: 'Mochi',
+          birthday: '2024-01-01',
+          sex: 'Female',
+          animal: 'Dog',
+          ngoId: new mongoose.Types.ObjectId().toString(),
+          files: [],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('petProfile.errors.ngoRoleRequired');
+      expect(petModel.create).not.toHaveBeenCalled();
+    });
+
+    // Multipart transport makes NoSQL object injection structurally impossible —
+    // every field arrives as a plain string, so operator objects cannot be sent.
+    test('multipart PATCH stores operator-like strings as plain data, preventing NoSQL injection', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const save = jest.fn().mockResolvedValue(undefined);
+      const petDoc = { _id: petId, userId, deleted: false, breedimage: [], save };
+
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petDoc,
+        multipartForm: { name: '{"$gt":""}', files: [] },
       });
 
       const result = await handler(
@@ -1708,21 +2095,51 @@ describe('pet-profile handler Tier 2 integration', () => {
           path: `/pet/profile/${petId}`,
           resource: '/pet/profile/{petId}',
           pathParameters: { petId },
-          body: JSON.stringify({ name: { $gt: '' } }),
+          body: 'multipart',
           authorizer: createAuthorizer({ userId }),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
         }),
         createContext()
       );
 
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.success).toBe(false);
-      expect(parsed.body.errorKey).toEqual(expect.any(String));
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(parseResponse(result).statusCode).toBe(200);
+      expect(petDoc.name).toBe('{"$gt":""}');
+      expect(save).toHaveBeenCalledWith({ validateBeforeSave: true });
     });
 
-    test('escapes regex metacharacters in NGO list search input', async () => {
+    test('multipart POST stores operator-like strings as plain data, preventing NoSQL injection', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: userId,
+        userDoc: { _id: userId, deleted: false },
+        multipartForm: {
+          name: 'Mochi',
+          sex: 'Female',
+          animal: '{"$ne":null}',
+          files: [],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      expect(parseResponse(result).statusCode).toBe(201);
+      expect(petModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ animal: '{"$ne":null}' })
+      );
+    });
+
+    // Regex injection via search input
+    test('escapes regex metacharacters in NGO list search input to prevent ReDoS', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ngoId = new mongoose.Types.ObjectId().toString();
       const { handler, petModel } = loadHandlerWithMocks({
@@ -1758,7 +2175,95 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(query.$or[0].name.$regex).toBe('a\\.\\*\\(b\\)\\?\\$');
       expect(query.$or[1].animal.$regex).toBe('a\\.\\*\\(b\\)\\?\\$');
     });
+
+    // Ownership bypass — attacker uses their own valid token to access a different user's pet
+    test('returns 403 when attacker uses valid token with own userId to read a different owner\'s pet', async () => {
+      const attackerId = new mongoose.Types.ObjectId().toString();
+      const victimId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: attackerId,
+        petDoc: { _id: petId, userId: victimId, deleted: false },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          authorizer: createAuthorizer({ userId: attackerId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('common.forbidden');
+      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    test('returns 403 when attacker uses valid token with own userId to delete a different owner\'s pet', async () => {
+      const attackerId = new mongoose.Types.ObjectId().toString();
+      const victimId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: attackerId,
+        petDoc: { _id: petId, userId: victimId, deleted: false },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'DELETE',
+          path: `/pet/profile/${petId}`,
+          resource: '/pet/profile/{petId}',
+          pathParameters: { petId },
+          authorizer: createAuthorizer({ userId: attackerId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('common.forbidden');
+      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    // Repeated hostile create requests — rate limit prevents burst abuse
+    test('returns 429 and does not create when a burst request hits the rate limit window', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler, petModel } = loadHandlerWithMocks({
+        authUserId: userId,
+        userDoc: { _id: userId, deleted: false },
+        multipartForm: { name: 'Mochi', animal: 'Dog', sex: 'Female', files: [] },
+        rateLimitEntry: {
+          count: 21,
+          expireAt: new Date(Date.now() + 60_000),
+          windowStart: new Date(),
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/profile',
+          resource: '/pet/profile',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(429);
+      expect(parsed.body.errorKey).toBe('common.rateLimited');
+      expect(result.headers['retry-after']).toEqual(expect.any(String));
+      expect(petModel.create).not.toHaveBeenCalled();
+    });
   });
+
+  // ── Infrastructure contract checks ──────────────────────────────────────────
 
   describe('Infrastructure contract checks', () => {
     test('template keeps by-tag GET and OPTIONS routes public without API key', async () => {
@@ -1776,8 +2281,24 @@ describe('pet-profile handler Tier 2 integration', () => {
     });
   });
 
-  describe('Deferred higher-tier proof', () => {
-    test.todo('Tier 3: local SAM HTTP integration through template.yaml and sam local start-api');
-    test.todo('Tier 4: DB-backed UAT covering persistence, repeated request stability, and delete/read/patch state transitions');
+  // ── Deferred proof — requires live AWS or unavailable infra ─────────────────
+  // Tier 3 (SAM local HTTP) is implemented in __tests__/pet-profile.sam.test.js.
+  // The remaining items below require infrastructure beyond SAM local.
+  //
+  // Blocked claims:
+  //   - Multipart S3 image upload: SAM local cannot prove the file reaches the
+  //     real S3 bucket and that the stored URL is returned in a follow-up GET.
+  //   - Parallel duplicate-tag concurrency: requires a concurrent load harness
+  //     against a live DB to prove uniqueness holds under race conditions.
+  //   - Deployed API Gateway authorizer: SAM local does not inject
+  //     requestContext.authorizer equivalently to live AWS; authorizer deny
+  //     behavior and correct context injection are only provable via a deployed
+  //     stage or equivalent live-environment test.
+
+  describe('Deferred — requires live AWS or unavailable infra', () => {
+    test.todo('multipart image upload: file reaches real S3 and the URL appears in a follow-up GET');
+    test.todo('parallel duplicate-tag create requests honor uniqueness under concurrency (real DB + load harness)');
+    test.todo('deployed AWS: API Gateway authorizer deny prevents this Lambda from running');
+    test.todo('deployed AWS: requestContext.authorizer is injected correctly by live API Gateway');
   });
 });

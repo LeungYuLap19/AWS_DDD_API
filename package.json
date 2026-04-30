@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "validate": "sam validate --template-file template.yaml",
+    "pretest": "npm run build:ts",
     "build:ts": "tsc -p tsconfig.json && node script/prepare-dist.cjs",
     "build": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml",
     "local:api": "sam local start-api --template .aws-sam/build/template.yaml",

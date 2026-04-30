@@ -4,44 +4,7 @@ import {
   rejectUnknownFields,
 } from './shared';
 
-const patchPetProfileAllowedFields = new Set([
-  'name',
-  'breedimage',
-  'animal',
-  'birthday',
-  'weight',
-  'sex',
-  'sterilization',
-  'sterilizationDate',
-  'adoptionStatus',
-  'breed',
-  'bloodType',
-  'features',
-  'info',
-  'status',
-  'ownerContact1',
-  'ownerContact2',
-  'contact1Show',
-  'contact2Show',
-  'receivedDate',
-  'location',
-  'position',
-  'chipId',
-  'placeOfBirth',
-  'motherName',
-  'motherBreed',
-  'motherDOB',
-  'motherChip',
-  'motherPlaceOfBirth',
-  'motherParity',
-  'fatherName',
-  'fatherBreed',
-  'fatherDOB',
-  'fatherChip',
-  'fatherPlaceOfBirth',
-]);
-
-const patchPetProfileMultipartAllowedFields = new Set([
+export const patchPetAllowedFields = new Set([
   'removedIndices',
   'name',
   'animal',
@@ -65,55 +28,24 @@ const patchPetProfileMultipartAllowedFields = new Set([
   'receivedDate',
   'ngoId',
   'ngoPetId',
-  'files',
+  'location',
+  'position',
+  'chipId',
+  'placeOfBirth',
+  'motherName',
+  'motherBreed',
+  'motherDOB',
+  'motherChip',
+  'motherPlaceOfBirth',
+  'motherParity',
+  'fatherName',
+  'fatherBreed',
+  'fatherDOB',
+  'fatherChip',
+  'fatherPlaceOfBirth',
 ]);
 
-export const patchPetProfileBodySchema = z
-  .object({
-    name: z.string().optional(),
-    breedimage: z.array(z.string().url('petProfile.errors.invalidImageUrl')).optional(),
-    animal: z.string().optional(),
-    birthday: optionalDateString('petProfile.errors.invalidBirthdayFormat'),
-    weight: z.number({ error: 'petProfile.errors.invalidWeightType' }).optional(),
-    sex: z.string().optional(),
-    sterilization: z.boolean({ error: 'petProfile.errors.invalidSterilizationType' }).optional(),
-    sterilizationDate: optionalDateString('petProfile.errors.invalidSterilizationDateFormat'),
-    adoptionStatus: z.string().optional(),
-    breed: z.string().optional(),
-    bloodType: z.string().optional(),
-    features: z.string().optional(),
-    info: z.string().optional(),
-    status: z.string().optional(),
-    ownerContact1: z.number({ error: 'petProfile.errors.invalidOwnerContact1Type' }).optional(),
-    ownerContact2: z.number({ error: 'petProfile.errors.invalidOwnerContact2Type' }).optional(),
-    contact1Show: z.boolean({ error: 'petProfile.errors.invalidContact1ShowType' }).optional(),
-    contact2Show: z.boolean({ error: 'petProfile.errors.invalidContact2ShowType' }).optional(),
-    receivedDate: optionalDateString('petProfile.errors.invalidReceivedDateFormat'),
-    location: z.string().optional(),
-    position: z.string().optional(),
-    chipId: z.string().optional(),
-    placeOfBirth: z.string().optional(),
-    motherName: z.string().optional(),
-    motherBreed: z.string().optional(),
-    motherDOB: optionalDateString('petProfile.errors.invalidParentDateFormat'),
-    motherChip: z.string().optional(),
-    motherPlaceOfBirth: z.string().optional(),
-    motherParity: z.coerce.number({ error: 'petProfile.errors.invalidMotherParity' }).optional(),
-    fatherName: z.string().optional(),
-    fatherBreed: z.string().optional(),
-    fatherDOB: optionalDateString('petProfile.errors.invalidParentDateFormat'),
-    fatherChip: z.string().optional(),
-    fatherPlaceOfBirth: z.string().optional(),
-  })
-  .passthrough()
-  .superRefine((body, ctx) => {
-    rejectUnknownFields(body, ctx, patchPetProfileAllowedFields, 'petProfile.errors.invalidBodyParams');
-  })
-  .refine((body) => Object.keys(body).length > 0, {
-    message: 'common.noFieldsToUpdate',
-  });
-
-export const patchPetProfileMultipartBodySchema = z
+export const patchPetBodySchema = z
   .object({
     removedIndices: z.string().optional(),
     name: z.string().optional(),
@@ -138,8 +70,23 @@ export const patchPetProfileMultipartBodySchema = z
     receivedDate: optionalDateString('petProfile.errors.invalidReceivedDateFormat'),
     ngoId: z.string().optional(),
     ngoPetId: z.string().optional(),
+    location: z.string().optional(),
+    position: z.string().optional(),
+    chipId: z.string().optional(),
+    placeOfBirth: z.string().optional(),
+    motherName: z.string().optional(),
+    motherBreed: z.string().optional(),
+    motherDOB: optionalDateString('petProfile.errors.invalidParentDateFormat'),
+    motherChip: z.string().optional(),
+    motherPlaceOfBirth: z.string().optional(),
+    motherParity: z.coerce.number({ error: 'petProfile.errors.invalidMotherParity' }).optional(),
+    fatherName: z.string().optional(),
+    fatherBreed: z.string().optional(),
+    fatherDOB: optionalDateString('petProfile.errors.invalidParentDateFormat'),
+    fatherChip: z.string().optional(),
+    fatherPlaceOfBirth: z.string().optional(),
   })
   .passthrough()
   .superRefine((body, ctx) => {
-    rejectUnknownFields(body, ctx, patchPetProfileMultipartAllowedFields, 'petProfile.errors.invalidBodyParams');
+    rejectUnknownFields(body, ctx, patchPetAllowedFields, 'petProfile.errors.invalidBodyParams');
   });
