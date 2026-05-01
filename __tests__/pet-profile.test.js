@@ -848,6 +848,7 @@ describe('pet-profile handler Tier 2 integration', () => {
         userDoc: { _id: userId, deleted: false },
         multipartForm: {
           name: 'Mochi',
+          birthday: '2024-01-01',
           animal: 'Dog',
           sex: 'Female',
           ngoId,
@@ -1088,7 +1089,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: { _id: userId, deleted: false },
-        multipartForm: { name: '', sex: '', animal: '', files: [] },
+        multipartForm: { name: '', birthday: '', sex: '', animal: '', files: [] },
       });
 
       const result = await handler(
@@ -1494,6 +1495,7 @@ describe('pet-profile handler Tier 2 integration', () => {
         duplicateNgoPet: { _id: new mongoose.Types.ObjectId().toString() },
         multipartForm: {
           name: 'Mochi',
+          birthday: '2024-01-01',
           animal: 'Dog',
           sex: 'Female',
           ngoId,
@@ -1641,7 +1643,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       const { handler } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: { _id: userId, deleted: false },
-        multipartForm: { name: 'Mochi', animal: 'Dog', sex: 'Female', files: [] },
+        multipartForm: { name: 'Mochi', birthday: '2024-01-01', animal: 'Dog', sex: 'Female', files: [] },
         rateLimitEntry: {
           count: 21,
           expireAt: new Date(Date.now() + 60_000),
@@ -1863,6 +1865,7 @@ describe('pet-profile handler Tier 2 integration', () => {
         userDoc: { _id: userId, deleted: false },
         multipartForm: {
           name: 'Mochi',
+          birthday: '2024-01-01',
           animal: 'Dog',
           sex: 'Female',
           ngoId: new mongoose.Types.ObjectId().toString(),
@@ -1897,6 +1900,7 @@ describe('pet-profile handler Tier 2 integration', () => {
         userDoc: { _id: userId, deleted: false },
         multipartForm: {
           name: 'Mochi',
+          birthday: '2024-01-01',
           animal: 'Dog',
           sex: 'Female',
           ngoId: requestedNgoId,
@@ -2114,6 +2118,7 @@ describe('pet-profile handler Tier 2 integration', () => {
         userDoc: { _id: userId, deleted: false },
         multipartForm: {
           name: 'Mochi',
+          birthday: '2024-01-01',
           sex: 'Female',
           animal: '{"$ne":null}',
           files: [],
@@ -2235,7 +2240,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       const { handler, petModel } = loadHandlerWithMocks({
         authUserId: userId,
         userDoc: { _id: userId, deleted: false },
-        multipartForm: { name: 'Mochi', animal: 'Dog', sex: 'Female', files: [] },
+        multipartForm: { name: 'Mochi', birthday: '2024-01-01', animal: 'Dog', sex: 'Female', files: [] },
         rateLimitEntry: {
           count: 21,
           expireAt: new Date(Date.now() + 60_000),
