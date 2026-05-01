@@ -9,6 +9,12 @@ export const optionalDateString = (message: string) =>
     .refine((value) => isValidDateFormat(value), { message })
     .optional();
 
+export const requiredDateString = (requiredMessage: string, formatMessage: string) =>
+  z
+    .string({ error: requiredMessage })
+    .min(1, requiredMessage)
+    .refine((value) => isValidDateFormat(value), { message: formatMessage });
+
 export function rejectUnknownFields(
   body: Record<string, unknown>,
   ctx: z.RefinementCtx,

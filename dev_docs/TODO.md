@@ -9,6 +9,14 @@
 
 - sanitize PRIVATE_DETAIL_FIELDS in pet-profile need narrower the return fields
 
+- The API doc says birthday is optional, but the actual Mongo model has it as required. 
+  {
+    "success": false,
+    "errorKey": "Pet validation failed: birthday: Path `birthday` is required.",
+    "error": "Pet validation failed: birthday: Path `birthday` is required.",
+    "requestId": "2d2a9aed-8096-4d6a-b3c3-700bded2169f"
+  }
+
 - ***collapse create / patch from multiparts, json to one only***
 
 - ***pet basic info vs detailed info***

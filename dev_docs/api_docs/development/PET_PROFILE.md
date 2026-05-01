@@ -269,7 +269,7 @@ Create a pet profile. This endpoint is multipart/form-data only.
 | `animal` | string | Yes | Non-empty after trim |
 | `sex` | string | Yes | Non-empty after trim |
 | `breed` | string | No | |
-| `birthday` | string | No | `DD/MM/YYYY` or ISO-like date |
+| `birthday` | string | Yes | `DD/MM/YYYY` or ISO-like date |
 | `weight` | number | No | Sent as form-data text; parsed into a number |
 | `sterilization` | boolean | No | Sent as form-data text; case-insensitive `"true"` becomes `true`, anything else becomes `false` |
 | `sterilizationDate` | string | No | `DD/MM/YYYY` or ISO-like date |
@@ -347,6 +347,7 @@ Unknown fields are rejected with `400 petProfile.errors.invalidBodyParams`.
 | 400 | `petProfile.errors.nameRequired` | Missing or empty `name` |
 | 400 | `petProfile.errors.animalRequired` | Missing or empty `animal` |
 | 400 | `petProfile.errors.sexRequired` | Missing or empty `sex` |
+| 400 | `petProfile.errors.birthdayRequired` | Missing or empty `birthday` |
 | 400 | `petProfile.errors.invalidDateFormat` | `birthday` failed date validation |
 | 400 | `petProfile.errors.invalidSterilizationDateFormat` | Bad `sterilizationDate` |
 | 400 | `petProfile.errors.invalidReceivedDateFormat` | Bad `receivedDate` |

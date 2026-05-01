@@ -4,6 +4,7 @@ import {
   optionalNonEmptyString,
   optionalTrimmedString,
   rejectUnknownFields,
+  requiredDateString,
 } from './shared';
 
 const createPetAllowedFields = new Set([
@@ -39,7 +40,7 @@ export const createPetBodySchema = z
     animal: z.string({ error: 'petProfile.errors.animalRequired' }).trim().min(1, 'petProfile.errors.animalRequired'),
     sex: z.string({ error: 'petProfile.errors.sexRequired' }).trim().min(1, 'petProfile.errors.sexRequired'),
     breed: optionalTrimmedString(),
-    birthday: optionalDateString('petProfile.errors.invalidDateFormat'),
+    birthday: requiredDateString('petProfile.errors.birthdayRequired', 'petProfile.errors.invalidDateFormat'),
     weight: z.number().finite().optional(),
     sterilization: z.boolean().optional(),
     sterilizationDate: optionalDateString('petProfile.errors.invalidSterilizationDateFormat'),
