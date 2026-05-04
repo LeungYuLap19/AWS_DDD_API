@@ -519,7 +519,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      // Empty body is rejected by parseBody({ requireNonEmpty: true }) using the
+      // Empty body is rejected by parseBody's default requireNonEmpty: true using the
       // shared default `common.missingParams` error key.
       expect(res.status).toBe(400);
       expect(res.body?.errorKey).toBe('common.missingParams');

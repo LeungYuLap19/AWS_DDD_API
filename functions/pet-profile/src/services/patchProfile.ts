@@ -52,7 +52,7 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
     const filteredBody = Object.fromEntries(
       Object.entries(normalizedBody).filter(([key]) => patchPetAllowedFields.has(key))
     );
-    const parsed = parseBody(filteredBody, patchPetBodySchema);
+    const parsed = parseBody(filteredBody, patchPetBodySchema, { requireNonEmpty: false });
 
     if (!parsed.ok) {
       return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);

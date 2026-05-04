@@ -117,6 +117,7 @@ All Lambda-produced success responses include `success: true` and `requestId`.
 | Condition | `errorKey` |
 | --- | --- |
 | Multipart parsing produced a non-object body (rare; should not happen in normal API Gateway flows) | `common.invalidBodyParams` |
+| Body is missing, `null`, non-object, or an empty object `{}` (POST only; PATCH accepts an empty form body when only files are uploaded) | `common.missingParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key (for example `petProfile.errors.nameRequired`, `petProfile.errors.invalidBodyParams`) | that key |
 | Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
 
@@ -358,6 +359,7 @@ Unknown fields are rejected with `400 petProfile.errors.invalidBodyParams`.
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing form body (no fields and no files) |
 | 400 | `petProfile.errors.nameRequired` | Missing or empty `name` |
 | 400 | `petProfile.errors.animalRequired` | Missing or empty `animal` |
 | 400 | `petProfile.errors.sexRequired` | Missing or empty `sex` |

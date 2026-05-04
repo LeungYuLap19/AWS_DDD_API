@@ -329,6 +329,34 @@ describe('pet-source handler Tier 2 integration', () => {
     expect(parsed.body.petId).toBe(petId);
   });
 
+  test('returns 200 with populated form when a source record exists', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const existing = buildSourceDocument({ petId });
+    const { handler } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: { _id: petId, userId, deleted: false },
+      sourceDoc: existing,
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: `/pet/source/${petId}`,
+        resource: '/pet/source/{petId}',
+        pathParameters: { petId },
+        authorizer: createAuthorizer({ userId }),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.form).not.toBeNull();
+    expect(parsed.body.sourceId).toBe(String(existing._id));
+    expect(parsed.body.petId).toBe(petId);
+  });
+
   test('creates a pet source record successfully', async () => {
     const userId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
@@ -397,6 +425,60 @@ describe('pet-source handler Tier 2 integration', () => {
     expect(parsed.statusCode).toBe(409);
     expect(parsed.body.errorKey).toBe('petSource.errors.duplicateRecord');
     expect(sourceModel.create).not.toHaveBeenCalled();
+  });
+
+  test('returns 403 when caller does not own the pet on POST', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const ownerId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const { handler } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: { _id: petId, userId: ownerId, deleted: false },
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: `/pet/source/${petId}`,
+        resource: '/pet/source/{petId}',
+        pathParameters: { petId },
+        authorizer: createAuthorizer({ userId }),
+        body: JSON.stringify({ placeofOrigin: 'Shelter' }),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(403);
+    expect(parsed.body.errorKey).toBe('common.forbidden');
+  });
+
+  test('returns 409 on race-condition duplicate POST (code 11000)', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const duplicateError = Object.assign(new Error('duplicate key'), { code: 11000 });
+    const { handler } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: { _id: petId, userId, deleted: false },
+      sourceDoc: null,
+      sourceCreateError: duplicateError,
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: `/pet/source/${petId}`,
+        resource: '/pet/source/{petId}',
+        pathParameters: { petId },
+        authorizer: createAuthorizer({ userId }),
+        body: JSON.stringify({ placeofOrigin: 'Street rescue' }),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(409);
+    expect(parsed.body.errorKey).toBe('petSource.errors.duplicateRecord');
   });
 
   test('returns 400 for malformed JSON bodies', async () => {
@@ -506,6 +588,57 @@ describe('pet-source handler Tier 2 integration', () => {
     expect(parsed.statusCode).toBe(400);
     expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
     expect(sourceModel.updateOne).not.toHaveBeenCalled();
+  });
+
+  test('returns 403 when caller does not own the pet on PATCH', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const ownerId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const { handler } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: { _id: petId, userId: ownerId, deleted: false },
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'PATCH',
+        path: `/pet/source/${petId}`,
+        resource: '/pet/source/{petId}',
+        pathParameters: { petId },
+        authorizer: createAuthorizer({ userId }),
+        body: JSON.stringify({ placeofOrigin: 'Updated place' }),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(403);
+    expect(parsed.body.errorKey).toBe('common.forbidden');
+  });
+
+  test('returns 400 when PATCH body has no recognised update fields', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const { handler } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: { _id: petId, userId, deleted: false },
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'PATCH',
+        path: `/pet/source/${petId}`,
+        resource: '/pet/source/{petId}',
+        pathParameters: { petId },
+        authorizer: createAuthorizer({ userId }),
+        body: JSON.stringify({}),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.missingParams');
   });
 
   test('returns 404 when PATCH cannot find an existing source record for the pet', async () => {

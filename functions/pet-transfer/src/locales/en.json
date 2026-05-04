@@ -1,1 +1,33 @@
-{}
+{
+  "petTransfer": {
+    "errors": {
+      "missingPetId": "Pet ID is required",
+      "invalidPetId": "Invalid pet ID format",
+      "petNotFound": "Pet not found",
+      "transfer": {
+        "missingTransferId": "Transfer ID is required",
+        "invalidTransferId": "Invalid transfer ID format",
+        "notFound": "Transfer record not found",
+        "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY"
+      },
+      "ngoTransfer": {
+        "missingRequiredFields": "UserEmail and UserContact are required",
+        "invalidEmailFormat": "Invalid email format",
+        "invalidPhoneFormat": "Invalid phone number format",
+        "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY",
+        "targetUserNotFound": "Target user not found",
+        "userIdentityMismatch": "The email and phone number do not belong to the same user"
+      }
+    },
+    "success": {
+      "transfer": {
+        "created": "Transfer record created successfully",
+        "updated": "Transfer record updated successfully",
+        "deleted": "Transfer record deleted successfully"
+      },
+      "ngoTransfer": {
+        "completed": "NGO pet ownership transfer completed successfully"
+      }
+    }
+  }
+}

@@ -114,6 +114,7 @@ The helper returns these standardized `400` `errorKey`s:
 | Condition | `errorKey` |
 | --- | --- |
 | Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
+| Body is missing, `null`, non-object, or an empty object `{}` | `common.missingParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key (for example `common.missingBodyParams`, `auth.login.ngo.invalidEmailFormat`, `auth.challenge.codeIncorrect`) | that key |
 | Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
 
@@ -199,10 +200,9 @@ Deployment note:
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `common.missingBodyParams` | Missing required field |
 | 400 | `common.invalidBodyParams` | Invalid email / phone format or wrong union shape |
-| 429 | `common.rateLimited` | Per-identifier rate limit exceeded |
-| 503 | `auth.challenge.emailServiceUnavailable` | SMTP send failed |
 | 503 | `auth.challenge.smsServiceUnavailable` | Twilio Verify request failed |
 | 500 | `common.internalError` | Unexpected error |
 
@@ -321,6 +321,7 @@ Implementation note:
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `common.missingBodyParams` | Missing required field |
 | 400 | `common.invalidBodyParams` | Invalid email / phone / code format or wrong union shape |
 | 400 | `auth.challenge.verificationFailed` | Email verification code not found, expired, consumed, or mismatched |
@@ -405,6 +406,7 @@ Also sets `Set-Cookie: refreshToken=...`.
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `common.missingBodyParams` | Missing required name fields or both identifier fields absent |
 | 400 | `common.invalidBodyParams` | Invalid email, phone, image URL, or birthday |
 | 403 | `auth.registration.user.verificationRequired` | No recent consumed verification proof found |
@@ -504,6 +506,7 @@ Also sets `Set-Cookie: refreshToken=...`.
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `common.missingBodyParams` | Missing required fields |
 | 400 | `common.invalidBodyParams` | Invalid email, phone, password confirmation, or malformed body |
 | 409 | `auth.registration.user.emailAlreadyRegistered` | Email already belongs to an active user |
@@ -569,6 +572,7 @@ Also sets `Set-Cookie: refreshToken=...`.
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `auth.login.ngo.invalidEmailFormat` | Invalid email format |
 | 400 | `auth.login.ngo.paramsMissing` | Missing password |
 | 401 | `auth.login.ngo.invalidUserCredential` | User not found or password mismatch |

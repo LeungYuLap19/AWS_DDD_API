@@ -107,7 +107,7 @@ Any key outside this set is rejected with `400 common.invalidBodyParams` before 
 | Condition | `errorKey` |
 | --- | --- |
 | Malformed JSON (body is not valid JSON) | `common.invalidBodyParams` |
-| Empty body (`{}`, `null`, or missing) when `requireNonEmpty` is set | `common.missingParams` |
+| Empty body (`{}`, `null`, or missing) | `common.missingParams` |
 | Unknown field supplied | `common.invalidBodyParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key | that key |
 

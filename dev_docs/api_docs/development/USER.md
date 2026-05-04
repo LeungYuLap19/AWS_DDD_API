@@ -64,6 +64,7 @@ The helper returns these standardized `400` `errorKey`s:
 | Condition | `errorKey` |
 | --- | --- |
 | Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
+| Body is missing, `null`, non-object, or an empty object `{}` | `common.missingParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key (for example `common.invalidBodyParams`, `user.errors.invalidEmailFormat`) | that key |
 | Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
 
@@ -240,6 +241,7 @@ Deployment note:
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `common.invalidBodyParams` | Invalid birthday, email, image URL, or phone format |
 | 401 or 403 | `common.unauthorized` | Missing or invalid auth in deployed/API-authorizer contexts; local handler normalization is `401` |
 | 404 | `common.notFound` | Authenticated user does not exist or is deleted |

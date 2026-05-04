@@ -86,6 +86,7 @@ The helper returns these standardized `400` `errorKey`s:
 | Condition | `errorKey` |
 | --- | --- |
 | Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
+| Body is missing, `null`, non-object, or an empty object `{}` | `common.missingParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key | that key |
 | Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
 
@@ -364,6 +365,7 @@ If the caller is not NGO admin (`roleInNgo !== "admin"`), they may only update `
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
+| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `common.invalidBodyParams` | Body failed Zod or Mongoose validation |
 | 401 or 403 | `common.unauthorized` | Missing or invalid auth in deployed/API-authorizer contexts; local handler normalization is `401` |
 | 403 | `common.unauthorized` | Non-NGO token, missing `ngoId`, inactive/unverified NGO, missing active access, or non-admin editing admin-only sections |

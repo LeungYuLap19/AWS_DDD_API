@@ -135,13 +135,13 @@ Audience:
       /{tagId}
         GET
 
-  /source
+  /source - not deployed
     /{petId}
       GET
       POST
       PATCH
 
-  /transfer
+  /transfer - not deployed
     /{petId}
       POST
       /{transferId}
@@ -150,7 +150,7 @@ Audience:
       /ngo-reassignment
         POST
 
-  /adoption
+  /adoption - not deployed
     GET
     /{adoptionId}
       GET

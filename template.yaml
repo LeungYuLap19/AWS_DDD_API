@@ -833,104 +833,65 @@ Resources:
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       Events:
-        PetTransferRootGET:
+        PetTransferPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/transfer
-            Method: GET
-        PetTransferRootDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/transfer
-            Method: DELETE
-        PetTransferRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/transfer
+            Path: /pet/transfer/{petId}
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetTransferRootPUT:
+        PetTransferPATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/transfer
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetTransferRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/transfer
+            Path: /pet/transfer/{petId}/{transferId}
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetTransferProxyGET:
+        PetTransferDELETE:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/transfer/{proxy+}
-            Method: GET
-        PetTransferProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/transfer/{proxy+}
+            Path: /pet/transfer/{petId}/{transferId}
             Method: DELETE
-        PetTransferProxyPOST:
+        PetTransferNGOPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/transfer/{proxy+}
+            Path: /pet/transfer/{petId}/ngo-reassignment
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetTransferProxyPUT:
+        PetTransferPetIdOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/transfer/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetTransferProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/transfer/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetTransferRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/transfer
+            Path: /pet/transfer/{petId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetTransferProxyOPTIONS:
+        PetTransferTransferIdOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/transfer/{proxy+}
+            Path: /pet/transfer/{petId}/{transferId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetTransferNGOOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/transfer/{petId}/ngo-reassignment
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -957,84 +918,9 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/adoption
             Method: GET
-        PetAdoptionRootDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption
-            Method: DELETE
-        PetAdoptionRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetAdoptionRootPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetAdoptionRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetAdoptionProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption/{proxy+}
-            Method: GET
-        PetAdoptionProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption/{proxy+}
-            Method: DELETE
-        PetAdoptionProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetAdoptionProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetAdoptionProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/adoption/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
         PetAdoptionRootOPTIONS:
           Type: Api
           Properties:
@@ -1044,11 +930,46 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetAdoptionProxyOPTIONS:
+        PetAdoptionByIdGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/adoption/{proxy+}
+            Path: /pet/adoption/{id}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetAdoptionByIdPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{id}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAdoptionByIdPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{id}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetAdoptionByIdDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{id}
+            Method: DELETE
+        PetAdoptionByIdOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{id}
             Method: OPTIONS
             Auth:
               Authorizer: NONE

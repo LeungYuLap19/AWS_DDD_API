@@ -56,15 +56,14 @@ export async function handleGetPetSource(ctx: RouteContext): Promise<APIGatewayP
 }
 
 export async function handleCreatePetSource(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = parseBody(ctx.body, sourceCreateBodySchema, {
-    requireNonEmpty: true,
-  });
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-  }
-
   try {
     const authContext = requireAuthContext(ctx.event);
+
+    const parsed = parseBody(ctx.body, sourceCreateBodySchema);
+    if (!parsed.ok) {
+      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+    }
+
     const petId = getValidatedPetId(ctx.event);
     await connectToMongoDB();
     await authorizePetAccess(authContext, petId);
@@ -110,20 +109,19 @@ export async function handleCreatePetSource(ctx: RouteContext): Promise<APIGatew
 }
 
 export async function handlePatchPetSource(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = parseBody(ctx.body, sourcePatchBodySchema, {
-    requireNonEmpty: true,
-  });
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-  }
-
-  const updateFields = buildSourceUpdateFields(parsed.data);
-  if (Object.keys(updateFields).length === 0) {
-    return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
-  }
-
   try {
     const authContext = requireAuthContext(ctx.event);
+
+    const parsed = parseBody(ctx.body, sourcePatchBodySchema);
+    if (!parsed.ok) {
+      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+    }
+
+    const updateFields = buildSourceUpdateFields(parsed.data);
+    if (Object.keys(updateFields).length === 0) {
+      return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
+    }
+
     const petId = getValidatedPetId(ctx.event);
     await connectToMongoDB();
     await authorizePetAccess(authContext, petId);
