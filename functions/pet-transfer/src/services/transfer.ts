@@ -208,24 +208,30 @@ export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayPr
 
     const data = parsed.data as NgoTransferBody;
 
-    // Normalize and validate email
-    const normalizedEmail = normalizeEmail(data.UserEmail);
-    if (!isValidEmail(normalizedEmail)) {
-      return response.errorResponse(
-        400,
-        'petTransfer.errors.ngoTransfer.invalidEmailFormat',
-        ctx.event
-      );
+    // Normalize and validate email if provided
+    let normalizedEmail: string | undefined;
+    if (data.UserEmail) {
+      normalizedEmail = normalizeEmail(data.UserEmail);
+      if (!isValidEmail(normalizedEmail)) {
+        return response.errorResponse(
+          400,
+          'petTransfer.errors.ngoTransfer.invalidEmailFormat',
+          ctx.event
+        );
+      }
     }
 
-    // Normalize and validate phone
-    const normalizedPhone = normalizePhone(data.UserContact);
-    if (!isValidPhoneNumber(normalizedPhone)) {
-      return response.errorResponse(
-        400,
-        'petTransfer.errors.ngoTransfer.invalidPhoneFormat',
-        ctx.event
-      );
+    // Normalize and validate phone if provided
+    let normalizedPhone: string | undefined;
+    if (data.UserContact) {
+      normalizedPhone = normalizePhone(data.UserContact);
+      if (!isValidPhoneNumber(normalizedPhone)) {
+        return response.errorResponse(
+          400,
+          'petTransfer.errors.ngoTransfer.invalidPhoneFormat',
+          ctx.event
+        );
+      }
     }
 
     // Validate date format if provided
@@ -237,33 +243,39 @@ export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayPr
       );
     }
 
-    // Verify target user exists by both email and phone (parallel lookup)
     const User = mongoose.model('User');
-    const [userByEmail, userByPhone] = await Promise.all([
-      User.findOne({ email: normalizedEmail, deleted: false }).select('_id').lean() as Promise<
-        { _id: unknown } | null
-      >,
-      User.findOne({ phoneNumber: normalizedPhone, deleted: false })
-        .select('_id')
-        .lean() as Promise<{ _id: unknown } | null>,
-    ]);
+    let resolvedUser: { _id: unknown } | null = null;
 
-    // Generic 404 to prevent user enumeration
-    if (!userByEmail || !userByPhone) {
-      return response.errorResponse(
-        404,
-        'petTransfer.errors.ngoTransfer.targetUserNotFound',
-        ctx.event
-      );
+    if (normalizedEmail && normalizedPhone) {
+      // Both provided — look up by each and cross-validate they are the same user
+      const [userByEmail, userByPhone] = await Promise.all([
+        User.findOne({ email: normalizedEmail, deleted: false }).select('_id').lean() as Promise<{ _id: unknown } | null>,
+        User.findOne({ phoneNumber: normalizedPhone, deleted: false }).select('_id').lean() as Promise<{ _id: unknown } | null>,
+      ]);
+
+      if (!userByEmail || !userByPhone) {
+        return response.errorResponse(404, 'petTransfer.errors.ngoTransfer.targetUserNotFound', ctx.event);
+      }
+
+      if (String(userByEmail._id) !== String(userByPhone._id)) {
+        return response.errorResponse(400, 'petTransfer.errors.ngoTransfer.userIdentityMismatch', ctx.event);
+      }
+
+      resolvedUser = userByEmail;
+    } else if (normalizedEmail) {
+      // Email only
+      resolvedUser = (await User.findOne({ email: normalizedEmail, deleted: false })
+        .select('_id')
+        .lean()) as { _id: unknown } | null;
+    } else {
+      // Phone only
+      resolvedUser = (await User.findOne({ phoneNumber: normalizedPhone, deleted: false })
+        .select('_id')
+        .lean()) as { _id: unknown } | null;
     }
 
-    // Cross-validate: both lookups must resolve to the same user
-    if (String(userByEmail._id) !== String(userByPhone._id)) {
-      return response.errorResponse(
-        400,
-        'petTransfer.errors.ngoTransfer.userIdentityMismatch',
-        ctx.event
-      );
+    if (!resolvedUser) {
+      return response.errorResponse(404, 'petTransfer.errors.ngoTransfer.targetUserNotFound', ctx.event);
     }
 
     // Build update fields
@@ -281,7 +293,7 @@ export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayPr
       updateFields['transferNGO.0.isTransferred'] = data.isTransferred;
 
     // Reassign ownership — transfer to target user, clear NGO ownership
-    updateFields['userId'] = userByEmail._id;
+    updateFields['userId'] = resolvedUser._id;
     updateFields['ngoId'] = '';
 
     if (data.regDate) updateFields['transfer.0.regDate'] = parseDateFlexible(data.regDate);

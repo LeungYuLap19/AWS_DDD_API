@@ -12,21 +12,21 @@ Ownership-transfer record management for a pet. Transfer history is stored as su
 | POST | `/pet/transfer/{petId}` | `x-api-key` + Bearer JWT | `pet-transfer` | Append a new transfer history record to the pet |
 | PATCH | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | `pet-transfer` | Partially update an existing transfer record |
 | DELETE | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | `pet-transfer` | Remove a transfer record |
-| POST | `/pet/transfer/{petId}/ngo-reassignment` | `x-api-key` + Bearer JWT (role: `ngo`) | `pet-transfer` | Validate a target user by email + phone and reassign pet ownership from NGO to that user |
+| POST | `/pet/transfer/{petId}/ngo-reassignment` | `x-api-key` + Bearer JWT (role: `ngo`) | `pet-transfer` | Validate a target user by email and/or phone and reassign pet ownership from NGO to that user |
 
 ## Integration-Critical Contract Notes
 
 | Topic | Current DDD behavior |
 | --- | --- |
 | Subdocument storage | Transfer records are stored inside `Pet.transfer[]`. There is no separate collection. Each record has a MongoDB-generated `_id` which serves as the `transferId`. |
-| POST with empty body | `POST /pet/transfer/{petId}` accepts an empty `{}` body and creates a record with all fields set to `null` (or `""` for `transferRemark`). This is intentional — all body fields are optional. |
+| POST with empty body | `POST /pet/transfer/{petId}` rejects an empty `{}` body with `400 common.missingBodyParams` — the `parseBody` helper defaults to `requireNonEmpty: true`. A non-empty body with all known fields is required. |
 | Unknown fields in POST/PATCH | POST and PATCH schemas are **not** strict. Unknown fields are silently stripped and do not cause a `400`. This differs from `pet-source`. |
 | PATCH response | PATCH returns `form: data` where `data` is the parsed request body, **not** the full stored record. Fields not included in the request are absent from `form`. Refetch via a separate GET endpoint if the full updated record is needed. |
 | PATCH noFieldsToUpdate | A 400 `common.noFieldsToUpdate` is returned when a non-empty body is submitted whose fields are all stripped by Zod (i.e., all fields are unknown). An empty `{}` body returns `400 common.missingParams` before reaching that check. |
 | DELETE method | DELETE does not require a body. The transfer record identity is supplied via `{transferId}` in the path. |
 | NGO transfer side effects | `POST /pet/transfer/{petId}/ngo-reassignment` writes data to both `Pet.transferNGO[0]` **and** `Pet.transfer[0]` (using `$set` with index notation — existing first elements are overwritten). `pet.userId` is set to the target user's `_id` and `pet.ngoId` is cleared to `""`. |
 | NGO role check order | `requireNGORole` fires **before** pet ownership checks and `parseBody`. A non-NGO caller receives `403` regardless of whether the pet exists or the body is valid. |
-| Dual-identity user lookup | The NGO reassignment validates the target user by **both** `UserEmail` and `UserContact`. Both must resolve to the same `User` document. A generic `404` is returned when either lookup fails (anti-enumeration). |
+| Dual-identity user lookup | The NGO reassignment requires **at least one** of `UserEmail` or `UserContact`. When both are supplied, both must resolve to the same `User` document — `400 userIdentityMismatch` fires if they differ. A generic `404` is returned when no user is found by the supplied identifier(s) (anti-enumeration). |
 | Email normalization | `UserEmail` is trimmed and lowercased before lookup. The lookup queries `User.email` which is stored with `trim` and `lowercase` Mongoose options. |
 | Phone format | `UserContact` must be E.164 format (`+[country code][number]`, e.g. `+85291234567`). A local number without the `+` prefix will fail validation. |
 | Date format | `regDate` accepts `DD/MM/YYYY` or ISO 8601 (`YYYY-MM-DD` or with time component). Separate `errorKey`s apply in the `transfer` and `ngoTransfer` namespaces. |
@@ -116,8 +116,8 @@ POST and PATCH bodies are parsed as `application/json` via the shared `parseBody
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `UserEmail` | string | Yes | Email of the target user; trimmed and lowercased |
-| `UserContact` | string | Yes | Phone number of the target user; E.164 format |
+| `UserEmail` | string | Conditional | Email of the target user; trimmed and lowercased; at least one of `UserEmail` or `UserContact` required |
+| `UserContact` | string | Conditional | Phone number of the target user; E.164 format; at least one of `UserEmail` or `UserContact` required |
 | `regDate` | string | No | `DD/MM/YYYY` or ISO 8601 |
 | `regPlace` | string | No | |
 | `transferOwner` | string | No | |
@@ -135,7 +135,7 @@ POST and PATCH bodies are parsed as `application/json` via the shared `parseBody
 | Empty body (`{}`, `null`, or missing) when `requireNonEmpty: true` applies | `common.missingParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key | that key |
 
-Note: `POST /pet/transfer/{petId}` uses `requireNonEmpty: false` — an empty `{}` body is allowed and creates a record with all null fields. `PATCH` and `POST /ngo-reassignment` use `requireNonEmpty: true`.
+Note: `POST /pet/transfer/{petId}`, `PATCH`, and `POST /ngo-reassignment` all use the default `requireNonEmpty: true` — an empty `{}` body returns `400 common.missingBodyParams`.
 
 ---
 
@@ -162,7 +162,7 @@ The `form` in the `200` response is the **submitted request body** after Zod par
 
 ### NGO transfer — `form` shape
 
-The `form` in the `200` response is the Zod-parsed request body. It contains `UserEmail`, `UserContact`, and any optional fields that were provided.
+The `form` in the `200` response is the Zod-parsed request body. It contains whichever of `UserEmail`, `UserContact` were provided, plus any optional fields.
 
 ---
 
@@ -170,7 +170,7 @@ The `form` in the `200` response is the Zod-parsed request body. It contains `Us
 
 ### POST /pet/transfer/{petId}
 
-Append a new transfer history record to a pet's `transfer[]` array. All body fields are optional — an empty body creates a record with all null fields.
+Append a new transfer history record to a pet's `transfer[]` array. All body fields are optional but at least one must be provided (empty body returns `400`).
 
 **Lambda:** `pet-transfer`  
 **Auth:** `x-api-key` + Bearer JWT required
@@ -183,7 +183,7 @@ Append a new transfer history record to a pet's `transfer[]` array. All body fie
 
 #### Body
 
-All fields optional. An empty `{}` body is valid.
+All fields optional but at least one must be present (empty `{}` body returns `400 common.missingBodyParams`).
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -382,7 +382,7 @@ None.
 
 ### POST /pet/transfer/{petId}/ngo-reassignment
 
-Transfer a pet from NGO ownership to a target individual user. The caller must have `userRole: ngo`. The target user is verified by both email **and** phone — both must exist and resolve to the same `User` document (anti-enumeration 404 if either is missing).
+Transfer a pet from NGO ownership to a target individual user. The caller must have `userRole: ngo`. The target user is verified using **at least one** of `UserEmail` or `UserContact`. When both are supplied, they must resolve to the same `User` document. A generic `404` is returned if no user matches the supplied identifier(s) (anti-enumeration).
 
 On success:
 - `Pet.transferNGO[0]` is set with the submitted fields (overwrites index 0)
@@ -403,8 +403,8 @@ On success:
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `UserEmail` | string | Yes | Email of the target user; trimmed and lowercased before lookup |
-| `UserContact` | string | Yes | Phone of the target user; must be E.164 (e.g. `+85291234567`) |
+| `UserEmail` | string | Conditional | Email of the target user; trimmed and lowercased before lookup; at least one of `UserEmail` or `UserContact` required |
+| `UserContact` | string | Conditional | Phone of the target user; must be E.164 (e.g. `+85291234567`); at least one of `UserEmail` or `UserContact` required |
 | `regDate` | string | No | `DD/MM/YYYY` or ISO 8601 |
 | `regPlace` | string | No | |
 | `transferOwner` | string | No | |
@@ -454,15 +454,15 @@ On success:
 | 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
 | 400 | `common.missingParams` | Body is empty (`{}`, `null`, or absent) |
 | 400 | `common.invalidBodyParams` | Malformed JSON body |
-| 400 | `petTransfer.errors.ngoTransfer.missingRequiredFields` | `UserEmail` or `UserContact` absent or empty string |
+| 400 | `petTransfer.errors.ngoTransfer.missingRequiredFields` | Neither `UserEmail` nor `UserContact` provided (or both are empty strings) |
 | 400 | `petTransfer.errors.ngoTransfer.invalidEmailFormat` | `UserEmail` fails regex validation or exceeds 254 characters |
 | 400 | `petTransfer.errors.ngoTransfer.invalidPhoneFormat` | `UserContact` is not E.164 format (must start with `+`) |
 | 400 | `petTransfer.errors.ngoTransfer.invalidDateFormat` | `regDate` is not `DD/MM/YYYY` or ISO 8601 |
-| 400 | `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Email and phone resolve to different `User` documents |
+| 400 | `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Both `UserEmail` and `UserContact` supplied but resolve to different `User` documents |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
 | 403 | `common.forbidden` | Caller role is not `ngo`, or caller does not own the pet |
 | 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is soft-deleted |
-| 404 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | Target user not found by email or phone (generic — anti-enumeration) |
+| 404 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | No user found matching the supplied identifier(s) (generic — anti-enumeration) |
 | 500 | `common.internalError` | Unexpected error |
 
 ---
@@ -490,19 +490,19 @@ On success:
    → 200 { form, petId }  → pet ownership transferred; pet.ngoId is now ""; pet.userId is the
                              target user's _id
    → 403 common.forbidden  → caller is not NGO, or does not own the pet
-   → 404 targetUserNotFound → email or phone not found in User collection
-   → 400 userIdentityMismatch → email and phone point to different accounts
+   → 404 targetUserNotFound → no user found matching the supplied identifier(s)
+   → 400 userIdentityMismatch → both UserEmail and UserContact supplied but point to different accounts
 ```
 
 ### Branch conditions
 
 | `errorKey` on POST `/ngo-reassignment` | Frontend action |
 | --- | --- |
-| `petTransfer.errors.ngoTransfer.missingRequiredFields` | Show field-level error: `UserEmail` and `UserContact` are required |
+| `petTransfer.errors.ngoTransfer.missingRequiredFields` | Show field-level error: at least one of `UserEmail` or `UserContact` is required |
 | `petTransfer.errors.ngoTransfer.invalidEmailFormat` | Show: "Invalid email address format" |
 | `petTransfer.errors.ngoTransfer.invalidPhoneFormat` | Show: "Phone must be E.164 format (e.g. +85291234567)" |
 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | Show: "No account found with these contact details" — do not specify which field failed |
-| `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Show: "Email and phone do not belong to the same account" |
+| `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Show: "Email and phone do not belong to the same account" — only applicable when both are provided |
 
 | `errorKey` on PATCH | Frontend action |
 | --- | --- |
@@ -512,9 +512,9 @@ On success:
 
 ### Important notes for frontend
 
-- `POST /pet/transfer/{petId}` accepts `{}` as a valid body — an empty transfer record is created. Submit a populated body only when the user has entered data.
+- `POST /pet/transfer/{petId}` requires at least one body field — an empty `{}` body is rejected with `400 common.missingBodyParams`.
 - The `PATCH` response `form` contains only the fields submitted, not the full stored record. If a complete updated view is required, call a read endpoint after the PATCH succeeds.
-- For NGO reassignment, both `UserEmail` and `UserContact` must be provided together. There is no partial lookup path.
+- For NGO reassignment, at least one of `UserEmail` or `UserContact` must be provided. When both are supplied, they must resolve to the same account.
 - Phone numbers must include the country code prefix (`+852...`). Local formats without `+` will be rejected.
 
 ---
@@ -546,12 +546,12 @@ The `pet-transfer` Lambda replaces the transfer and NGO-transfer routes previous
 | `petTransfer.errors.transfer.invalidTransferId` | 400 | `transferId` is not a valid MongoDB ObjectId |
 | `petTransfer.errors.transfer.notFound` | 404 | Transfer subdocument not found on this pet |
 | `petTransfer.errors.transfer.invalidDateFormat` | 400 | `regDate` in POST/PATCH is not `DD/MM/YYYY` or ISO 8601 |
-| `petTransfer.errors.ngoTransfer.missingRequiredFields` | 400 | `UserEmail` or `UserContact` absent or empty |
+| `petTransfer.errors.ngoTransfer.missingRequiredFields` | 400 | Neither `UserEmail` nor `UserContact` provided (or both are empty strings) |
 | `petTransfer.errors.ngoTransfer.invalidEmailFormat` | 400 | `UserEmail` fails regex or exceeds 254 chars |
 | `petTransfer.errors.ngoTransfer.invalidPhoneFormat` | 400 | `UserContact` is not E.164 |
 | `petTransfer.errors.ngoTransfer.invalidDateFormat` | 400 | `regDate` in NGO transfer is not `DD/MM/YYYY` or ISO 8601 |
-| `petTransfer.errors.ngoTransfer.targetUserNotFound` | 404 | Target user not found by email or phone (anti-enumeration) |
-| `petTransfer.errors.ngoTransfer.userIdentityMismatch` | 400 | Email and phone resolve to different users |
+| `petTransfer.errors.ngoTransfer.targetUserNotFound` | 404 | No user found matching the supplied identifier(s) (anti-enumeration) |
+| `petTransfer.errors.ngoTransfer.userIdentityMismatch` | 400 | Both `UserEmail` and `UserContact` supplied but resolve to different users |
 | `common.missingParams` | 400 | Empty body when one is required |
 | `common.invalidBodyParams` | 400 | Malformed JSON body |
 | `common.noFieldsToUpdate` | 400 | Valid body but all fields stripped (only unknown fields sent) |
