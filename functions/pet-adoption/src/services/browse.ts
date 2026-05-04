@@ -32,7 +32,7 @@ function buildAdoptionListQuery(query: {
   const conditions: Record<string, unknown> & { $and: object[] } = {
     $and: [
       { AdoptionSite: { $nin: EXCLUDED_SITES } },
-      { Image_URL: { $ne: [] } },
+      { Image_URL: { $exists: true, $not: { $size: 0 } } },
     ],
   };
 

@@ -278,9 +278,9 @@ At least one of `placeofOrigin` or `channel` must be non-empty. A body with only
 | --- | --- | --- |
 | 400 | `petSource.errors.missingPetId` | `petId` path parameter absent |
 | 400 | `petSource.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
-| 400 | `petSource.errors.missingRequiredFields` | Both `placeofOrigin` and `channel` are absent or empty |
+| 400 | `petSource.errors.missingRequiredFields` | Both `placeofOrigin` and `channel` are absent or empty (including `{}` body with no recognized fields) |
 | 400 | `common.invalidBodyParams` | Malformed JSON, unknown fields, or Zod schema rejection |
-| 400 | `common.missingParams` | Empty or missing body (`{}`, `null`, or absent) |
+| 400 | `common.missingParams` | Body is null or absent (no request body sent at all) |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
 | 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
 | 404 | `petSource.errors.petNotFound` | Pet does not exist or is soft-deleted |
@@ -342,8 +342,8 @@ PATCH returns `petId` and `sourceId` only. The updated document is not included.
 | 400 | `petSource.errors.missingPetId` | `petId` path parameter absent |
 | 400 | `petSource.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
 | 400 | `common.invalidBodyParams` | Malformed JSON, unknown fields, or Zod schema rejection |
-| 400 | `common.missingParams` | Empty or missing body (`{}`, `null`, or absent) |
-| 400 | `common.noFieldsToUpdate` | Body is valid but every supplied field resolved to `undefined` in the update |  
+| 400 | `common.missingParams` | Body is null or absent (no request body sent at all) |
+| 400 | `common.noFieldsToUpdate` | Body is valid but every supplied field resolved to `undefined` in the update (including `{}` body with no recognized fields) |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
 | 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
 | 404 | `petSource.errors.petNotFound` | Pet does not exist or is soft-deleted |
@@ -401,11 +401,10 @@ The field is `placeofOrigin` (lowercase `o`), **not** `placeOfOrigin`. Sending `
 | `petSource.errors.recordNotFound` | 404 | No source record exists for this pet |
 | `petSource.errors.duplicateRecord` | 409 | A source record already exists for this pet |
 | `common.invalidBodyParams` | 400 | Malformed JSON, unknown field, or Zod schema rejection |
-| `common.missingParams` | 400 | Empty or missing body (`{}`, `null`, or absent) on POST or PATCH |
+| `common.missingParams` | 400 | Body is null or absent (no request body sent at all) on POST or PATCH |
 | `common.noFieldsToUpdate` | 400 | PATCH body is valid but every supplied field resolved to `undefined` in the update |
 | `common.forbidden` | 403 | Caller is not the pet owner or NGO owner |
 | `common.unauthorized` | 401 | Missing or invalid Bearer token |
 | `common.routeNotFound` | 404 | Unknown path |
 | `common.methodNotAllowed` | 405 | Wrong HTTP method for this path |
-| `common.rateLimited` | 429 | Rate limit exceeded |
 | `common.internalError` | 500 | Unexpected server error |
