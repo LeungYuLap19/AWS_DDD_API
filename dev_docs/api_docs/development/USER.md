@@ -55,6 +55,20 @@ Implementation note:
 - It resolves the target record strictly from JWT `userId`
 - A valid NGO JWT can therefore read, update, or delete its own underlying `User` document through these endpoints
 
+### Request Body Validation
+
+JSON-body routes in this doc (`PATCH /user/me`) run their decoded body through the shared `parseBody` helper before any business logic.
+
+The helper returns these standardized `400` `errorKey`s:
+
+| Condition | `errorKey` |
+| --- | --- |
+| Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
+| Zod schema rejected the body and the first issue message is a dotted i18n key (for example `common.invalidBodyParams`, `user.errors.invalidEmailFormat`) | that key |
+| Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
+
+Deployed API Gateway may also reject malformed or non-object JSON before Lambda runs with its own `400`. Routes without a request body (`GET /user/me`, `DELETE /user/me`) are unaffected.
+
 ### Localization
 
 - Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`

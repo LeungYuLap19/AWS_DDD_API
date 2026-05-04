@@ -2,6 +2,7 @@ import type { APIGatewayProxyResult } from 'aws-lambda';
 import {
   AuthContextError,
   logWarn,
+  parseBody,
   requireAuthContext,
 } from '@aws-ddd-api/shared';
 import mongoose from 'mongoose';
@@ -120,9 +121,9 @@ export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayPro
 
 export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireNgoContext(ctx);
-  const parsed = editNgoBodySchema.safeParse(ctx.body);
-  if (!parsed.success) {
-    return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
+  const parsed = parseBody(ctx.body, editNgoBodySchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   await connectToMongoDB();

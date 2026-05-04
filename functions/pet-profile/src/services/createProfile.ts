@@ -1,7 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
 import multipart from 'lambda-multipart-parser';
-import { getFirstZodIssueMessage, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { parseFlexibleDate } from '../utils/date';
@@ -41,10 +41,10 @@ export async function handleCreatePetProfile(ctx: RouteContext): Promise<APIGate
     const { files, ...rawFields } = parsedForm;
 
     const normalizedBody = normalizeMultipartBody(rawFields);
-    const parsed = createPetBodySchema.safeParse(normalizedBody);
+    const parsed = parseBody(normalizedBody, createPetBodySchema);
 
-    if (!parsed.success) {
-      return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+    if (!parsed.ok) {
+      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
     }
 
     const user = await resolveActiveUser(authContext.userId);

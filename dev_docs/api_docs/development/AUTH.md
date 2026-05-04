@@ -105,6 +105,22 @@ All Lambda-produced success responses include `success: true` and `requestId`. `
 }
 ```
 
+### Request Body Validation
+
+All JSON-body auth routes (`POST /auth/challenges`, `POST /auth/challenges/verify`, `POST /auth/registrations/user`, `POST /auth/registrations/ngo`, `POST /auth/login/ngo`) run their decoded body through the shared `parseBody` helper before any business logic.
+
+The helper returns these standardized `400` `errorKey`s:
+
+| Condition | `errorKey` |
+| --- | --- |
+| Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
+| Zod schema rejected the body and the first issue message is a dotted i18n key (for example `common.missingBodyParams`, `auth.login.ngo.invalidEmailFormat`, `auth.challenge.codeIncorrect`) | that key |
+| Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
+
+The route-specific 400 keys listed in each endpoint's error table (`common.missingBodyParams`, `common.invalidBodyParams`, `auth.*` keys, etc.) come from the schema messages and are returned by `parseBody` when matched.
+
+Deployed API Gateway may also reject malformed or non-object JSON before Lambda runs with its own `400`. `GET` routes and the `POST /auth/tokens/refresh` route do not use a JSON body and are unaffected.
+
 ### Localization
 
 `error` is localized. `errorKey` is the stable integration key.
@@ -644,5 +660,5 @@ Do not rely on challenge verification as the NGO login path. The implemented ver
 
 ## Known Contract Edges
 
-- Invalid JSON bodies are first passed through the shared handler as raw strings; route-level Zod validation then typically returns `400 common.invalidBodyParams` or another route-specific validation key rather than a dedicated `common.invalidJSON`
+- Invalid JSON bodies are first passed through the shared handler as raw strings, then through the shared `parseBody` helper. Auth routes use the helper's defaults, so malformed JSON consistently surfaces as `400 common.invalidBodyParams` rather than a dedicated `common.invalidJSON` key
 - In non-production deployments where `ALLOWED_ORIGINS='*'`, the shared CORS helper returns `Access-Control-Allow-Origin: *` without `Access-Control-Allow-Credentials`; browser cookie-based refresh flows can therefore require explicit allowed origins instead of wildcard CORS

@@ -91,7 +91,7 @@ Audience:
 以下 graph 以 `structure.txt` 為基礎，並保留目前已討論完成的方向。
 
 ```text
-/auth
+/auth - manual deployment tested 
   /challenges
     POST
     /verify
@@ -108,13 +108,13 @@ Audience:
     /refresh
       POST
 
-/user
+/user - manual deployment tested 
   /me
     GET
     PATCH
     DELETE
 
-/ngo
+/ngo - manual deployment tested 
   /me
     GET
     PATCH
@@ -123,7 +123,7 @@ Audience:
       GET
 
 /pet
-  /profile
+  /profile - manual deployment tested 
     POST
     /{petId}
       GET
@@ -196,7 +196,7 @@ Audience:
           PATCH
           DELETE
 
-  /analysis (need further optimization)
+  /analysis (need further optimization) x
     /eye
       /{petId}
         GET
@@ -213,7 +213,7 @@ Audience:
       /breed-image
         POST
 
-  /recovery
+  /recovery 
     /lost
       GET
       POST
@@ -225,7 +225,7 @@ Audience:
       /{petFoundID}
         DELETE
 
-  /biometric
+  /biometric x
     /{petId}
       GET
     /registrations

@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { getFirstZodIssueMessage, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { userPatchBodySchema } from '../zodSchema/userPatchBodySchema';
@@ -44,9 +44,9 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
 
 export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
-  const parsed = userPatchBodySchema.safeParse(ctx.body);
-  if (!parsed.success) {
-    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  const parsed = parseBody(ctx.body, userPatchBodySchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   await connectToMongoDB();

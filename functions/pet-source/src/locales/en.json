@@ -1,1 +1,17 @@
-{}
+{
+  "petSource": {
+    "errors": {
+      "missingPetId": "Pet ID is required",
+      "invalidPetId": "Invalid pet ID format",
+      "petNotFound": "Pet not found",
+      "recordNotFound": "Rescue/origin record not found",
+      "duplicateRecord": "A source record already exists for this pet",
+      "missingRequiredFields": "At least one of place of origin or channel is required"
+    },
+    "success": {
+      "retrieved": "Rescue/origin information retrieved successfully",
+      "created": "Rescue/origin record created successfully",
+      "updated": "Rescue/origin record updated successfully"
+    }
+  }
+}

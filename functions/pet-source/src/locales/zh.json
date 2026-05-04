@@ -1,1 +1,17 @@
-{}
+{
+  "petSource": {
+    "errors": {
+      "missingPetId": "需要寵物身分證",
+      "invalidPetId": "無效的寵物 ID 格式",
+      "petNotFound": "未找到寵物",
+      "recordNotFound": "找不到救援／來源紀錄",
+      "duplicateRecord": "此寵物的來源紀錄已存在",
+      "missingRequiredFields": "至少需要提供來源地或渠道其中一項"
+    },
+    "success": {
+      "retrieved": "成功取得救援／來源資料",
+      "created": "救援／來源紀錄創建成功",
+      "updated": "救援／來源紀錄更新成功"
+    }
+  }
+}

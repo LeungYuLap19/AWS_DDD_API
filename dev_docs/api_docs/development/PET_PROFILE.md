@@ -108,6 +108,20 @@ All Lambda-produced success responses include `success: true` and `requestId`.
 }
 ```
 
+### Request Body Validation
+
+`POST /pet/profile` and `PATCH /pet/profile/{petId}` both accept `multipart/form-data`. The Lambda first parses the multipart payload, separates files from text fields, normalizes typed fields (`weight`, `sterilization`, `ownerContact1`, `ownerContact2`, `contact1Show`, `contact2Show`, single-string `breedimage`), and then runs the resulting object through the shared `parseBody` helper.
+
+`parseBody` returns these standardized `400` `errorKey`s:
+
+| Condition | `errorKey` |
+| --- | --- |
+| Multipart parsing produced a non-object body (rare; should not happen in normal API Gateway flows) | `common.invalidBodyParams` |
+| Zod schema rejected the body and the first issue message is a dotted i18n key (for example `petProfile.errors.nameRequired`, `petProfile.errors.invalidBodyParams`) | that key |
+| Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
+
+The route-specific `400` keys listed in each endpoint's error table (`petProfile.errors.nameRequired`, `petProfile.errors.invalidBodyParams`, etc.) come from the schema messages and are returned by `parseBody` when matched. `PATCH /pet/profile/{petId}` additionally rejects unknown multipart fields with `400 petProfile.errors.invalidBodyParams` *before* `parseBody` runs.
+
 ### Rate Limiting
 
 When a rate limit is exceeded, the Lambda returns `429 common.rateLimited`. Current implemented limits:

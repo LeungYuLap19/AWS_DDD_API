@@ -2,7 +2,7 @@ import type { APIGatewayProxyResult } from 'aws-lambda';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import { getBearerToken, getFirstZodIssueMessage } from '@aws-ddd-api/shared';
+import { getBearerToken, parseBody } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
@@ -425,9 +425,9 @@ async function verifySmsChallenge(
 }
 
 export async function handleCreateChallenge(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = challengeBodySchema.safeParse(ctx.body);
-  if (!parsed.success) {
-    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  const parsed = parseBody(ctx.body, challengeBodySchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   if ('email' in parsed.data) {
@@ -438,9 +438,9 @@ export async function handleCreateChallenge(ctx: RouteContext): Promise<APIGatew
 }
 
 export async function handleVerifyChallenge(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = verifyChallengeBodySchema.safeParse(ctx.body);
-  if (!parsed.success) {
-    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  const parsed = parseBody(ctx.body, verifyChallengeBodySchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   if ('email' in parsed.data) {

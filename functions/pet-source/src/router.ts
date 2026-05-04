@@ -1,11 +1,16 @@
 import { createRouter } from '@aws-ddd-api/shared';
 import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { handleProxyAny, handleProxyRoot } from './services/source';
+import {
+  handleCreatePetSource,
+  handleGetPetSource,
+  handlePatchPetSource,
+} from './services/source';
 
 const routes: Record<string, RouteHandler> = {
-  '/pet/source': handleProxyRoot,
-  '/pet/source/{proxy+}': handleProxyAny,
+  'GET /pet/source/{petId}': handleGetPetSource,
+  'POST /pet/source/{petId}': handleCreatePetSource,
+  'PATCH /pet/source/{petId}': handlePatchPetSource,
 };
 
 export const routeRequest = createRouter(routes, { response });

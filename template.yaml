@@ -785,104 +785,37 @@ Resources:
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       Events:
-        PetSourceRootGET:
+        PetSourceGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/source
+            Path: /pet/source/{petId}
             Method: GET
-        PetSourceRootDELETE:
+        PetSourcePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/source
-            Method: DELETE
-        PetSourceRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source
+            Path: /pet/source/{petId}
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetSourceRootPUT:
+        PetSourcePATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/source
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetSourceRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source
+            Path: /pet/source/{petId}
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetSourceProxyGET:
+        PetSourceOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/source/{proxy+}
-            Method: GET
-        PetSourceProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source/{proxy+}
-            Method: DELETE
-        PetSourceProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetSourceProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetSourceProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetSourceRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source
-            Method: OPTIONS
-            Auth:
-              Authorizer: NONE
-              ApiKeyRequired: false
-        PetSourceProxyOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/source/{proxy+}
+            Path: /pet/source/{petId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
