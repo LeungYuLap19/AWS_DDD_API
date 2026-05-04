@@ -385,16 +385,12 @@ describe('POST /pet/transfer/{petId} — createTransfer', () => {
     );
   });
 
-  test('happy path: creates with all-null optional fields when body is empty object', async () => {
+  test('returns 400 when body is empty object (requireNonEmpty is true by default)', async () => {
     const userId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
 
     const { handler, authorizer } = loadHandlerWithMocks({
       authUserId: userId,
-      petFindOneResults: [
-        createLeanResult({ _id: petId, userId, ngoId: null, deleted: false }),
-      ],
-      petUpdateOneResult: { matchedCount: 1 },
     });
 
     const result = await handler(
@@ -410,8 +406,7 @@ describe('POST /pet/transfer/{petId} — createTransfer', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(201);
-    expect(parsed.body.transferId).toBeDefined();
+    expect(parsed.statusCode).toBe(400);
   });
 
   test('happy path: NGO-owned pet allows create when ngoId matches', async () => {
@@ -970,13 +965,73 @@ describe('POST /pet/transfer/{petId}/ngo-reassignment — ngoTransfer', () => {
     expect(parsed.body.errorKey).toBe('common.forbidden');
   });
 
-  test('returns 400 when UserEmail is missing', async () => {
+  test('returns 400 when neither UserEmail nor UserContact is provided', async () => {
     const { userId, ngoId, petId } = buildNGOSetup();
 
     const { handler, authorizer } = loadHandlerWithMocks({
       authUserId: userId,
       authRole: 'ngo',
       authNgoId: ngoId,
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        pathValue: `/pet/transfer/${petId}/ngo-reassignment`,
+        resource: '/pet/transfer/{petId}/ngo-reassignment',
+        pathParameters: { petId },
+        body: JSON.stringify({ regPlace: 'Hong Kong' }), // non-empty body but no identifier
+        authorizer,
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('petTransfer.errors.ngoTransfer.missingRequiredFields');
+  });
+
+  test('happy path: email-only lookup succeeds when UserContact is absent', async () => {
+    const { userId, ngoId, petId, targetUserId, petDoc } = buildNGOSetup();
+    const userDoc = { _id: targetUserId };
+
+    const { handler, authorizer } = loadHandlerWithMocks({
+      authUserId: userId,
+      authRole: 'ngo',
+      authNgoId: ngoId,
+      petFindOneResults: [createLeanResult(petDoc)],
+      userFindOneResults: [createLeanResult(userDoc)],
+      petUpdateOneResult: { matchedCount: 1 },
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        pathValue: `/pet/transfer/${petId}/ngo-reassignment`,
+        resource: '/pet/transfer/{petId}/ngo-reassignment',
+        pathParameters: { petId },
+        body: JSON.stringify({ UserEmail: 'adopter@example.com' }),
+        authorizer,
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.petId).toBe(petId);
+  });
+
+  test('happy path: phone-only lookup succeeds when UserEmail is absent', async () => {
+    const { userId, ngoId, petId, targetUserId, petDoc } = buildNGOSetup();
+    const userDoc = { _id: targetUserId };
+
+    const { handler, authorizer } = loadHandlerWithMocks({
+      authUserId: userId,
+      authRole: 'ngo',
+      authNgoId: ngoId,
+      petFindOneResults: [createLeanResult(petDoc)],
+      userFindOneResults: [createLeanResult(userDoc)],
+      petUpdateOneResult: { matchedCount: 1 },
     });
 
     const result = await handler(
@@ -992,34 +1047,8 @@ describe('POST /pet/transfer/{petId}/ngo-reassignment — ngoTransfer', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petTransfer.errors.ngoTransfer.missingRequiredFields');
-  });
-
-  test('returns 400 when UserContact is missing', async () => {
-    const { userId, ngoId, petId } = buildNGOSetup();
-
-    const { handler, authorizer } = loadHandlerWithMocks({
-      authUserId: userId,
-      authRole: 'ngo',
-      authNgoId: ngoId,
-    });
-
-    const result = await handler(
-      createEvent({
-        method: 'POST',
-        pathValue: `/pet/transfer/${petId}/ngo-reassignment`,
-        resource: '/pet/transfer/{petId}/ngo-reassignment',
-        pathParameters: { petId },
-        body: JSON.stringify({ UserEmail: 'user@example.com' }),
-        authorizer,
-      }),
-      createContext()
-    );
-
-    const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petTransfer.errors.ngoTransfer.missingRequiredFields');
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.petId).toBe(petId);
   });
 
   test('returns 400 for invalid email format', async () => {

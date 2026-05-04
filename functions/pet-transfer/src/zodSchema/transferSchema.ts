@@ -16,20 +16,21 @@ export const transferUpdateBodySchema = z.object({
   transferRemark: z.string().optional(),
 });
 
-export const ngoTransferBodySchema = z.object({
-  UserEmail: z
-    .string({ message: 'petTransfer.errors.ngoTransfer.missingRequiredFields' })
-    .min(1, 'petTransfer.errors.ngoTransfer.missingRequiredFields'),
-  UserContact: z
-    .string({ message: 'petTransfer.errors.ngoTransfer.missingRequiredFields' })
-    .min(1, 'petTransfer.errors.ngoTransfer.missingRequiredFields'),
+export const ngoTransferBodySchema = z
+  .object({
+  UserEmail: z.string().min(1).optional(),
+  UserContact: z.string().min(1).optional(),
   regDate: z.string().optional(),
   regPlace: z.string().optional(),
   transferOwner: z.string().optional(),
   transferContact: z.string().optional(),
   transferRemark: z.string().optional(),
   isTransferred: z.boolean().optional(),
-});
+  })
+  .refine(
+    (data) => !!(data.UserEmail?.trim() || data.UserContact?.trim()),
+    { message: 'petTransfer.errors.ngoTransfer.missingRequiredFields' }
+  );
 
 export type TransferCreateBody = z.infer<typeof transferCreateBodySchema>;
 export type TransferUpdateBody = z.infer<typeof transferUpdateBodySchema>;

@@ -17,6 +17,8 @@
   - Lack of Zod Schema Enforcement
     - NoSql injection
 
+- Claude opus 4.7 for a full scale locale keys standardization + response format standardization
+
 - mongodb indexing issues
 
 - error keys standardization

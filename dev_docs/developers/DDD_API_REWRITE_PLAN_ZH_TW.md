@@ -135,7 +135,7 @@ Audience:
       /{tagId}
         GET
 
-  /source - deployed
+  /source - manual deployment tested 
     /{petId}
       GET
       POST
@@ -150,7 +150,7 @@ Audience:
       /ngo-reassignment
         POST
 
-  /adoption - deployed
+  /adoption - manual deployment tested 
     GET
     /{adoptionId}
       GET
@@ -196,7 +196,7 @@ Audience:
           PATCH
           DELETE
 
-  /analysis (need further optimization) x
+  /analysis - non urgent 
     /eye
       /{petId}
         GET
@@ -225,7 +225,7 @@ Audience:
       /{petFoundID}
         DELETE
 
-  /biometric x
+  /biometric - not required 
     /{petId}
       GET
     /registrations

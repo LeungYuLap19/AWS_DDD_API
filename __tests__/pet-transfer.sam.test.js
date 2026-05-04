@@ -953,14 +953,14 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('common.forbidden');
     });
 
-    test('returns 400 when UserEmail is missing', async () => {
+    test('returns 400 when neither UserEmail nor UserContact is provided', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
       const res = await req(
         'POST',
         `/pet/transfer/${state.ngoPetId}/ngo-reassignment`,
-        { UserContact: TARGET_USER_PHONE },
+        { regPlace: 'Hong Kong' },
         authHeaders(state.ngoToken)
       );
 
@@ -968,7 +968,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       expect(res.body?.errorKey).toBe('petTransfer.errors.ngoTransfer.missingRequiredFields');
     });
 
-    test('returns 400 when UserContact is missing', async () => {
+    test('succeeds with 200 when only UserEmail is provided (UserContact not required)', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
@@ -979,8 +979,23 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.ngoToken)
       );
 
-      expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petTransfer.errors.ngoTransfer.missingRequiredFields');
+      expect(res.status).toBe(200);
+      expect(res.body?.petId).toBeDefined();
+    });
+
+    test('succeeds with 200 when only UserContact is provided (UserEmail not required)', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedFixtures();
+
+      const res = await req(
+        'POST',
+        `/pet/transfer/${state.ngoPetId}/ngo-reassignment`,
+        { UserContact: TARGET_USER_PHONE },
+        authHeaders(state.ngoToken)
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body?.petId).toBeDefined();
     });
 
     test('returns 400 for invalid email format', async () => {
