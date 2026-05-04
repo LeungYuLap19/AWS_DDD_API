@@ -193,6 +193,28 @@ declare module '@aws-ddd-api/shared/validation/zod' {
   export function getFirstZodIssueMessage(error: unknown, fallback?: string): string;
   export function getJoinedZodIssueMessages(error: unknown, fallback?: string): string;
   export function parseJsonBodyWithSchema<T>(body: unknown, schema: ZodType<T>): T;
+
+  export interface ParseBodySuccess<T> {
+    ok: true;
+    data: T;
+  }
+  export interface ParseBodyFailure {
+    ok: false;
+    statusCode: number;
+    errorKey: string;
+  }
+  export type ParseBodyResult<T> = ParseBodySuccess<T> | ParseBodyFailure;
+  export interface ParseBodyOptions {
+    requireNonEmpty?: boolean;
+    malformedJsonErrorKey?: string;
+    emptyBodyErrorKey?: string;
+    fallbackErrorKey?: string;
+  }
+  export function parseBody<T>(
+    body: unknown,
+    schema: ZodType<T>,
+    options?: ParseBodyOptions
+  ): ParseBodyResult<T>;
 }
 
 declare module '@aws-ddd-api/shared/config/boolean' {

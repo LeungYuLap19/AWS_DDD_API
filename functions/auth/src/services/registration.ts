@@ -1,5 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { getFirstZodIssueMessage, isTrue } from '@aws-ddd-api/shared';
+import { isTrue, parseBody } from '@aws-ddd-api/shared';
 import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
 import type { RouteContext } from '../../../../types/lambda';
@@ -55,9 +55,9 @@ async function consumeVerificationProofs(email?: string, phoneNumber?: string) {
 }
 
 export async function handleUserRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = userRegistrationBodySchema.safeParse(ctx.body);
-  if (!parsed.success) {
-    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  const parsed = parseBody(ctx.body, userRegistrationBodySchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   await connectToMongoDB();
@@ -178,9 +178,9 @@ export async function handleUserRegistration(ctx: RouteContext): Promise<APIGate
 }
 
 export async function handleNgoRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = ngoRegistrationBodySchema.safeParse(ctx.body);
-  if (!parsed.success) {
-    return response.errorResponse(400, getFirstZodIssueMessage(parsed.error), ctx.event);
+  const parsed = parseBody(ctx.body, ngoRegistrationBodySchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   await connectToMongoDB();

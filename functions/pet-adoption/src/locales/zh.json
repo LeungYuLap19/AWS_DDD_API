@@ -1,1 +1,31 @@
-{}
+{
+  "petAdoption": {
+    "errors": {
+      "browse": {
+        "invalidIdFormat": "無效的領養列表 ID 格式",
+        "petNotFound": "找不到領養列表",
+        "invalidPage": "分頁參數無效",
+        "invalidSearch": "搜尋參數過長"
+      },
+      "managed": {
+        "invalidPetId": "無效的寵物 ID 格式",
+        "petNotFound": "找不到寵物",
+        "recordNotFound": "未找到領養後記錄",
+        "duplicateRecord": "此寵物的領養紀錄已存在",
+        "invalidDateFormat": "日期格式無效，請使用 ISO 8601 格式 (YYYY-MM-DD) 或 DD/MM/YYYY"
+      }
+    },
+    "success": {
+      "browse": {
+        "listRetrieved": "已取得領養列表",
+        "detailRetrieved": "已取得領養詳情"
+      },
+      "managed": {
+        "retrieved": "成功獲取領養後記錄",
+        "created": "領養後記錄創建成功",
+        "updated": "領養後記錄更新成功",
+        "deleted": "領養後記錄刪除成功"
+      }
+    }
+  }
+}

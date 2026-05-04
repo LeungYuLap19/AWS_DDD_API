@@ -1,1 +1,31 @@
-{}
+{
+  "petAdoption": {
+    "errors": {
+      "browse": {
+        "invalidIdFormat": "Invalid adoption listing ID format",
+        "petNotFound": "Adoption listing not found",
+        "invalidPage": "Invalid page parameter",
+        "invalidSearch": "Search parameter too long"
+      },
+      "managed": {
+        "invalidPetId": "Invalid pet ID format",
+        "petNotFound": "Pet not found",
+        "recordNotFound": "Post-adoption record not found",
+        "duplicateRecord": "An adoption record already exists for this pet",
+        "invalidDateFormat": "Invalid date format. Please use ISO 8601 (YYYY-MM-DD) or DD/MM/YYYY"
+      }
+    },
+    "success": {
+      "browse": {
+        "listRetrieved": "Adoption listings retrieved",
+        "detailRetrieved": "Adoption listing retrieved"
+      },
+      "managed": {
+        "retrieved": "Post-adoption record retrieved",
+        "created": "Post-adoption record created",
+        "updated": "Post-adoption record updated",
+        "deleted": "Post-adoption record deleted"
+      }
+    }
+  }
+}

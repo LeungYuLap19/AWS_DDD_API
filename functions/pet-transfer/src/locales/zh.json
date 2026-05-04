@@ -1,1 +1,33 @@
-{}
+{
+  "petTransfer": {
+    "errors": {
+      "missingPetId": "需要寵物 ID",
+      "invalidPetId": "無效的寵物 ID 格式",
+      "petNotFound": "找不到寵物",
+      "transfer": {
+        "missingTransferId": "需要轉移 ID",
+        "invalidTransferId": "無效的轉移 ID 格式",
+        "notFound": "找不到轉移記錄",
+        "invalidDateFormat": "無效的日期格式，應為 YYYY-MM-DD 或 DD/MM/YYYY"
+      },
+      "ngoTransfer": {
+        "missingRequiredFields": "需要 UserEmail 和 UserContact",
+        "invalidEmailFormat": "無效的電子郵件格式",
+        "invalidPhoneFormat": "無效的電話號碼格式",
+        "invalidDateFormat": "無效的日期格式，應為 YYYY-MM-DD 或 DD/MM/YYYY",
+        "targetUserNotFound": "找不到目標用戶",
+        "userIdentityMismatch": "電子郵件和電話號碼不屬於同一用戶"
+      }
+    },
+    "success": {
+      "transfer": {
+        "created": "轉移記錄建立成功",
+        "updated": "轉移記錄更新成功",
+        "deleted": "轉移記錄刪除成功"
+      },
+      "ngoTransfer": {
+        "completed": "NGO 寵物所有權轉移完成"
+      }
+    }
+  }
+}

@@ -1,5 +1,22 @@
 # TODO
 
+- Anaf CRM Lmabdas
+  - Create admin, hashed pw, salt, algo all inside a client request
+    - Shift the source of truth to client
+    - Attackers can send a pre computed hash to backdoor the system
+  - Broken Object Level Authorization
+    - GET, UPDATE, DELETE admins relying on path id
+    - Any authenticated admin can modify / delete otehrs
+  - Mass Assignment
+    - Even with ["admin", "log-admin", "shop-admin"]
+    - A lower-level admin (e.g., shop-admin) could send a PATCH request to grant themselves full system permissions
+  - Sensitive Data Leakage in Logs
+    - Logged the entire **event** object to CloudWatch.
+    - The event contains the Authorization header (JWTs and API Keys)
+    - Internal devs can hijack active sessions
+  - Lack of Zod Schema Enforcement
+    - NoSql injection
+
 - mongodb indexing issues
 
 - error keys standardization
@@ -8,23 +25,6 @@
   - userRegistrationBodySchema: subscribe, promotion, district, image, birthday, gender should not accepted on register
 
 - sanitize PRIVATE_DETAIL_FIELDS in pet-profile need narrower the return fields
-
-- The API doc says birthday is optional, but the actual Mongo model has it as required. 
-  {
-    "success": false,
-    "errorKey": "Pet validation failed: birthday: Path `birthday` is required.",
-    "error": "Pet validation failed: birthday: Path `birthday` is required.",
-    "requestId": "2d2a9aed-8096-4d6a-b3c3-700bded2169f"
-  }
-
-- ***collapse create / patch from multiparts, json to one only***
-
-- ***pet basic info vs detailed info***
-  - GET /pet/profile/{petId}?view=basic
-  - GET /pet/profile/{petId}?view=detail
-  - GET /pet/profile/{petId}?view=full
-
-- consider on demand response body fields (pre defined return fields vs. client picked return fields)
 
 - consider move PATCH pet profile by {petId} to /pet-profile/me
 

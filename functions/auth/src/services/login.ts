@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
+import { parseBody } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { ngoLoginBodySchema } from '../zodSchema/ngoLoginBodySchema';
@@ -22,9 +23,9 @@ type NgoLoginUser = {
 };
 
 export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const parsed = ngoLoginBodySchema.safeParse(ctx.body);
-  if (!parsed.success) {
-    return response.errorResponse(400, parsed.error.issues[0]?.message || 'common.invalidBodyParams', ctx.event);
+  const parsed = parseBody(ctx.body, ngoLoginBodySchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   await connectToMongoDB();
