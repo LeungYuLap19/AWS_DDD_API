@@ -120,7 +120,7 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
     return rateLimitResponse;
   }
 
-  const petId = toTrimmedString(ctx.event.pathParameters?.petId);
+  const petId = toTrimmedString(ctx.event.pathParameters?.identifier);
   if (!petId || !mongoose.isValidObjectId(petId)) {
     return response.errorResponse(400, 'petAnalysis.errors.invalidObjectId', ctx.event);
   }
@@ -260,7 +260,7 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
   }
 
   const { petId, date, leftEyeImage1PublicAccessUrl, rightEyeImage1PublicAccessUrl } = parsed.data;
-  const routePetId = toTrimmedString(ctx.event.pathParameters?.petId);
+  const routePetId = toTrimmedString(ctx.event.pathParameters?.identifier);
 
   if (!mongoose.isValidObjectId(petId) || routePetId !== petId) {
     return response.errorResponse(400, 'petAnalysis.errors.updatePetEye.invalidPetIdFormat', ctx.event);

@@ -1275,7 +1275,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/eye/{petId}
+            Path: /pet/analysis/eye/{identifier}
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
@@ -1285,7 +1285,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/eye/{petId}
+            Path: /pet/analysis/eye/{identifier}
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest

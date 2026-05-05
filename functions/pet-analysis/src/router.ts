@@ -7,8 +7,8 @@ import { handleUploadImage, handleUploadPetBreedImage } from './services/upload'
 
 const routes: Record<string, RouteHandler> = {
   'GET /pet/analysis/eye/{identifier}': handleGetEye,
-  'POST /pet/analysis/eye/{petId}': handlePostEye,
-  'PATCH /pet/analysis/eye/{petId}': handlePatchEye,
+  'POST /pet/analysis/eye/{identifier}': handlePostEye,
+  'PATCH /pet/analysis/eye/{identifier}': handlePatchEye,
   'POST /pet/analysis/breed': handleBreedAnalysis,
   'POST /pet/analysis/uploads/image': handleUploadImage,
   'POST /pet/analysis/uploads/breed-image': handleUploadPetBreedImage,

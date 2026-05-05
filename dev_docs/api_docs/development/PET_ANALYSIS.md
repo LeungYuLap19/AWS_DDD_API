@@ -11,8 +11,8 @@ AI-powered pet health analysis for the PetPetClub platform. Covers eye disease d
 | Method | Path | Auth | Lambda | Purpose |
 | --- | --- | --- | --- | --- |
 | GET | `/pet/analysis/eye/{identifier}` | No API key, no JWT; Lambda-level auth for ObjectId branch | `pet-analysis` | Look up eye disease by name (public) or retrieve pet eye analysis log (authenticated) |
-| POST | `/pet/analysis/eye/{petId}` | `x-api-key` + Bearer JWT | `pet-analysis` | Submit eye image for ML analysis |
-| PATCH | `/pet/analysis/eye/{petId}` | `x-api-key` + Bearer JWT | `pet-analysis` | Append left/right eye image URLs to pet record |
+| POST | `/pet/analysis/eye/{identifier}` | `x-api-key` + Bearer JWT | `pet-analysis` | Submit eye image for ML analysis |
+| PATCH | `/pet/analysis/eye/{identifier}` | `x-api-key` + Bearer JWT | `pet-analysis` | Append left/right eye image URLs to pet record |
 | POST | `/pet/analysis/breed` | `x-api-key` + Bearer JWT | `pet-analysis` | Identify breed from image URL via ML |
 | POST | `/pet/analysis/uploads/image` | `x-api-key` + Bearer JWT | `pet-analysis` | Upload single image to S3 |
 | POST | `/pet/analysis/uploads/breed-image` | `x-api-key` + Bearer JWT | `pet-analysis` | Upload image to S3 under a caller-specified folder |
@@ -22,9 +22,9 @@ AI-powered pet health analysis for the PetPetClub platform. Covers eye disease d
 Eye analysis:
 
 1. `POST /pet/analysis/uploads/image` to upload an eye photo and receive a public S3 URL
-2. `POST /pet/analysis/eye/{petId}` with the URL (or a file) to run ML analysis; result is persisted
-3. `PATCH /pet/analysis/eye/{petId}` to save left/right image URLs to the pet's `eyeimages` array
-4. `GET /pet/analysis/eye/{petId}` to retrieve the pet's historical eye analysis log
+2. `POST /pet/analysis/eye/{identifier}` with the URL (or a file) to run ML analysis; result is persisted
+3. `PATCH /pet/analysis/eye/{identifier}` to save left/right image URLs to the pet's `eyeimages` array
+4. `GET /pet/analysis/eye/{identifier}` to retrieve the pet's historical eye analysis log (pass the petId as `identifier`)
 
 Breed analysis:
 
@@ -108,7 +108,7 @@ All Lambda-produced success responses include `success: true` and `requestId`. `
 
 ### Request Body Validation
 
-JSON-body routes (`PATCH /pet/analysis/eye/{petId}`, `POST /pet/analysis/breed`) and multipart routes pass through the shared `parseBody` helper or multipart parser before business logic.
+JSON-body routes (`PATCH /pet/analysis/eye/{identifier}`, `POST /pet/analysis/breed`) and multipart routes pass through the shared `parseBody` helper or multipart parser before business logic. Note: all three eye routes share the same `{identifier}` path parameter at the API Gateway level — POST and PATCH treat it as a petId (must be a valid ObjectId), while GET dispatches on whether it's an ObjectId or a disease name string.
 
 JSON-body routes have an API Gateway request model (`GenericJsonObjectRequest`, `ValidateBody: true`, `Required: false`). On deployed API Gateway, malformed JSON can be rejected before Lambda with an API Gateway-generated `400`.
 
@@ -242,7 +242,7 @@ Returns up to 100 records sorted newest-first. Empty array if no records exist. 
 | 403 | `common.unauthorized` | Caller does not own the pet |
 | 404 | `petAnalysis.errors.petNotFound` | Pet not found or soft-deleted |
 
-### POST /pet/analysis/eye/{petId}
+### POST /pet/analysis/eye/{identifier}
 
 Submit an eye image for AI disease detection. Accepts a file upload (multipart) or an image URL. The image is sent to an external ML VM. Results are persisted to `eyeanalysisrecords` and `api_logs`.
 
@@ -254,7 +254,7 @@ Submit an eye image for AI disease detection. Accepts a file upload (multipart) 
 
 | Param | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `petId` | string (ObjectId) | Yes | Must be a valid MongoDB ObjectId |
+| `identifier` | string (ObjectId) | Yes | Must be a valid MongoDB ObjectId (used as petId) |
 
 **Body (multipart/form-data):**
 
@@ -334,7 +334,7 @@ No `message` field is returned on this endpoint.
 | 429 | `common.rateLimited` | Rate limit exceeded (`retry-after` header included) |
 | 500 | `petAnalysis.errors.analysisError` | ML VM unreachable or returned no result |
 
-### PATCH /pet/analysis/eye/{petId}
+### PATCH /pet/analysis/eye/{identifier}
 
 Append a pair of left/right eye image URLs to the pet's `eyeimages` array. Each call pushes a new entry — does not replace existing entries.
 
@@ -346,7 +346,7 @@ Append a pair of left/right eye image URLs to the pet's `eyeimages` array. Each 
 
 | Param | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `petId` | string (ObjectId) | Yes | Must match `petId` in body |
+| `identifier` | string (ObjectId) | Yes | Must match `petId` in body |
 
 **Body (JSON):**
 
@@ -584,10 +584,10 @@ url=breed_analysis
 ### Eye Analysis
 
 1. Upload the eye photo via `POST /pet/analysis/uploads/image`
-2. Take the returned `url` and call `POST /pet/analysis/eye/{petId}` with `image_url=<url>`
+2. Take the returned `url` and call `POST /pet/analysis/eye/{identifier}` with `image_url=<url>`
 3. Display the `result` (disease + confidence) and optional `heatmap` to the user
-4. Call `PATCH /pet/analysis/eye/{petId}` to persist left/right eye image URLs to the pet record
-5. Call `GET /pet/analysis/eye/{petId}` to display the pet's eye analysis history
+4. Call `PATCH /pet/analysis/eye/{identifier}` to persist left/right eye image URLs to the pet record
+5. Call `GET /pet/analysis/eye/{identifier}` to display the pet's eye analysis history (pass the petId as `identifier`)
 
 ### Breed Analysis
 
@@ -630,13 +630,13 @@ npx jest --runInBand --testPathPattern=pet-analysis.sam.test --no-coverage
 
 - The `GET /pet/analysis/eye/{identifier}` endpoint dispatches on `mongoose.isValidObjectId(identifier)`. A 24-character hex string that happens to look like a disease name will be treated as an ObjectId and trigger the authenticated branch
 - Disease lookup returns a raw MongoDB lean document (all persisted fields). The "Normal" special case returns a hardcoded object with different field names (camelCase vs snake_case) and all-null values
-- `POST /pet/analysis/eye/{petId}` has two response ID fields: `request_id` (ApiLog `_id`, underscore) and `requestId` (AWS Lambda request ID, camelCase)
-- `POST /pet/analysis/eye/{petId}` does not return a `message` field, unlike all other success responses in this domain
-- `PATCH /pet/analysis/eye/{petId}` returns the sanitized pet via `sanitizePet`, which does **not** include `eyeimages` or `_id`. The frontend cannot confirm the pushed eye images from the PATCH response — use `GET` or query the pet profile separately
-- `PATCH /pet/analysis/eye/{petId}` only checks `userId` ownership, not `ngoId`. NGO staff managing NGO-owned pets cannot use this endpoint
+- `POST /pet/analysis/eye/{identifier}` has two response ID fields: `request_id` (ApiLog `_id`, underscore) and `requestId` (AWS Lambda request ID, camelCase)
+- `POST /pet/analysis/eye/{identifier}` does not return a `message` field, unlike all other success responses in this domain
+- `PATCH /pet/analysis/eye/{identifier}` returns the sanitized pet via `sanitizePet`, which does **not** include `eyeimages` or `_id`. The frontend cannot confirm the pushed eye images from the PATCH response — use `GET` or query the pet profile separately
+- `PATCH /pet/analysis/eye/{identifier}` only checks `userId` ownership, not `ngoId`. NGO staff managing NGO-owned pets cannot use this endpoint
 - The breed and upload endpoints have `GenericJsonObjectRequest` as the API Gateway request model with `Required: false`. This model targets JSON bodies and should not block multipart requests, but the interaction between request model validation and `multipart/form-data` on deployed API Gateway is an edge worth monitoring
 - ML VM `result` shapes for eye analysis and breed analysis are opaque to the Lambda — they are forwarded as-is from the external service. Field names and structure may change if the ML model is updated
-- The `EyeAnalysisRecord` model defines the field as `side`, but the eye log query `.select()` and `sanitizeEyeLog` both reference `eyeSide`. Because the names do not match, the field is always absent from the log response. `POST /pet/analysis/eye/{petId}` also never sets `side` or `userId` when creating the record, so these model fields are always `null`
+- The `EyeAnalysisRecord` model defines the field as `side`, but the eye log query `.select()` and `sanitizeEyeLog` both reference `eyeSide`. Because the names do not match, the field is always absent from the log response. `POST /pet/analysis/eye/{identifier}` also never sets `side` or `userId` when creating the record, so these model fields are always `null`
 - The PATCH `date` field's error message claims `YYYY-MM-DD` format, but the `isValidDateFormat` validator uses `new Date(value)` internally, which accepts many other formats (ISO 8601, RFC 2822, epoch strings, etc.). Frontends should send `YYYY-MM-DD` for consistency, but the server does not enforce it strictly
 - `POST /pet/analysis/uploads/breed-image` silently takes only the first file when multiple are attached, while `POST /pet/analysis/uploads/image` explicitly rejects requests with more than one file (`tooManyFiles`)
-- Upload endpoints (`/uploads/image` and `/uploads/breed-image`) do not enforce a maximum file size. Only `POST /pet/analysis/eye/{petId}` enforces the 30 MB limit
+- Upload endpoints (`/uploads/image` and `/uploads/breed-image`) do not enforce a maximum file size. Only `POST /pet/analysis/eye/{identifier}` enforces the 30 MB limit
