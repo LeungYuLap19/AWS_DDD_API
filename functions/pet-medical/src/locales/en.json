@@ -1,1 +1,60 @@
-{}
+{
+  "petMedicalRecord": {
+    "errors": {
+      "missingPetId": "Pet ID is required",
+      "invalidPetIdFormat": "Invalid pet ID format",
+      "petNotFound": "Pet not found",
+      "petDeleted": "Pet has been deleted",
+      "medicalRecord": {
+        "notFound": "Medical record not found",
+        "missingId": "Medical ID is required",
+        "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY format",
+        "invalidMedicalIdFormat": "Invalid medical ID format"
+      },
+      "bloodTest": {
+        "notFound": "Blood test record not found",
+        "missingId": "Blood test ID is required",
+        "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY format",
+        "invalidBloodTestIdFormat": "Invalid blood test ID format"
+      },
+      "medicationRecord": {
+        "notFound": "Medication record not found",
+        "missingId": "Medication ID is required",
+        "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY format",
+        "invalidMedicationIdFormat": "Invalid medication ID format"
+      },
+      "dewormRecord": {
+        "notFound": "Deworm record not found",
+        "missingId": "Deworm Record ID is required",
+        "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY format",
+        "invalidDewormIdFormat": "Invalid deworm record ID format"
+      }
+    },
+    "success": {
+      "medicalRecord": {
+        "created": "Pet medical record created successfully",
+        "updated": "Pet medical record updated successfully",
+        "deleted": "Medical record deleted successfully",
+        "getSuccess": "Pet medical record retrieved successfully"
+      },
+      "bloodTest": {
+        "created": "Blood test record created successfully",
+        "updated": "Blood test record updated successfully",
+        "deleted": "Blood test record deleted successfully",
+        "getSuccess": "Pet blood test records retrieved successfully"
+      },
+      "medicationRecord": {
+        "created": "Pet medication record created successfully",
+        "updated": "Pet medication record updated successfully",
+        "deleted": "Medication record deleted successfully",
+        "getSuccess": "Pet medication record retrieved successfully"
+      },
+      "dewormRecord": {
+        "created": "Pet deworm record created successfully",
+        "updated": "Pet deworm record updated successfully",
+        "deleted": "Deworm record deleted successfully",
+        "getSuccess": "Pet deworm record retrieved successfully"
+      }
+    }
+  }
+}

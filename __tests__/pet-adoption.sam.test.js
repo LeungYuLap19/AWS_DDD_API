@@ -171,7 +171,11 @@ function adoptionsCol() {
 }
 
 async function clearAdoptionFor(petId) {
-  await adoptionsCol().deleteMany({ petId: petId.toString() });
+  // The schema stores petId as ObjectId, but some test helpers insert with string petId.
+  // Delete both forms so that state from previous tests does not bleed through.
+  const oid = new mongoose.Types.ObjectId(petId.toString());
+  const str = petId.toString();
+  await adoptionsCol().deleteMany({ $or: [{ petId: oid }, { petId: str }] });
 }
 
 async function seedFixtures() {
@@ -632,18 +636,20 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       expect(persisted).not.toBeNull();
       expect(persisted.postAdoptionName).toBe('Mochi');
       expect(persisted.isNeutered).toBe(false);
-      expect(persisted.petId).toBe(String(state.primaryPetId));
+      expect(String(persisted.petId)).toBe(String(state.primaryPetId));
     });
 
-    test('returns 201 with null optional fields when body is empty', async () => {
+    test('returns 201 with null optional fields when minimal body is sent', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
       await clearAdoptionFor(state.primaryPetId);
 
+      // parseBody rejects an empty {} body (requireNonEmpty default).
+      // Send a body with at least one field; unset optional fields default to null in DB.
       const res = await req(
         'POST',
         `/pet/adoption/${state.primaryPetId}`,
-        {},
+        { postAdoptionName: null },
         authHeaders(state.primaryToken)
       );
 
@@ -653,6 +659,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       const adoptionOid = new mongoose.Types.ObjectId(res.body.adoptionId);
       const persisted = await adoptionsCol().findOne({ _id: adoptionOid });
       expect(persisted).not.toBeNull();
+      expect(persisted.isNeutered).toBeNull();
     });
 
     test('returns 409 on duplicate POST — only one record is persisted', async () => {
@@ -678,7 +685,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       expect(second.body.errorKey).toBe('petAdoption.errors.managed.duplicateRecord');
 
       const count = await adoptionsCol().countDocuments({
-        petId: String(state.primaryPetId),
+        petId: new mongoose.Types.ObjectId(state.primaryPetId),
       });
       expect(count).toBe(1);
     });
@@ -1117,6 +1124,9 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       await seedFixtures();
       await clearAdoptionFor(state.primaryPetId);
 
+      // petAdoptionCreateBodySchema uses z.object() without .strict(): Zod strips
+      // unknown fields (deleted, isAdmin, _id, petId override). The known field
+      // (postAdoptionName: 'Legit') satisfies validation → 201.
       const res = await req(
         'POST',
         `/pet/adoption/${state.primaryPetId}`,
@@ -1130,12 +1140,16 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(201);
 
-      const persisted = await adoptionsCol().findOne({
-        petId: String(state.primaryPetId),
-      });
-      expect(persisted).toBeNull();
+      const persisted = await adoptionsCol().findOne({ _id: new mongoose.Types.ObjectId(res.body.adoptionId) });
+      expect(persisted).not.toBeNull();
+      expect(persisted.postAdoptionName).toBe('Legit');            // allowed field persisted
+      expect(String(persisted.petId)).toBe(String(state.primaryPetId)); // Lambda-assigned petId, not attacker's
+      expect(persisted.deleted).toBeUndefined();                   // unknown field stripped
+      expect(persisted.isAdmin).toBeUndefined();                   // unknown field stripped
+
+      await clearAdoptionFor(state.primaryPetId);
     });
 
     test('PATCH /pet/adoption/{id} rejects NoSQL operator injection in postAdoptionName, DB unchanged', async () => {
@@ -1181,6 +1195,9 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       expect(createRes.status).toBe(201);
       const adoptionOid = new mongoose.Types.ObjectId(createRes.body.adoptionId);
 
+      // petAdoptionUpdateBodySchema uses z.object() without .strict(): Zod strips
+      // unknown fields (isAdmin, deleted, __v). The known field (postAdoptionName)
+      // is applied normally → 200.
       const res = await req(
         'PATCH',
         `/pet/adoption/${state.primaryPetId}`,
@@ -1188,12 +1205,12 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
 
       const persisted = await adoptionsCol().findOne({ _id: adoptionOid });
-      expect(persisted.postAdoptionName).toBe('Original');
-      expect(persisted.isAdmin).toBeUndefined();
-      expect(persisted.deleted).toBeUndefined();
+      expect(persisted.postAdoptionName).toBe('Allowed');  // recognized field applied
+      expect(persisted.isAdmin).toBeUndefined();           // unknown field stripped
+      expect(persisted.deleted).toBeUndefined();           // unknown field stripped
     });
 
     test('replayed duplicate POST returns 409 and only one record persists', async () => {
@@ -1220,7 +1237,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       expect(replay.status).toBe(409);
 
       const count = await adoptionsCol().countDocuments({
-        petId: String(state.primaryPetId),
+        petId: new mongoose.Types.ObjectId(state.primaryPetId),
       });
       expect(count).toBe(1);
     });

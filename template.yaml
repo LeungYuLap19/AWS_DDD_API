@@ -318,6 +318,32 @@ Resources:
                   - s3:PutObjectAcl
                 Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
 
+  PetRecoveryFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-pet-recovery-s3-upload'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
+
   AuthorizerFunctionRole: # the IAM role for the authorizer Lambda only - RequestAuthorizerFunction
     Type: AWS::IAM::Role
     Properties:
@@ -987,104 +1013,202 @@ Resources:
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       Events:
-        PetMedicalRootGET:
+        PetMedicalGeneralListGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/medical
+            Path: /pet/medical/{petId}/general
             Method: GET
-        PetMedicalRootDELETE:
+        PetMedicalGeneralCreatePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/medical
-            Method: DELETE
-        PetMedicalRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical
+            Path: /pet/medical/{petId}/general
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetMedicalRootPUT:
+        PetMedicalGeneralListOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/medical
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetMedicalRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetMedicalProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/{proxy+}
-            Method: GET
-        PetMedicalProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/{proxy+}
-            Method: DELETE
-        PetMedicalProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetMedicalProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetMedicalProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetMedicalRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical
+            Path: /pet/medical/{petId}/general
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetMedicalProxyOPTIONS:
+        PetMedicalGeneralItemPATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/medical/{proxy+}
+            Path: /pet/medical/{petId}/general/{medicalId}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalGeneralItemDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/general/{medicalId}
+            Method: DELETE
+        PetMedicalGeneralItemOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/general/{medicalId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalMedicationListGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/medication
+            Method: GET
+        PetMedicalMedicationCreatePOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/medication
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalMedicationListOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/medication
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalMedicationItemPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/medication/{medicationId}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalMedicationItemDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/medication/{medicationId}
+            Method: DELETE
+        PetMedicalMedicationItemOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/medication/{medicationId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalDewormingListGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/deworming
+            Method: GET
+        PetMedicalDewormingCreatePOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/deworming
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalDewormingListOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/deworming
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalDewormingItemPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/deworming/{dewormId}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalDewormingItemDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/deworming/{dewormId}
+            Method: DELETE
+        PetMedicalDewormingItemOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/deworming/{dewormId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalBloodTestListGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/blood-test
+            Method: GET
+        PetMedicalBloodTestCreatePOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/blood-test
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalBloodTestListOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/blood-test
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalBloodTestItemPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/blood-test/{bloodTestId}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalBloodTestItemDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/blood-test/{bloodTestId}
+            Method: DELETE
+        PetMedicalBloodTestItemOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/blood-test/{bloodTestId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1221,7 +1345,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-recovery'
       CodeUri: dist/functions/pet-recovery/
       Handler: index.handler
-      Role: !GetAtt SharedFunctionRole.Arn
+      Role: !GetAtt PetRecoveryFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
@@ -1232,104 +1356,82 @@ Resources:
           AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
           AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
-        PetRecoveryRootGET:
+        PetRecoveryLostListGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/recovery
+            Path: /pet/recovery/lost
             Method: GET
-        PetRecoveryRootDELETE:
+        PetRecoveryLostCreatePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/recovery
-            Method: DELETE
-        PetRecoveryRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery
+            Path: /pet/recovery/lost
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetRecoveryRootPUT:
+        PetRecoveryLostListOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/recovery
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetRecoveryRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetRecoveryProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery/{proxy+}
-            Method: GET
-        PetRecoveryProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery/{proxy+}
-            Method: DELETE
-        PetRecoveryProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetRecoveryProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetRecoveryProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetRecoveryRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/recovery
+            Path: /pet/recovery/lost
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetRecoveryProxyOPTIONS:
+        PetRecoveryLostByIdDELETE:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/recovery/{proxy+}
+            Path: /pet/recovery/lost/{petLostID}
+            Method: DELETE
+        PetRecoveryLostByIdOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/lost/{petLostID}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetRecoveryFoundListGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/found
+            Method: GET
+        PetRecoveryFoundCreatePOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/found
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetRecoveryFoundListOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/found
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetRecoveryFoundByIdDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/found/{petFoundID}
+            Method: DELETE
+        PetRecoveryFoundByIdOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/recovery/found/{petFoundID}
             Method: OPTIONS
             Auth:
               Authorizer: NONE

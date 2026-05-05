@@ -1,23 +1,6 @@
 # TODO
 
-- Anaf CRM Lmabdas
-  - Create admin, hashed pw, salt, algo all inside a client request
-    - Shift the source of truth to client
-    - Attackers can send a pre computed hash to backdoor the system
-  - Broken Object Level Authorization
-    - GET, UPDATE, DELETE admins relying on path id
-    - Any authenticated admin can modify / delete otehrs
-  - Mass Assignment
-    - Even with ["admin", "log-admin", "shop-admin"]
-    - A lower-level admin (e.g., shop-admin) could send a PATCH request to grant themselves full system permissions
-  - Sensitive Data Leakage in Logs
-    - Logged the entire **event** object to CloudWatch.
-    - The event contains the Authorization header (JWTs and API Keys)
-    - Internal devs can hijack active sessions
-  - Lack of Zod Schema Enforcement
-    - NoSql injection
-
-- Claude opus 4.7 for a full scale locale keys standardization + response format standardization
+- Claude opus 4.7 for a full scale locale keys standardization + response format standardization + error handling standardization
 
 - mongodb indexing issues
 

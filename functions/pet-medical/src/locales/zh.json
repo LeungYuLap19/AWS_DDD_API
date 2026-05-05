@@ -1,1 +1,60 @@
-{}
+{
+  "petMedicalRecord": {
+    "errors": {
+      "missingPetId": "需要寵物身分證",
+      "invalidPetIdFormat": "無效的寵物 ID 格式",
+      "petNotFound": "未找到寵物",
+      "petDeleted": "寵物已被刪除",
+      "medicalRecord": {
+        "notFound": "未找到醫療記錄",
+        "missingId": "需要醫療 ID",
+        "invalidDateFormat": "無效的日期格式，應為 YYYY-MM-DD 或 DD/MM/YYYY 格式",
+        "invalidMedicalIdFormat": "無效的醫療 ID 格式"
+      },
+      "bloodTest": {
+        "notFound": "找不到血檢紀錄",
+        "missingId": "血檢紀錄 ID 為必填",
+        "invalidDateFormat": "日期格式無效。預期格式為 YYYY-MM-DD 或 DD/MM/YYYY",
+        "invalidBloodTestIdFormat": "血檢紀錄 ID 格式無效"
+      },
+      "medicationRecord": {
+        "notFound": "未找到用藥記錄",
+        "missingId": "需要用藥 ID",
+        "invalidDateFormat": "無效的日期格式，應為 YYYY-MM-DD 或 DD/MM/YYYY 格式",
+        "invalidMedicationIdFormat": "無效的用藥 ID 格式"
+      },
+      "dewormRecord": {
+        "notFound": "未找到驅蟲記錄",
+        "missingId": "需要驅蟲記錄 ID",
+        "invalidDateFormat": "無效的日期格式，應為 YYYY-MM-DD 或 DD/MM/YYYY 格式",
+        "invalidDewormIdFormat": "無效的驅蟲記錄 ID 格式"
+      }
+    },
+    "success": {
+      "medicalRecord": {
+        "created": "寵物醫療記錄創建成功",
+        "updated": "寵物醫療記錄更新成功",
+        "deleted": "醫療記錄刪除成功",
+        "getSuccess": "寵物醫療記錄檢索成功"
+      },
+      "bloodTest": {
+        "created": "血檢紀錄創建成功",
+        "updated": "血檢紀錄更新成功",
+        "deleted": "血檢紀錄已成功刪除",
+        "getSuccess": "成功取得寵物血檢紀錄"
+      },
+      "medicationRecord": {
+        "created": "寵物用藥記錄創建成功",
+        "updated": "寵物用藥記錄更新成功",
+        "deleted": "用藥記錄刪除成功",
+        "getSuccess": "寵物用藥記錄檢索成功"
+      },
+      "dewormRecord": {
+        "created": "寵物驅蟲記錄創建成功",
+        "updated": "寵物驅蟲記錄更新成功",
+        "deleted": "驅蟲記錄刪除成功",
+        "getSuccess": "寵物驅蟲記錄檢索成功"
+      }
+    }
+  }
+}

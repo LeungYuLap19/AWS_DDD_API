@@ -520,9 +520,9 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
       );
 
       // Empty body is rejected by parseBody's default requireNonEmpty: true using the
-      // shared default `common.missingParams` error key.
+      // shared default `common.missingBodyParams` error key.
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('common.missingParams');
+      expect(res.body?.errorKey).toBe('common.missingBodyParams');
     });
 
     test('POST /pet/source/{petId} rejects unknown body fields with invalidBodyParams', async () => {

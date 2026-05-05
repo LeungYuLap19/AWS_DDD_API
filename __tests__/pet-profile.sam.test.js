@@ -460,7 +460,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('common.noFieldsToUpdate');
+      expect(res.body.errorKey).toBe('common.missingBodyParams');
     });
 
     test('PATCH /pet/profile/{petId} rejects an invalid field type', async () => {

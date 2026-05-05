@@ -22,7 +22,7 @@ Ownership-transfer record management for a pet. Transfer history is stored as su
 | POST with empty body | `POST /pet/transfer/{petId}` rejects an empty `{}` body with `400 common.missingBodyParams` — the `parseBody` helper defaults to `requireNonEmpty: true`. A non-empty body with all known fields is required. |
 | Unknown fields in POST/PATCH | POST and PATCH schemas are **not** strict. Unknown fields are silently stripped and do not cause a `400`. This differs from `pet-source`. |
 | PATCH response | PATCH returns `form: data` where `data` is the parsed request body, **not** the full stored record. Fields not included in the request are absent from `form`. Refetch via a separate GET endpoint if the full updated record is needed. |
-| PATCH noFieldsToUpdate | A 400 `common.noFieldsToUpdate` is returned when a non-empty body is submitted whose fields are all stripped by Zod (i.e., all fields are unknown). An empty `{}` body returns `400 common.missingParams` before reaching that check. |
+| PATCH noFieldsToUpdate | A 400 `common.noFieldsToUpdate` is returned when a non-empty body is submitted whose fields are all stripped by Zod (i.e., all fields are unknown). An empty `{}` body returns `400 common.missingBodyParams` before reaching that check. |
 | DELETE method | DELETE does not require a body. The transfer record identity is supplied via `{transferId}` in the path. |
 | NGO transfer side effects | `POST /pet/transfer/{petId}/ngo-reassignment` writes data to both `Pet.transferNGO[0]` **and** `Pet.transfer[0]` (using `$set` with index notation — existing first elements are overwritten). `pet.userId` is set to the target user's `_id` and `pet.ngoId` is cleared to `""`. |
 | NGO role check order | `requireNGORole` fires **before** pet ownership checks and `parseBody`. A non-NGO caller receives `403` regardless of whether the pet exists or the body is valid. |
@@ -132,7 +132,7 @@ POST and PATCH bodies are parsed as `application/json` via the shared `parseBody
 | Condition | `errorKey` |
 | --- | --- |
 | Malformed JSON (body is not valid JSON) | `common.invalidBodyParams` |
-| Empty body (`{}`, `null`, or missing) when `requireNonEmpty: true` applies | `common.missingParams` |
+| Empty body (`{}`, `null`, or missing) when `requireNonEmpty: true` applies | `common.missingBodyParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key | that key |
 
 Note: `POST /pet/transfer/{petId}`, `PATCH`, and `POST /ngo-reassignment` all use the default `requireNonEmpty: true` — an empty `{}` body returns `400 common.missingBodyParams`.
@@ -227,7 +227,7 @@ Unknown extra fields are silently stripped.
 }
 ```
 
-Empty-body create (201):
+Empty-body create returns `400 common.missingBodyParams`. A minimal body (at least one field present, e.g. `{ "transferRemark": "" }`) creates a record with all optional fields null:
 
 ```json
 {
@@ -252,6 +252,7 @@ Empty-body create (201):
 | --- | --- | --- |
 | 400 | `petTransfer.errors.missingPetId` | `petId` path parameter absent |
 | 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
+| 400 | `common.missingBodyParams` | Body is empty (`{}`, `null`, or absent) |
 | 400 | `common.invalidBodyParams` | Malformed JSON body |
 | 400 | `petTransfer.errors.transfer.invalidDateFormat` | `regDate` is not `DD/MM/YYYY` or ISO 8601 |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
@@ -322,9 +323,7 @@ At least one recognized field must be provided.
 | 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
 | 400 | `petTransfer.errors.transfer.missingTransferId` | `transferId` path parameter absent |
 | 400 | `petTransfer.errors.transfer.invalidTransferId` | `transferId` is not a valid MongoDB ObjectId |
-| 400 | `common.missingParams` | Body is empty (`{}`, `null`, or absent) |
-| 400 | `common.invalidBodyParams` | Malformed JSON body |
-| 400 | `common.noFieldsToUpdate` | Non-empty body but all fields were stripped by Zod (only unknown fields sent) |
+| 400 | `common.missingBodyParams` | Body is empty (`{}`, `null`, or absent) |
 | 400 | `petTransfer.errors.transfer.invalidDateFormat` | `regDate` is not `DD/MM/YYYY` or ISO 8601 |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
 | 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
@@ -452,7 +451,7 @@ On success:
 | --- | --- | --- |
 | 400 | `petTransfer.errors.missingPetId` | `petId` path parameter absent |
 | 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
-| 400 | `common.missingParams` | Body is empty (`{}`, `null`, or absent) |
+| 400 | `common.missingBodyParams` | Body is empty (`{}`, `null`, or absent) |
 | 400 | `common.invalidBodyParams` | Malformed JSON body |
 | 400 | `petTransfer.errors.ngoTransfer.missingRequiredFields` | Neither `UserEmail` nor `UserContact` provided (or both are empty strings) |
 | 400 | `petTransfer.errors.ngoTransfer.invalidEmailFormat` | `UserEmail` fails regex validation or exceeds 254 characters |
@@ -506,7 +505,7 @@ On success:
 
 | `errorKey` on PATCH | Frontend action |
 | --- | --- |
-| `common.missingParams` | At least one field must be provided |
+| `common.missingBodyParams` | At least one field must be provided |
 | `common.noFieldsToUpdate` | Body contained only unrecognized fields; check field names |
 | `petTransfer.errors.transfer.notFound` | The transfer record no longer exists; refresh the list |
 
@@ -530,7 +529,7 @@ The `pet-transfer` Lambda replaces the transfer and NGO-transfer routes previous
 | NGO transfer | `PUT /pets/{petID}/detail-info/NGOtransfer` | `POST /pet/transfer/{petId}/ngo-reassignment` (method + path changed) |
 | Error namespace | `petDetailInfo.errors.transferPath.*` | `petTransfer.errors.transfer.*` |
 | NGO error namespace | `petDetailInfo.errors.ngoTransfer.*` | `petTransfer.errors.ngoTransfer.*` |
-| Empty body on create | Not documented | Explicitly allowed; creates null-field record |
+| Empty body on create | Not documented | Explicitly rejected; empty `{}` returns `400 common.missingBodyParams` |
 | Unknown fields | Rejected (strict schema) | **Silently stripped** |
 
 ---
@@ -552,7 +551,7 @@ The `pet-transfer` Lambda replaces the transfer and NGO-transfer routes previous
 | `petTransfer.errors.ngoTransfer.invalidDateFormat` | 400 | `regDate` in NGO transfer is not `DD/MM/YYYY` or ISO 8601 |
 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | 404 | No user found matching the supplied identifier(s) (anti-enumeration) |
 | `petTransfer.errors.ngoTransfer.userIdentityMismatch` | 400 | Both `UserEmail` and `UserContact` supplied but resolve to different users |
-| `common.missingParams` | 400 | Empty body when one is required |
+| `common.missingBodyParams` | 400 | Empty body when one is required |
 | `common.invalidBodyParams` | 400 | Malformed JSON body |
 | `common.noFieldsToUpdate` | 400 | Valid body but all fields stripped (only unknown fields sent) |
 | `common.forbidden` | 403 | Caller is not the pet owner/NGO owner, or role is not `ngo` |

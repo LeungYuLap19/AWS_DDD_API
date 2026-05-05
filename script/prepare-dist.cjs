@@ -52,6 +52,16 @@ copyFile(
   'dist/functions/pet-transfer/package.json'
 );
 
+copyFile(
+  'functions/pet-medical/package.json',
+  'dist/functions/pet-medical/package.json'
+);
+
+copyFile(
+  'functions/pet-recovery/package.json',
+  'dist/functions/pet-recovery/package.json'
+);
+
 if (fs.existsSync(path.join(repoRoot, 'functions/request-authorizer/package-lock.json'))) {
   copyFile(
     'functions/request-authorizer/package-lock.json',
