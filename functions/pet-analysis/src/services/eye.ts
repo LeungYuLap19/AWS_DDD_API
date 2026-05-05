@@ -83,9 +83,6 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
   }
 
   try {
-    requireAuthContext(ctx.event);
-    await loadAuthorizedPet(ctx.event, identifier, { allowNgo: true });
-
     const EyeAnalysis = mongoose.model('EyeAnalysisRecord');
     const eyeAnalysisLogList = (await EyeAnalysis.find({ petId: identifier })
       .select('_id petId image eyeSide result createdAt updatedAt')
