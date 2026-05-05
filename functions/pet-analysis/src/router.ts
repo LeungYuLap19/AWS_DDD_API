@@ -1,11 +1,17 @@
 import { createRouter } from '@aws-ddd-api/shared';
 import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { handleProxyAny, handleProxyRoot } from './services/analysis';
+import { handleGetEye, handlePatchEye, handlePostEye } from './services/eye';
+import { handleBreedAnalysis } from './services/breed';
+import { handleUploadImage, handleUploadPetBreedImage } from './services/upload';
 
 const routes: Record<string, RouteHandler> = {
-  '/pet/analysis': handleProxyRoot,
-  '/pet/analysis/{proxy+}': handleProxyAny,
+  'GET /pet/analysis/eye/{identifier}': handleGetEye,
+  'POST /pet/analysis/eye/{petId}': handlePostEye,
+  'PATCH /pet/analysis/eye/{petId}': handlePatchEye,
+  'POST /pet/analysis/breed': handleBreedAnalysis,
+  'POST /pet/analysis/uploads/image': handleUploadImage,
+  'POST /pet/analysis/uploads/breed-image': handleUploadPetBreedImage,
 };
 
 export const routeRequest = createRouter(routes, { response });

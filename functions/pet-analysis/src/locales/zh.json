@@ -1,1 +1,42 @@
-{}
+{
+	"petAnalysis": {
+		"errors": {
+			"invalidPetIdFormat": "寵物 ID 格式無效",
+			"petNotFound": "找不到寵物",
+			"noFilesUploaded": "未上傳任何檔案",
+			"tooManyFiles": "每次請求僅允許上傳一個檔案",
+			"invalidImageFormat": "檔案必須為 JPEG 或 PNG 格式",
+			"fileTooLarge": "圖片檔案過大（最大 30MB）",
+			"fileTooSmall": "圖片檔案為空",
+			"userNotFound": "找不到使用者",
+			"missingArguments": "缺少必要參數",
+			"unsupportedFormat": "不支援的圖片格式",
+			"analysisError": "眼部分析失敗",
+			"missingPetId": "路徑中需要寵物 ID",
+			"invalidObjectId": "ID 格式無效",
+			"invalidFolder": "無效的上傳資料夾路徑",
+			"speciesRequired": "需要物種資訊",
+			"urlRequired": "需要圖片 URL",
+			"fieldTooLong": "欄位值超過最大長度",
+			"invalidUrl": "URL 格式無效",
+			"unknownField": "不允許未知欄位",
+			"missingEyeDiseaseName": "需要 eyeDiseaseName 參數",
+			"eyeDiseaseNotFound": "找不到眼疾資料",
+			"updatePetEye": {
+				"invalidPetIdFormat": "寵物 ID 格式無效",
+				"invalidDateFormat": "日期格式無效，需為 YYYY-MM-DD",
+				"invalidImageUrlFormat": "圖片 URL 格式無效",
+				"petNotFound": "找不到寵物",
+				"petDeleted": "寵物已被刪除",
+				"missingRequiredFields": "petId、date、leftEyeImage1PublicAccessUrl 與 rightEyeImage1PublicAccessUrl 為必填"
+			}
+		},
+		"success": {
+			"eyeLogRetrievedSuccessfully": "成功取得眼部分析紀錄",
+			"eyeDiseaseRetrieved": "成功取得眼疾資料",
+			"breedAnalysisCompleted": "品種分析成功",
+			"imageUploaded": "圖片上傳成功",
+			"petEyeUpdated": "成功更新寵物眼部影像"
+		}
+	}
+}

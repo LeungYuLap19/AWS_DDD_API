@@ -344,6 +344,32 @@ Resources:
                   - s3:PutObjectAcl
                 Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
 
+  PetAnalysisFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-pet-analysis-s3-upload'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/*'
+
   AuthorizerFunctionRole: # the IAM role for the authorizer Lambda only - RequestAuthorizerFunction
     Type: AWS::IAM::Role
     Properties:
@@ -1220,7 +1246,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-analysis'
       CodeUri: dist/functions/pet-analysis/
       Handler: index.handler
-      Role: !GetAtt SharedFunctionRole.Arn
+      Role: !GetAtt PetAnalysisFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
@@ -1236,104 +1262,88 @@ Resources:
           VM_BREED_PUBLIC_IP: !Ref PetAnalysisVmBreedPublicIp
           BREED_DOCKER_IMAGE: !Ref PetAnalysisBreedDockerImage
       Events:
-        PetAnalysisRootGET:
+        PetAnalysisEyeGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis
+            Path: /pet/analysis/eye/{identifier}
             Method: GET
-        PetAnalysisRootDELETE:
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetAnalysisEyePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis
-            Method: DELETE
-        PetAnalysisRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/analysis
+            Path: /pet/analysis/eye/{petId}
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetAnalysisRootPUT:
+        PetAnalysisEyePATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetAnalysisRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/analysis
+            Path: /pet/analysis/eye/{petId}
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetAnalysisProxyGET:
+        PetAnalysisBreedPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/{proxy+}
-            Method: GET
-        PetAnalysisProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/analysis/{proxy+}
-            Method: DELETE
-        PetAnalysisProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/analysis/{proxy+}
+            Path: /pet/analysis/breed
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetAnalysisProxyPUT:
+        PetAnalysisUploadImagePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/{proxy+}
-            Method: PUT
+            Path: /pet/analysis/uploads/image
+            Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetAnalysisProxyPATCH:
+        PetAnalysisUploadBreedImagePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/{proxy+}
-            Method: PATCH
+            Path: /pet/analysis/uploads/breed-image
+            Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetAnalysisRootOPTIONS:
+        PetAnalysisEyeOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis
+            Path: /pet/analysis/eye/{proxy+}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetAnalysisProxyOPTIONS:
+        PetAnalysisBreedOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/{proxy+}
+            Path: /pet/analysis/breed
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetAnalysisUploadsOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/uploads/{proxy+}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
