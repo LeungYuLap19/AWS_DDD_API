@@ -51,7 +51,7 @@ Disease lookup (public, no auth):
 | Scenario | Requirement |
 | --- | --- |
 | Disease lookup (GET with non-ObjectId identifier) | No `x-api-key`, no Bearer JWT |
-| Eye log retrieval (GET with ObjectId identifier) | No `x-api-key` at API Gateway, but Lambda requires valid Bearer JWT + pet ownership |
+| Eye log retrieval (GET with ObjectId identifier) | No `x-api-key`, no Bearer JWT |
 | Eye analysis POST, eye PATCH | `x-api-key` + `Authorization: Bearer <access-token>` + pet ownership |
 | Breed analysis POST | `x-api-key` + `Authorization: Bearer <access-token>` |
 | Upload POST routes | `x-api-key` + `Authorization: Bearer <access-token>` |
@@ -63,14 +63,15 @@ Disease lookup (public, no auth):
 | JSON body routes (PATCH eye, POST breed) | `Content-Type: application/json`, `x-api-key: <key>`, `Authorization: Bearer <token>` |
 | Multipart routes (POST eye, POST uploads) | `Content-Type: multipart/form-data`, `x-api-key: <key>`, `Authorization: Bearer <token>` |
 | Public disease lookup | None required |
-| Authenticated eye log retrieval | `Authorization: Bearer <token>` |
+| Eye log retrieval | None required |
 
 ### Authorization Model
 
 Eye analysis endpoints enforce **pet ownership** inside the Lambda:
 
-- `GET` (ObjectId branch) and `POST` eye: caller's `userId` or `ngoId` must match the pet
+- `POST` eye: caller's `userId` or `ngoId` must match the pet
 - `PATCH` eye: caller's `userId` must match the pet (NGO access is **not** supported)
+- `GET` eye log (ObjectId branch): no ownership check — any caller with the petId can retrieve the log
 
 Breed and upload endpoints require authentication but do **not** enforce pet ownership.
 
@@ -196,7 +197,7 @@ Contract delta: the "Normal" case returns camelCase field names (`eyeDiseaseEng`
 
 #### Branch 2: Eye Analysis Log (Authenticated)
 
-The identifier is treated as a pet ID when it **is** a valid MongoDB ObjectId. Requires Bearer JWT. Caller must own the pet (userId or ngoId match).
+The identifier is treated as a pet ID when it **is** a valid MongoDB ObjectId. No authentication required.
 
 **Path params:**
 
@@ -208,7 +209,6 @@ The identifier is treated as a pet ID when it **is** a valid MongoDB ObjectId. R
 
 ```http
 GET /pet/analysis/eye/665f1a2b3c4d5e6f7a8b9c0d
-Authorization: Bearer <access-token>
 ```
 
 **Success (200)**
@@ -237,10 +237,7 @@ Returns up to 100 records sorted newest-first. Empty array if no records exist. 
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
-| 400 | `petAnalysis.errors.invalidPetIdFormat` | Identifier is a valid ObjectId format but fails pet-level validation in `loadAuthorizedPet` |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.unauthorized` | Caller does not own the pet |
-| 404 | `petAnalysis.errors.petNotFound` | Pet not found or soft-deleted |
+| 400 | `petAnalysis.errors.missingEyeDiseaseName` | Empty or missing identifier in path |
 
 ### POST /pet/analysis/eye/{identifier}
 

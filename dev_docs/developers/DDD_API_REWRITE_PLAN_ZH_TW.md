@@ -196,7 +196,7 @@ Audience:
           PATCH
           DELETE
 
-  /analysis - not deployed
+  /analysis - manual deployment tested
     /eye
       /{petId}
         GET
@@ -204,12 +204,12 @@ Audience:
         PATCH
       /{eyeDiseaseName}
         GET
-    /breed
+    /breed - fully functional
       POST
     /uploads
       /image
         POST
-      /breed-image
+      /breed-image - fully functional
         POST
 
   /recovery - manual deployment tested 
