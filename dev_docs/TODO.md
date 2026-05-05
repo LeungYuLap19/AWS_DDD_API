@@ -2,7 +2,7 @@
 
 - Claude opus 4.7 for a full scale locale keys standardization + response format standardization + error handling standardization
 
-- mongodb indexing issues
+- mongodb indexing issue
 
 - error keys standardization
 
