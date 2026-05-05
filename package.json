@@ -5,11 +5,9 @@
   "scripts": {
     "validate": "sam validate --template-file template.yaml",
     "pretest": "npm run build:ts",
-    "build:ts": "tsc -p tsconfig.json && node script/prepare-dist.cjs",
-    "build": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml",
-    "local:api": "sam local start-api --template .aws-sam/build/template.yaml",
     "local:api:warm": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml && sam local start-api --template .aws-sam/build/template.yaml --env-vars env.json --warm-containers EAGER",
-    "local:smoke": "npm_config_cache=.npm-cache sam local invoke PipelineSmokeFunction --event events/pipeline-smoke-get.json --template template.yaml"
+    "secrets:dev": "node script/create-github-dev-secrets-script.cjs && bash set-github-dev-secrets.local.sh",
+    "deploy:dev": "npm run secrets:dev && git commit --allow-empty -m \"chore: redeploy to sync secrets\" && git push"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1036.0",

@@ -68,5 +68,5 @@ for (const [name, value] of Object.entries(values)) {
   lines.push(`gh secret set ${name} --body ${quote(value)}`);
 }
 
-fs.writeFileSync('set-github-dev-secrets.local.sh', `${lines.join('\n')}\n`, { mode: 0o700 });
+fs.writeFileSync('script/set-github-dev-secrets.local.sh', `${lines.join('\n')}\n`, { mode: 0o700 });
 console.log('Wrote set-github-dev-secrets.local.sh');
