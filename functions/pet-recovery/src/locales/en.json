@@ -1,1 +1,38 @@
-{}
+{
+  "petRecovery": {
+    "errors": {
+      "petLost": {
+        "nameRequired": "Pet name is required",
+        "sexRequired": "Pet sex is required",
+        "animalRequired": "Animal type is required",
+        "lostDateRequired": "Lost date is required",
+        "lostLocationRequired": "Lost location is required",
+        "lostDistrictRequired": "Lost district is required",
+        "invalidPetId": "Invalid pet ID format",
+        "petNotFound": "The specified pet was not found",
+        "notFound": "Lost pet record not found",
+        "invalidId": "Invalid lost pet ID format"
+      },
+      "petFound": {
+        "animalRequired": "Animal type is required",
+        "foundDateRequired": "Found date is required",
+        "foundLocationRequired": "Found location is required",
+        "foundDistrictRequired": "Found district is required",
+        "notFound": "Found pet record not found",
+        "invalidId": "Invalid found pet ID format"
+      }
+    },
+    "success": {
+      "petLost": {
+        "listRetrieved": "All lost pets retrieved successfully",
+        "created": "Successfully added lost pet",
+        "deleted": "Pet lost record deleted successfully"
+      },
+      "petFound": {
+        "listRetrieved": "All found pets retrieved successfully",
+        "created": "Successfully added found pet",
+        "deleted": "Pet found record deleted successfully"
+      }
+    }
+  }
+}

@@ -1,1 +1,38 @@
-{}
+{
+  "petRecovery": {
+    "errors": {
+      "petLost": {
+        "nameRequired": "寵物名稱為必填",
+        "sexRequired": "寵物性別為必填",
+        "animalRequired": "動物類型為必填",
+        "lostDateRequired": "走失日期為必填",
+        "lostLocationRequired": "走失地點為必填",
+        "lostDistrictRequired": "走失地區為必填",
+        "invalidPetId": "寵物 ID 格式無效",
+        "petNotFound": "找不到指定的寵物",
+        "notFound": "找不到走失寵物記錄",
+        "invalidId": "走失寵物 ID 格式無效"
+      },
+      "petFound": {
+        "animalRequired": "動物類型為必填",
+        "foundDateRequired": "發現日期為必填",
+        "foundLocationRequired": "發現地點為必填",
+        "foundDistrictRequired": "發現地區為必填",
+        "notFound": "找不到發現寵物記錄",
+        "invalidId": "發現寵物 ID 格式無效"
+      }
+    },
+    "success": {
+      "petLost": {
+        "listRetrieved": "成功獲取所有走失寵物",
+        "created": "成功新增走失寵物",
+        "deleted": "走失寵物記錄已成功刪除"
+      },
+      "petFound": {
+        "listRetrieved": "成功獲取所有發現的寵物",
+        "created": "成功新增發現的寵物",
+        "deleted": "發現寵物記錄已成功刪除"
+      }
+    }
+  }
+}

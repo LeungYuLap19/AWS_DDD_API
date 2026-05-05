@@ -24,7 +24,7 @@ Protected pet-profile CRUD endpoints plus one public tag-lookup endpoint owned b
 | Empty pet lists | User branch returns `200` with `pets: []` and `total: 0`. NGO branch returns `404 petProfile.errors.noPetsFound`. |
 | Create success shape | Returns `{ id, result }` where `result` contains the sanitized newly-created pet document. |
 | Patch success shape | Returns `{ id }` only. Refetch via `GET /pet/profile/{petId}` if the updated document is needed. |
-| Transport format | Both `POST /pet/profile` and `PATCH /pet/profile/{petId}` are multipart-only. There is no JSON body path. |
+| Transport format | `POST /pet/profile` is multipart/form-data only. `PATCH /pet/profile/{petId}` accepts both `multipart/form-data` and `application/json`. When `Content-Type` is `multipart/form-data`, string-typed numeric and boolean fields are normalized before Zod validation. When `Content-Type` is `application/json`, native JS types are passed directly to Zod — no normalization is applied. |
 | Multipart booleans | Multipart normalization uses `String(value).toLowerCase() === "true"`, so `"true"`, `"True"`, and `"TRUE"` all become `true`. Any other supplied string becomes `false`. If the field is absent the value remains `undefined` and the field is treated as not provided. |
 | Public tag lookup | `/pet/profile/by-tag/{tagId}` is public at API Gateway: no authorizer and no `x-api-key`. Missing match is still `200` with all documented fields set to `null`. |
 
@@ -117,7 +117,7 @@ All Lambda-produced success responses include `success: true` and `requestId`.
 | Condition | `errorKey` |
 | --- | --- |
 | Multipart parsing produced a non-object body (rare; should not happen in normal API Gateway flows) | `common.invalidBodyParams` |
-| Body is missing, `null`, non-object, or an empty object `{}` (POST only; PATCH accepts an empty form body when only files are uploaded) | `common.missingParams` |
+| Body is missing, `null`, non-object, or an empty object `{}` | `common.missingBodyParams` |
 | Zod schema rejected the body and the first issue message is a dotted i18n key (for example `petProfile.errors.nameRequired`, `petProfile.errors.invalidBodyParams`) | that key |
 | Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
 
@@ -359,7 +359,7 @@ Unknown fields are rejected with `400 petProfile.errors.invalidBodyParams`.
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing form body (no fields and no files) |
+| 400 | `common.missingBodyParams` | Empty or missing form body (no fields and no files) |
 | 400 | `petProfile.errors.nameRequired` | Missing or empty `name` |
 | 400 | `petProfile.errors.animalRequired` | Missing or empty `animal` |
 | 400 | `petProfile.errors.sexRequired` | Missing or empty `sex` |
@@ -535,7 +535,7 @@ Return one authorized pet's private detail profile.
 
 ### PATCH /pet/profile/{petId}
 
-Update one authorized pet. This endpoint is multipart/form-data only.
+Update one authorized pet. This endpoint accepts both `multipart/form-data` (including file uploads) and `application/json`.
 
 **Lambda:** `pet-profile`  
 **Auth:** `x-api-key` + Bearer JWT required  
@@ -604,7 +604,8 @@ Unknown fields are rejected with `400 petProfile.errors.invalidBodyParams`.
 - `removedIndices` is applied in descending index order before new files are appended
 - each uploaded file is stored in S3 under `user-uploads/pets/<petId>/...`
 - uploaded file URLs are appended to `breedimage`
-- an empty multipart body with no files is accepted as a no-op and returns `200`
+- an empty multipart body containing only uploaded files (no text fields) is accepted and returns `200`
+- an empty JSON body `{}` is rejected with `400 common.missingBodyParams`
 - non-NGO owners cannot set `ngoPetId`
 - `ngoId` can only be set when it matches both the pet's current NGO ownership context and the caller's JWT `ngoId`
 
@@ -624,7 +625,9 @@ Unknown fields are rejected with `400 petProfile.errors.invalidBodyParams`.
 | Status | errorKey | Cause |
 | --- | --- | --- |
 | 400 | `petProfile.errors.invalidPetId` | Bad `petId` |
+| 400 | `common.missingBodyParams` | Empty JSON body `{}` sent with no text fields and no files |
 | 400 | `petProfile.errors.invalidBodyParams` | Unknown field or mass-assignment attempt |
+| 400 | `petProfile.errors.invalidWeightType` | `weight` is not a number |
 | 400 | `petProfile.errors.invalidRemovedIndices` | `removedIndices` is not a valid JSON array of integers |
 | 400 | `petProfile.errors.invalidBirthdayFormat` | Bad `birthday` |
 | 400 | `petProfile.errors.invalidSterilizationDateFormat` | Bad `sterilizationDate` |

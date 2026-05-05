@@ -160,7 +160,7 @@ Audience:
       PATCH
       DELETE
 
-  /medical
+  /medical - not deployed 
     /reference
       /deworm
         GET
@@ -196,24 +196,23 @@ Audience:
           PATCH
           DELETE
 
-  /analysis - non urgent 
+  /analysis
     /eye
       /{petId}
         GET
         POST
         PATCH
-    /breed
-      POST
-    /eye-diseases
       /{eyeDiseaseName}
         GET
+    /breed
+      POST
     /uploads
       /image
         POST
       /breed-image
         POST
 
-  /recovery 
+  /recovery - not deployed 
     /lost
       GET
       POST
@@ -761,8 +760,8 @@ sam deploy --config-env production
 | `GET /pet/analysis/eye/{petId}` | `GET /pets/{petID}/eyeLog` | `PetBasicInfo` | 取得 eye log / eye history。 |
 | `POST /pet/analysis/eye/{petId}` | `POST /analysis/eye-upload/{petId}` | `EyeUpload` | 執行 eye analysis。 |
 | `PATCH /pet/analysis/eye/{petId}` | `PUT /pets/updatePetEye` | `GetAllPets` | 更新/追加 eye capture history。 |
+| `GET /pet/analysis/eye/{eyeDiseaseName}` | `GET /analysis/{eyeDiseaseName}` | `GetBreed` | 取得 eye disease reference content。 |
 | `POST /pet/analysis/breed` | `POST /analysis/breed` | `EyeUpload` | 執行 breed analysis。 |
-| `GET /pet/analysis/eye-diseases/{eyeDiseaseName}` | `GET /analysis/{eyeDiseaseName}` | `GetBreed` | 取得 eye disease reference content。 |
 | `POST /pet/analysis/uploads/image` | `POST /util/uploadImage` | `EyeUpload` | generic image upload helper。 |
 | `POST /pet/analysis/uploads/breed-image` | `POST /util/uploadPetBreedImage` | `EyeUpload` | breed image upload helper。 |
 

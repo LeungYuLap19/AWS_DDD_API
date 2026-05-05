@@ -10,12 +10,12 @@ import { sanitizeRecord } from '../utils/sanitize';
 import { isValidDateFormat, parseDDMMYYYY } from '../utils/date';
 import { HttpError } from '../utils/httpError';
 import {
-  createMedicalRecordSchema,
-  updateMedicalRecordSchema,
-} from '../zodSchema/medicalSchema';
+  createDewormRecordSchema,
+  updateDewormRecordSchema,
+} from '../zodSchema/dewormSchema';
 
 const PROJECTION =
-  'medicalDate medicalPlace medicalDoctor medicalResult medicalSolution petId';
+  'date vaccineBrand vaccineType typesOfInternalParasites typesOfExternalParasites frequency nextDewormDate notification petId';
 
 function handleKnownError(
   error: unknown,
@@ -27,7 +27,7 @@ function handleKnownError(
   return null;
 }
 
-export async function handleListMedicalRecords(
+export async function handleListDewormRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const petId = String(ctx.event.pathParameters?.petId || '');
@@ -38,14 +38,14 @@ export async function handleListMedicalRecords(
   try {
     await loadAuthorizedPet(ctx.event, petId);
 
-    const MedicalRecords = mongoose.model('Medical_Records');
-    const records = await MedicalRecords.find({ petId })
+    const DewormRecords = mongoose.model('Deworm_Records');
+    const records = await DewormRecords.find({ petId })
       .select(PROJECTION)
       .lean();
 
     return response.successResponse(200, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.getSuccess',
-      form: { medical: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
+      message: 'petMedicalRecord.success.dewormRecord.getSuccess',
+      form: { deworm: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
       petId,
     });
   } catch (error) {
@@ -55,7 +55,7 @@ export async function handleListMedicalRecords(
   }
 }
 
-export async function handleCreateMedicalRecord(
+export async function handleCreateDewormRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const petId = String(ctx.event.pathParameters?.petId || '');
@@ -77,36 +77,51 @@ export async function handleCreateMedicalRecord(
   try {
     await loadAuthorizedPet(ctx.event, petId);
 
-    const parsed = parseBody(ctx.body, createMedicalRecordSchema);
+    const parsed = parseBody(ctx.body, createDewormRecordSchema);
     if (!parsed.ok) {
       return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
     }
     const data = parsed.data;
 
-    if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
+    if (data.date && !isValidDateFormat(data.date)) {
       return response.errorResponse(
         400,
-        'petMedicalRecord.errors.medicalRecord.invalidDateFormat',
+        'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
+        ctx.event
+      );
+    }
+    if (data.nextDewormDate && !isValidDateFormat(data.nextDewormDate)) {
+      return response.errorResponse(
+        400,
+        'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
         ctx.event
       );
     }
 
-    const MedicalRecords = mongoose.model('Medical_Records');
+    const DewormRecords = mongoose.model('Deworm_Records');
 
-    const newRecord = await MedicalRecords.create({
-      medicalDate: data.medicalDate ? parseDDMMYYYY(data.medicalDate) : null,
-      medicalPlace: data.medicalPlace,
-      medicalDoctor: data.medicalDoctor,
-      medicalResult: data.medicalResult,
-      medicalSolution: data.medicalSolution,
+    const parsedDate = data.date ? parseDDMMYYYY(data.date) : null;
+    const parsedNextDewormDate = data.nextDewormDate
+      ? parseDDMMYYYY(data.nextDewormDate)
+      : null;
+
+    const newRecord = await DewormRecords.create({
+      date: parsedDate,
+      vaccineBrand: data.vaccineBrand,
+      vaccineType: data.vaccineType,
+      typesOfInternalParasites: data.typesOfInternalParasites,
+      typesOfExternalParasites: data.typesOfExternalParasites,
+      frequency: data.frequency,
+      nextDewormDate: parsedNextDewormDate,
+      notification: data.notification ?? false,
       petId,
     });
 
     return response.successResponse(201, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.created',
+      message: 'petMedicalRecord.success.dewormRecord.created',
       form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
       petId,
-      medicalRecordId: newRecord._id,
+      dewormRecordId: newRecord._id,
     });
   } catch (error) {
     const known = handleKnownError(error, ctx.event);
@@ -115,18 +130,18 @@ export async function handleCreateMedicalRecord(
   }
 }
 
-export async function handleUpdateMedicalRecord(
+export async function handleUpdateDewormRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const petId = String(ctx.event.pathParameters?.petId || '');
-  const medicalId = String(ctx.event.pathParameters?.medicalId || '');
+  const dewormId = String(ctx.event.pathParameters?.dewormId || '');
 
   const authContext = requireAuthContext(ctx.event);
 
-  if (!mongoose.isValidObjectId(medicalId)) {
+  if (!mongoose.isValidObjectId(dewormId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat',
+      'petMedicalRecord.errors.dewormRecord.invalidDewormIdFormat',
       ctx.event
     );
   }
@@ -147,32 +162,45 @@ export async function handleUpdateMedicalRecord(
   try {
     await loadAuthorizedPet(ctx.event, petId);
 
-    const parsed = parseBody(ctx.body, updateMedicalRecordSchema);
+    const parsed = parseBody(ctx.body, updateDewormRecordSchema);
     if (!parsed.ok) {
       return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
     }
     const data = parsed.data;
 
-    if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
+    if (data.date && !isValidDateFormat(data.date)) {
       return response.errorResponse(
         400,
-        'petMedicalRecord.errors.medicalRecord.invalidDateFormat',
+        'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
+        ctx.event
+      );
+    }
+    if (data.nextDewormDate && !isValidDateFormat(data.nextDewormDate)) {
+      return response.errorResponse(
+        400,
+        'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
         ctx.event
       );
     }
 
     const updateFields: Record<string, unknown> = {};
-    if (data.medicalDate !== undefined) {
-      updateFields.medicalDate = data.medicalDate ? parseDDMMYYYY(data.medicalDate) : null;
-    }
-    if (data.medicalPlace !== undefined) updateFields.medicalPlace = data.medicalPlace;
-    if (data.medicalDoctor !== undefined) updateFields.medicalDoctor = data.medicalDoctor;
-    if (data.medicalResult !== undefined) updateFields.medicalResult = data.medicalResult;
-    if (data.medicalSolution !== undefined) updateFields.medicalSolution = data.medicalSolution;
+    if (data.date !== undefined) updateFields.date = data.date ? parseDDMMYYYY(data.date) : null;
+    if (data.vaccineBrand !== undefined) updateFields.vaccineBrand = data.vaccineBrand;
+    if (data.vaccineType !== undefined) updateFields.vaccineType = data.vaccineType;
+    if (data.typesOfInternalParasites !== undefined)
+      updateFields.typesOfInternalParasites = data.typesOfInternalParasites;
+    if (data.typesOfExternalParasites !== undefined)
+      updateFields.typesOfExternalParasites = data.typesOfExternalParasites;
+    if (data.frequency !== undefined) updateFields.frequency = data.frequency;
+    if (data.nextDewormDate !== undefined)
+      updateFields.nextDewormDate = data.nextDewormDate
+        ? parseDDMMYYYY(data.nextDewormDate)
+        : null;
+    if (data.notification !== undefined) updateFields.notification = data.notification;
 
-    const MedicalRecords = mongoose.model('Medical_Records');
-    const updated = await MedicalRecords.findOneAndUpdate(
-      { _id: medicalId, petId },
+    const DewormRecords = mongoose.model('Deworm_Records');
+    const updated = await DewormRecords.findOneAndUpdate(
+      { _id: dewormId, petId },
       { $set: updateFields },
       { new: true, projection: PROJECTION }
     ).lean();
@@ -180,15 +208,15 @@ export async function handleUpdateMedicalRecord(
     if (!updated) {
       return response.errorResponse(
         404,
-        'petMedicalRecord.errors.medicalRecord.notFound',
+        'petMedicalRecord.errors.dewormRecord.notFound',
         ctx.event
       );
     }
 
     return response.successResponse(200, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.updated',
+      message: 'petMedicalRecord.success.dewormRecord.updated',
       petId,
-      medicalRecordId: medicalId,
+      dewormRecordId: dewormId,
       form: sanitizeRecord(updated as Record<string, unknown>),
     });
   } catch (error) {
@@ -198,18 +226,18 @@ export async function handleUpdateMedicalRecord(
   }
 }
 
-export async function handleDeleteMedicalRecord(
+export async function handleDeleteDewormRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const petId = String(ctx.event.pathParameters?.petId || '');
-  const medicalId = String(ctx.event.pathParameters?.medicalId || '');
+  const dewormId = String(ctx.event.pathParameters?.dewormId || '');
 
   const authContext = requireAuthContext(ctx.event);
 
-  if (!mongoose.isValidObjectId(medicalId)) {
+  if (!mongoose.isValidObjectId(dewormId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat',
+      'petMedicalRecord.errors.dewormRecord.invalidDewormIdFormat',
       ctx.event
     );
   }
@@ -230,21 +258,21 @@ export async function handleDeleteMedicalRecord(
   try {
     await loadAuthorizedPet(ctx.event, petId);
 
-    const MedicalRecords = mongoose.model('Medical_Records');
+    const DewormRecords = mongoose.model('Deworm_Records');
 
-    const deleted = await MedicalRecords.deleteOne({ _id: medicalId, petId });
+    const deleted = await DewormRecords.deleteOne({ _id: dewormId, petId });
     if (deleted.deletedCount === 0) {
       return response.errorResponse(
         404,
-        'petMedicalRecord.errors.medicalRecord.notFound',
+        'petMedicalRecord.errors.dewormRecord.notFound',
         ctx.event
       );
     }
 
     return response.successResponse(200, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.deleted',
+      message: 'petMedicalRecord.success.dewormRecord.deleted',
       petId,
-      medicalRecordId: medicalId,
+      dewormRecordId: dewormId,
     });
   } catch (error) {
     const known = handleKnownError(error, ctx.event);

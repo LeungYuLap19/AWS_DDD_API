@@ -40,19 +40,35 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
       return rateLimitResponse;
     }
 
-    const parsedForm = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
-    const { files, ...rawFields } = parsedForm;
+    const contentType = (
+      ctx.event.headers?.['content-type'] ||
+      ctx.event.headers?.['Content-Type'] ||
+      ''
+    ).toLowerCase();
+    const isMultipart = contentType.includes('multipart/form-data');
+    let files: ParsedMultipartForm['files'] = [];
+    let rawFields: Record<string, unknown>;
+    if (isMultipart) {
+      const parsedForm = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
+      files = parsedForm.files || [];
+      const { files: _f, ...fields } = parsedForm;
+      rawFields = fields;
+    } else {
+      rawFields = (ctx.body as Record<string, unknown>) || {};
+    }
 
     const unknownField = Object.keys(rawFields).find((key) => !patchPetAllowedFields.has(key));
     if (unknownField) {
       return response.errorResponse(400, 'petProfile.errors.invalidBodyParams', ctx.event);
     }
 
-    const normalizedBody = normalizeMultipartBody(rawFields);
+    // For multipart, normalize string field values (booleans, numbers as strings).
+    // For JSON, skip normalization so Zod receives proper native types.
+    const sourceBody = isMultipart ? normalizeMultipartBody(rawFields) : rawFields;
     const filteredBody = Object.fromEntries(
-      Object.entries(normalizedBody).filter(([key]) => patchPetAllowedFields.has(key))
+      Object.entries(sourceBody).filter(([key]) => patchPetAllowedFields.has(key))
     );
-    const parsed = parseBody(filteredBody, patchPetBodySchema, { requireNonEmpty: false });
+    const parsed = parseBody(filteredBody, patchPetBodySchema);
 
     if (!parsed.ok) {
       return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);

@@ -37,8 +37,21 @@ export async function handleCreatePetProfile(ctx: RouteContext): Promise<APIGate
       return rateLimitResponse;
     }
 
-    const parsedForm = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
-    const { files, ...rawFields } = parsedForm;
+    const contentType = (
+      ctx.event.headers?.['content-type'] ||
+      ctx.event.headers?.['Content-Type'] ||
+      ''
+    ).toLowerCase();
+    let files: ParsedMultipartForm['files'] = [];
+    let rawFields: Record<string, unknown>;
+    if (contentType.includes('multipart/form-data')) {
+      const parsedForm = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
+      files = parsedForm.files || [];
+      const { files: _f, ...fields } = parsedForm;
+      rawFields = fields;
+    } else {
+      rawFields = (ctx.body as Record<string, unknown>) || {};
+    }
 
     const normalizedBody = normalizeMultipartBody(rawFields);
     const parsed = parseBody(normalizedBody, createPetBodySchema);

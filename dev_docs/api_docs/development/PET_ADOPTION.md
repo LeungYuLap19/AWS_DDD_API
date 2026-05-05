@@ -28,7 +28,7 @@ Two separate subsystems share the `/pet/adoption` path:
 | PATCH response | PATCH does **not** return the updated `form`. It returns `{ petId }` only. Re-fetch via managed GET if the updated document is needed. |
 | Date format | Date fields accept `DD/MM/YYYY` or ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDThh:mm:ssZ`). Any date field that is present but fails both formats returns `400 petAdoption.errors.managed.invalidDateFormat`. |
 | Unknown POST/PATCH fields | The adoption Zod schema uses `z.object()` without `.strict()`, so unknown fields are **stripped silently** rather than rejected. If all supplied fields are stripped (only unknown keys were sent), PATCH returns `400 petAdoption.errors.managed.noFieldsToUpdate`. |
-| Empty body behavior | POST accepts an empty `{}` body — all fields are optional, so `{}` creates a record with all null/default values. A `null`/absent body (no body sent) returns `400 common.invalidBodyParams` (Zod rejects null). PATCH with `{}` body returns `400 petAdoption.errors.managed.noFieldsToUpdate`. The key `common.missingBodyParams` is never returned by this Lambda. |
+| Empty body behavior | Both POST and PATCH reject an empty `{}` body with `400 common.missingBodyParams` — the shared `parseBody` helper defaults to `requireNonEmpty: true`. A `null` or absent body also returns `400 common.missingBodyParams`. PATCH with a non-empty body whose fields are all stripped by Zod (only unknown keys) returns `400 petAdoption.errors.managed.noFieldsToUpdate`. |
 | Ownership check | The Lambda checks `pet.userId === jwt.userId` **or** `pet.ngoId === jwt.ngoId`. A non-owner caller receives `403 common.forbidden`. Soft-deleted pets (`deleted: true`) return `404 petAdoption.errors.managed.petNotFound`. |
 | Browse exclusions | The listing excludes adoption sites `["Arc Dog Shelter", "Tolobunny", "HKRABBIT"]` and documents with an empty `Image_URL`. |
 | Page size | Browse list is paginated at **16** records per page. |
@@ -124,7 +124,7 @@ Unknown fields are stripped silently (schema does not use `.strict()`).
 | Condition | `errorKey` |
 | --- | --- |
 | Malformed JSON (body arrives as unparsed string) | `common.invalidBodyParams` |
-| Null or absent body (no body sent) | `common.invalidBodyParams` (Zod rejects null; `requireNonEmpty` is not set) |
+| Empty body (`{}`, `null`, or absent) | `common.missingBodyParams` (`requireNonEmpty: true` is the default) |
 | Zod schema rejection | `common.invalidBodyParams` (or the first Zod issue if it is a dotted i18n key) |
 
 After `parseBody` succeeds, the PATCH handler performs one additional check:
@@ -457,7 +457,8 @@ All fields are optional and nullable. An empty `{}` body is accepted and creates
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `petAdoption.errors.managed.invalidPetId` | `id` is not a valid MongoDB ObjectId |
-| 400 | `common.invalidBodyParams` | Malformed JSON, Zod schema rejection, or null/absent body |
+| 400 | `common.missingBodyParams` | Empty body (`{}`, `null`, or absent) |
+| 400 | `common.invalidBodyParams` | Malformed JSON or Zod schema rejection |
 | 400 | `petAdoption.errors.managed.invalidDateFormat` | A date field is present but fails format validation |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
 | 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
@@ -511,9 +512,10 @@ Same schema as POST. At least one known field must be present.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `petAdoption.errors.managed.invalidPetId` | `id` is not a valid MongoDB ObjectId |
-| 400 | `common.invalidBodyParams` | Malformed JSON, Zod schema rejection, or null/absent body |
+| 400 | `common.missingBodyParams` | Empty body (`{}`, `null`, or absent) |
+| 400 | `common.invalidBodyParams` | Malformed JSON or Zod schema rejection |
 | 400 | `petAdoption.errors.managed.invalidDateFormat` | A date field is present but fails format validation |
-| 400 | `petAdoption.errors.managed.noFieldsToUpdate` | Body contains no recognized update fields after Zod parse (`{}` or only unknown fields) |
+| 400 | `petAdoption.errors.managed.noFieldsToUpdate` | Non-empty body but all fields stripped by Zod (only unknown fields sent) |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
 | 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is soft-deleted |
@@ -612,7 +614,7 @@ A mismatch returns `403 common.forbidden`. A non-existent or soft-deleted pet re
 | Lambda owner | `PetDetailInfo` | `pet-adoption` |
 | Browse routes | Separate lambda `GetAdoption` at `/adoption` and `/adoption/{id}` | Same lambda `pet-adoption` at `/pet/adoption` and `/pet/adoption/{id}` |
 | Error key namespace | `petDetailInfo.errors.petAdoption.*` | `petAdoption.errors.managed.*` / `petAdoption.errors.browse.*` |
-| Empty body behavior | POST: `{}` accepted (creates null-field record); null body → `common.invalidBodyParams`. PATCH: `{}` → `petAdoption.errors.managed.noFieldsToUpdate`; null body → `common.invalidBodyParams`. Key `common.missingBodyParams` is never returned. | n/a (`common.missingParams` on null body) |
+| Empty body behavior | POST: `{}` accepted (creates null-field record); null body → `common.invalidBodyParams`. PATCH: `{}` → `petAdoption.errors.managed.noFieldsToUpdate`; null body → `common.invalidBodyParams`. | Both POST and PATCH reject `{}`, `null`, and absent body with `400 common.missingBodyParams`. PATCH with a non-empty unknown-only body → `petAdoption.errors.managed.noFieldsToUpdate`. |
 | PATCH response | `{ petId, adoptionId }` | `{ petId }` only |
 
 ---

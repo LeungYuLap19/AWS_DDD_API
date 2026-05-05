@@ -210,16 +210,15 @@ locales
     GET /pets/{petID}/eyeLog
     PUT /pets/updatePetEye
     ---
-    /eye
+     /eye
       /{petId}
         GET
         POST
         PATCH
-    /breed
-      POST
-    /eye-diseases
       /{eyeDiseaseName}
         GET
+    /breed
+      POST
     /uploads
       /image
         POST

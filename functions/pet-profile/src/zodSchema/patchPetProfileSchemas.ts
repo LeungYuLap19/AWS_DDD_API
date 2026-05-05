@@ -51,7 +51,7 @@ export const patchPetBodySchema = z
     name: z.string().optional(),
     animal: z.string().optional(),
     birthday: optionalDateString('petProfile.errors.invalidBirthdayFormat'),
-    weight: z.number().finite().optional(),
+    weight: z.number({ error: 'petProfile.errors.invalidWeightType' }).finite({ message: 'petProfile.errors.invalidWeightType' }).optional(),
     sex: z.string().optional(),
     sterilization: z.boolean().optional(),
     sterilizationDate: optionalDateString('petProfile.errors.invalidSterilizationDateFormat'),
