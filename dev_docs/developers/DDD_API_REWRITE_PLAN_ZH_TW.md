@@ -141,7 +141,7 @@ Audience:
       POST
       PATCH
 
-  /transfer - deployed
+  /transfer - manual deployment tested
     /{petId}
       POST
       /{transferId}
@@ -160,7 +160,7 @@ Audience:
       PATCH
       DELETE
 
-  /medical - not deployed 
+  /medical - manual deployment tested 
     /reference
       /deworm
         GET
@@ -196,7 +196,7 @@ Audience:
           PATCH
           DELETE
 
-  /analysis
+  /analysis - not deployed
     /eye
       /{petId}
         GET
@@ -212,7 +212,7 @@ Audience:
       /breed-image
         POST
 
-  /recovery - not deployed 
+  /recovery - manual deployment tested 
     /lost
       GET
       POST
