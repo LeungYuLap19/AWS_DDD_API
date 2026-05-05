@@ -1325,7 +1325,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/eye/{proxy+}
+            Path: /pet/analysis/eye/{identifier}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1339,11 +1339,20 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetAnalysisUploadsOPTIONS:
+        PetAnalysisUploadsImageOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/uploads/{proxy+}
+            Path: /pet/analysis/uploads/image
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetAnalysisUploadsBreedImageOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/uploads/breed-image
             Method: OPTIONS
             Auth:
               Authorizer: NONE
