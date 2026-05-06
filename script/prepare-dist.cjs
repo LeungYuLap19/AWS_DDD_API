@@ -97,7 +97,7 @@ copyFile(
   'dist/functions/commerce-fulfillment/package.json'
 );
 
-copyFile(
+copyDirectory(
   'functions/commerce-fulfillment/static',
   'dist/functions/commerce-fulfillment/static'
 );
