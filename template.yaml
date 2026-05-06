@@ -1590,104 +1590,51 @@ Resources:
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       Events:
-        NotificationsRootGET:
+        NotificationsMeGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /notifications
+            Path: /notifications/me
             Method: GET
-        NotificationsRootDELETE:
+        NotificationsMeOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /notifications
-            Method: DELETE
-        NotificationsRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NotificationsRootPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NotificationsRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NotificationsProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications/{proxy+}
-            Method: GET
-        NotificationsProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications/{proxy+}
-            Method: DELETE
-        NotificationsProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NotificationsProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NotificationsProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        NotificationsRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /notifications
+            Path: /notifications/me
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        NotificationsProxyOPTIONS:
+        NotificationsMeByIdPATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /notifications/{proxy+}
+            Path: /notifications/me/{notificationId}
+            Method: PATCH
+        NotificationsMeByIdOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/me/{notificationId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        NotificationsDispatchPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/dispatch
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        NotificationsDispatchOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notifications/dispatch
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1844,104 +1791,125 @@ Resources:
           SMTP_PASS: !Ref LogisticsSmtpPass
           SMTP_FROM: !Ref LogisticsSmtpFrom
       Events:
-        LogisticsRootGET:
+        LogisticsTokenPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /logistics
-            Method: GET
-        LogisticsRootDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics
-            Method: DELETE
-        LogisticsRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics
+            Path: /logistics/token
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        LogisticsRootPUT:
+        LogisticsTokenOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /logistics
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        LogisticsRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        LogisticsProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics/{proxy+}
-            Method: GET
-        LogisticsProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics/{proxy+}
-            Method: DELETE
-        LogisticsProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        LogisticsProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        LogisticsProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        LogisticsRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /logistics
+            Path: /logistics/token
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        LogisticsProxyOPTIONS:
+        LogisticsLookupsAreasPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /logistics/{proxy+}
+            Path: /logistics/lookups/areas
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsLookupsAreasOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/lookups/areas
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        LogisticsLookupsNetCodesPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/lookups/net-codes
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsLookupsNetCodesOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/lookups/net-codes
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        LogisticsLookupsPickupLocationsPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/lookups/pickup-locations
+            Method: POST
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsLookupsPickupLocationsOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/lookups/pickup-locations
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        LogisticsShipmentsPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/shipments
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsShipmentsOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/shipments
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        LogisticsCloudWaybillPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/cloud-waybill
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        LogisticsCloudWaybillOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /logistics/cloud-waybill
             Method: OPTIONS
             Auth:
               Authorizer: NONE

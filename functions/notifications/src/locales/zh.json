@@ -1,1 +1,8 @@
-{}
+{
+  "notifications": {
+    "errors": {
+      "typeRequired": "通知類型為必填且須為有效類型",
+      "invalidDate": "日期格式無效，請使用 ISO 8601 或 DD/MM/YYYY 格式"
+    }
+  }
+}

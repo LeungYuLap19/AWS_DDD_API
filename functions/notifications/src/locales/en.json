@@ -1,1 +1,8 @@
-{}
+{
+  "notifications": {
+    "errors": {
+      "typeRequired": "Notification type is required and must be a valid type",
+      "invalidDate": "Invalid date format. Use ISO 8601 or DD/MM/YYYY"
+    }
+  }
+}

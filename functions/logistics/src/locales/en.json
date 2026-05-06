@@ -1,1 +1,19 @@
-{}
+{
+  "logistics": {
+    "validation": {
+      "lastNameRequired": "Last name is required",
+      "phoneNumberRequired": "Phone number is required",
+      "addressRequired": "Address is required",
+      "waybillNoRequired": "Waybill number is required",
+      "tokenRequired": "Token is required",
+      "typeIdRequired": "Type ID is required",
+      "areaIdRequired": "Area ID is required",
+      "netCodeListRequired": "netCode must be a non-empty array"
+    },
+    "sfApiError": "SF API request failed",
+    "invalidSfResponse": "Invalid response from SF API",
+    "missingWaybill": "No waybill returned from SF API",
+    "missingPrintFile": "No print file returned from SF API"
+  }
+}
+

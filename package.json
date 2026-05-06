@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "build": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml",
+    "build:ts": "tsc",
+    "test": "jest",
     "validate": "sam validate --template-file template.yaml",
     "pretest": "npm run build:ts",
     "local:api:warm": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml && sam local start-api --template .aws-sam/build/template.yaml --env-vars env.json --warm-containers EAGER",
