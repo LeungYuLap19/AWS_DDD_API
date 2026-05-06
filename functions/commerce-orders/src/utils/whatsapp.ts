@@ -58,6 +58,7 @@ export async function sendWhatsAppOrderMessage(
         Authorization: token,
       },
       body: JSON.stringify(data),
+      signal: AbortSignal.timeout(4000),
     }
   );
 

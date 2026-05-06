@@ -93,6 +93,7 @@ async function shortenUrl(longUrl: string): Promise<string> {
   try {
     const res = await axios.get<{ url?: { shortLink?: string } }>('https://cutt.ly/api/api.php', {
       params: { key: apiKey, short: longUrl },
+      timeout: 3000,
     });
     if (res.data?.url?.shortLink) return res.data.url.shortLink;
     return longUrl;

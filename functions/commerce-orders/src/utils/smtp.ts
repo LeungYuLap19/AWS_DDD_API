@@ -8,6 +8,9 @@ function createSmtpTransporter() {
     port: parseInt(env.SMTP_PORT, 10) || 465,
     secure: true,
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+    connectionTimeout: 4000,
+    greetingTimeout: 4000,
+    socketTimeout: 4000,
   });
 }
 

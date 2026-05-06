@@ -148,11 +148,12 @@ Records a product-view event (analytics tracking).
 
 **Errors:**
 
-| Status | `errorKey` | Cause |
-| --- | --- | --- |
-| 400 | `common.missingBodyParams` | Body is missing or empty |
-| 400 | `common.invalidBodyParams` | Malformed JSON or missing/invalid required fields |
-| 500 | `common.internalError` | DB write failure or unexpected error |
+| Status | `errorKey` | Cause | Source |
+| --- | --- | --- | --- |
+| 400 | *(none — API GW shape: `{"message":"Invalid request body"}`)* | Malformed / non-object JSON body | API Gateway (`ValidateBody: true` on `GenericJsonObjectRequest` model — Lambda never runs) |
+| 400 | `common.missingBodyParams` | Body is missing or empty | Lambda |
+| 400 | `common.invalidBodyParams` | Valid JSON object but missing or invalid required fields | Lambda |
+| 500 | `common.internalError` | DB write failure or unexpected error | Lambda |
 
 ---
 
