@@ -73,7 +73,8 @@ When `POST /commerce/orders` succeeds, it creates both documents atomically. `Or
 {
   "success": true,
   "message": "<optional localized message>",
-  "<endpoint-specific fields>": "..."
+  "<endpoint-specific fields>": "...",
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -168,7 +169,8 @@ Returns paginated list of all orders. Admin/developer only.
     "page": 1,
     "limit": 100,
     "total": 320
-  }
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -214,6 +216,7 @@ Submits a new PTag order. Authenticated users only.
 | `petContact` | string | No | Pet-related contact number; defaults to `""` |
 | `optionSize` | string | No | Size variant; max 32 chars; defaults to `""` |
 | `optionColor` | string | No | Color variant; max 64 chars; defaults to `""` |
+| `optionImg` | string | No | Image URL variant hint; max unconstrained; defaults to `""`; accepted by the schema but **not used** by the handler — stored as empty string regardless |
 | `lang` | string | No | `"chn"` or `"eng"`; defaults to `"eng"` |
 
 **Side effects on success:**
@@ -238,7 +241,8 @@ If `OrderVerification` creation fails after `Order` is saved, the `Order` is del
   "message": "Order placed successfully.",
   "purchase_code": "ORDER-2025-001",
   "price": 298,
-  "_id": "665f1a2b3c4d5e6f7a8b9c12"
+  "_id": "665f1a2b3c4d5e6f7a8b9c12",
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -309,7 +313,8 @@ Returns paginated list of all `OrderVerification` records. Admin/developer only.
     "page": 1,
     "limit": 100,
     "total": 320
-  }
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -348,7 +353,8 @@ Returns the pet contact summary for one order. Ownership enforced for non-admin 
   "form": {
     "petContact": "98765432"
   },
-  "id": "665f1a2b3c4d5e6f7a8b9c12"
+  "id": "665f1a2b3c4d5e6f7a8b9c12",
+  "requestId": "aws-lambda-request-id"
 }
 ```
 

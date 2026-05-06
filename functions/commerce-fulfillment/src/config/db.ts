@@ -7,8 +7,8 @@ let connectionPromise: Promise<typeof mongoose> | null = null;
 
 function registerModels() {
   mongoose.models.OrderVerification ||
-    mongoose.model('OrderVerification', OrderVerificationSchema, 'order_verifications');
-  mongoose.models.Order || mongoose.model('Order', OrderSchema, 'orders');
+    mongoose.model('OrderVerification', OrderVerificationSchema, 'orderVerification');
+  mongoose.models.Order || mongoose.model('Order', OrderSchema, 'order');
 }
 
 export async function connectToMongoDB() {

@@ -44,7 +44,8 @@ All three routes require `x-api-key` at API Gateway. No `Authorization` header i
 ```json
 {
   "success": true,
-  "<endpoint-specific fields>": "..."
+  "<endpoint-specific fields>": "...",
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -88,7 +89,8 @@ Returns the full product list.
       "_id": "665f1a2b3c4d5e6f7a8b9c0d",
       "..."
     }
-  ]
+  ],
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -137,7 +139,8 @@ Records a product-view event (analytics tracking).
 ```json
 {
   "success": true,
-  "id": "665f1a2b3c4d5e6f7a8b9c0f"
+  "id": "665f1a2b3c4d5e6f7a8b9c0f",
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -147,8 +150,8 @@ Records a product-view event (analytics tracking).
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.invalidJSON` | Body is not valid JSON |
-| 400 | `common.invalidInput` | Zod validation failed (missing required fields) |
+| 400 | `common.missingBodyParams` | Body is missing or empty |
+| 400 | `common.invalidBodyParams` | Malformed JSON or missing/invalid required fields |
 | 500 | `common.internalError` | DB write failure or unexpected error |
 
 ---
@@ -177,7 +180,8 @@ Returns shop metadata for all configured shops.
       "shopContactPerson": "Ms. Chan",
       "price": 298
     }
-  ]
+  ],
+  "requestId": "aws-lambda-request-id"
 }
 ```
 

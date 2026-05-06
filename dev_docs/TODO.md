@@ -34,3 +34,7 @@
   Raw error leakage: unhandled exceptions and validation failures must not expose internals.
 
 - [logistics] SF address client uses `hksfaddsit.sf-express.com` (SIT/staging environment) for area, netCode, and address lookups. Only the login URL uses the production `hksfadd` subdomain. Carried over from legacy unchanged. Confirm with SF Express whether separate production URLs exist for these endpoints. Revisit after frontend integration tests.
+
+- ~~[commerce-fulfillment] Collection name mismatch — fulfillment Lambda uses `order_verifications` and `orders` but the real data is in `orderVerification` and `order` (as used by commerce-orders). All fulfillment routes that touch OrderVerification or Order return empty/404 against real data. Fix: align collection names in `functions/commerce-fulfillment/src/config/db.ts` to `orderVerification` and `order`.~~ ✅ Fixed.
+
+- [commerce-orders] POST /commerce/orders times out at 10 s (Lambda hard limit) on every valid payload (502 to client). Validation and shopCode DB lookup succeed. The hang occurs silently after both — no log output between START and END. Candidates: tagId uniqueness query, Order/OrderVerification write, or a missing timeout on the confirmation email or WhatsApp notification call. requestId: 3088d40e-bc04-45ec-83bb-90ae15f8d40a (2026-05-06T08:57:19Z). Fix the hang; also raise Lambda timeout above 10 s if side-effect calls (email, WhatsApp) are legitimately slow.
