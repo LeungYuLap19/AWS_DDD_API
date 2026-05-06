@@ -1,11 +1,13 @@
 import { createRouter } from '@aws-ddd-api/shared';
 import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { handleProxyAny, handleProxyRoot } from './services/orders';
+import { handleGetOrders, handleCreateOrder, handleGetOperations, handleGetOrderByTempId } from './services/orders';
 
 const routes: Record<string, RouteHandler> = {
-  '/commerce/orders': handleProxyRoot,
-  '/commerce/orders/{proxy+}': handleProxyAny,
+  'GET /commerce/orders': handleGetOrders,
+  'POST /commerce/orders': handleCreateOrder,
+  'GET /commerce/orders/operations': handleGetOperations,
+  'GET /commerce/orders/{tempId}': handleGetOrderByTempId,
 };
 
 export const routeRequest = createRouter(routes, { response });

@@ -814,7 +814,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
         PetProfileByTagOPTIONS:
           Type: Api
           Properties:
@@ -972,7 +971,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
         PetAdoptionRootOPTIONS:
           Type: Api
           Properties:
@@ -990,7 +988,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
         PetAdoptionByIdPOST:
           Type: Api
           Properties:
@@ -1270,7 +1267,6 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
         PetAnalysisEyePOST:
           Type: Api
           Properties:
@@ -1651,11 +1647,6 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
-      Environment:
-        Variables:
-          AWS_BUCKET_NAME: !Ref S3BucketName
-          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
-          AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
         CommerceCatalogGET:
           Type: Api
@@ -1663,28 +1654,16 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/catalog
             Method: GET
-        CommerceCatalogPOST:
+            Auth:
+              Authorizer: NONE
+        CommerceCatalogEventsPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/catalog
+            Path: /commerce/catalog/events
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        CommerceCatalogProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce/catalog/{proxy+}
-            Method: GET
-        CommerceCatalogProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce/catalog/{proxy+}
-            Method: POST
+            Auth:
+              Authorizer: NONE
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -1695,6 +1674,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/storefront
             Method: GET
+            Auth:
+              Authorizer: NONE
         CommerceCatalogOPTIONS:
           Type: Api
           Properties:
@@ -1704,11 +1685,11 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        CommerceCatalogProxyOPTIONS:
+        CommerceCatalogEventsOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/catalog/{proxy+}
+            Path: /commerce/catalog/events
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1723,13 +1704,41 @@ Resources:
               Authorizer: NONE
               ApiKeyRequired: false
 
+  CommerceOrdersFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-commerce-orders-s3-upload'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/orders/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/qr-codes/*'
+
   CommerceOrdersFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${ProjectName}-${StageName}-commerce-orders'
       CodeUri: dist/functions/commerce-orders/
       Handler: index.handler
-      Role: !GetAtt SharedFunctionRole.Arn
+      Role: !GetAtt CommerceOrdersFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
@@ -1764,11 +1773,17 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        CommerceOrdersProxyGET:
+        CommerceOrdersOperationsGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/orders/{proxy+}
+            Path: /commerce/orders/operations
+            Method: GET
+        CommerceOrdersByTempIdGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/orders/{tempId}
             Method: GET
         CommerceOrdersOPTIONS:
           Type: Api
@@ -1779,11 +1794,20 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        CommerceOrdersProxyOPTIONS:
+        CommerceOrdersByTempIdOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/orders/{proxy+}
+            Path: /commerce/orders/{tempId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceOrdersOperationsOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/orders/operations
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1820,39 +1844,55 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/fulfillment
             Method: GET
-        CommerceFulfillmentDELETE:
+        CommerceFulfillmentByIdDELETE:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/fulfillment
+            Path: /commerce/fulfillment/{orderVerificationId}
             Method: DELETE
-        CommerceFulfillmentProxyGET:
+        CommerceFulfillmentTagsGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/fulfillment/{proxy+}
+            Path: /commerce/fulfillment/tags/{tagId}
             Method: GET
-        CommerceFulfillmentProxyPATCH:
+        CommerceFulfillmentTagsPATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/fulfillment/{proxy+}
+            Path: /commerce/fulfillment/tags/{tagId}
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        CommerceFulfillmentProxyDELETE:
+        CommerceFulfillmentSuppliersGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/fulfillment/{proxy+}
-            Method: DELETE
-        CommerceCommandsProxyPOST:
+            Path: /commerce/fulfillment/suppliers/{orderId}
+            Method: GET
+        CommerceFulfillmentSuppliersPATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/commands/{proxy+}
+            Path: /commerce/fulfillment/suppliers/{orderId}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceFulfillmentShareLinksGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment/share-links/whatsapp/{verificationId}
+            Method: GET
+        CommerceCommandsPtagEmailPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/commands/ptag-detection-email
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
@@ -1867,20 +1907,47 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        CommerceFulfillmentProxyOPTIONS:
+        CommerceFulfillmentByIdOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/fulfillment/{proxy+}
+            Path: /commerce/fulfillment/{orderVerificationId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        CommerceCommandsProxyOPTIONS:
+        CommerceFulfillmentTagsOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/commands/{proxy+}
+            Path: /commerce/fulfillment/tags/{tagId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceFulfillmentSuppliersOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment/suppliers/{orderId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceFulfillmentShareLinksOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment/share-links/whatsapp/{verificationId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceCommandsPtagEmailOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/commands/ptag-detection-email
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1936,7 +2003,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -1958,7 +2024,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
@@ -1980,7 +2045,6 @@ Resources:
             Method: POST
             Auth:
               Authorizer: NONE
-              ApiKeyRequired: false
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false

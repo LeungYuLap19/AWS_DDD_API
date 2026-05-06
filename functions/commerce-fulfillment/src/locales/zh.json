@@ -1,1 +1,20 @@
-{}
+{
+  "fulfillment": {
+    "errors": {
+      "notFound": "找不到訂單驗證記錄。",
+      "alreadyCancelled": "該訂單驗證記錄已被取消。",
+      "missingOrderId": "必須提供 orderId。",
+      "missingTagId": "必須提供 tagId。",
+      "missingVerificationId": "必須提供 _id。",
+      "invalidVerificationId": "_id 格式不正確。",
+      "duplicateOrderId": "該 orderId 的訂單驗證記錄已存在。",
+      "invalidDate": "日期格式不正確，請使用 DD/MM/YYYY。",
+      "invalidField": "欄位值不正確。",
+      "invalidPendingStatus": "pendingStatus 必須為布林值。",
+      "missingFields": "缺少必填欄位。",
+      "invalidEmail": "電郵地址格式無效。",
+      "invalidLocationURL": "位置連結必須是有效的 HTTPS 地址。"
+    }
+  }
+}
+

@@ -3,7 +3,7 @@
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-Protected pet-profile CRUD endpoints plus one public tag-lookup endpoint owned by the `pet-profile` Lambda.
+Protected pet-profile CRUD endpoints plus one unauthenticated (no JWT) tag-lookup endpoint owned by the `pet-profile` Lambda.
 
 ## Overview
 
@@ -14,7 +14,7 @@ Protected pet-profile CRUD endpoints plus one public tag-lookup endpoint owned b
 | GET | `/pet/profile/{petId}` | `x-api-key` + Bearer JWT | `pet-profile` | Return one authorized pet profile; `?view=basic\|detail\|full` (default `full`) |
 | PATCH | `/pet/profile/{petId}` | `x-api-key` + Bearer JWT | `pet-profile` | Update one authorized pet via multipart/form-data |
 | DELETE | `/pet/profile/{petId}` | `x-api-key` + Bearer JWT | `pet-profile` | Soft-delete one authorized pet and clear its `tagId` |
-| GET | `/pet/profile/by-tag/{tagId}` | No API key, no Bearer JWT | `pet-profile` | Public-safe tag lookup |
+| GET | `/pet/profile/by-tag/{tagId}` | `x-api-key`, no Bearer JWT | `pet-profile` | Unauthenticated tag lookup |
 
 ## Integration-Critical Contract Notes
 
@@ -26,7 +26,7 @@ Protected pet-profile CRUD endpoints plus one public tag-lookup endpoint owned b
 | Patch success shape | Returns `{ id }` only. Refetch via `GET /pet/profile/{petId}` if the updated document is needed. |
 | Transport format | `POST /pet/profile` is multipart/form-data only. `PATCH /pet/profile/{petId}` accepts both `multipart/form-data` and `application/json`. When `Content-Type` is `multipart/form-data`, string-typed numeric and boolean fields are normalized before Zod validation. When `Content-Type` is `application/json`, native JS types are passed directly to Zod — no normalization is applied. |
 | Multipart booleans | Multipart normalization uses `String(value).toLowerCase() === "true"`, so `"true"`, `"True"`, and `"TRUE"` all become `true`. Any other supplied string becomes `false`. If the field is absent the value remains `undefined` and the field is treated as not provided. |
-| Public tag lookup | `/pet/profile/by-tag/{tagId}` is public at API Gateway: no authorizer and no `x-api-key`. Missing match is still `200` with all documented fields set to `null`. |
+| Tag lookup auth | `/pet/profile/by-tag/{tagId}` has no JWT authorizer but requires `x-api-key` at API Gateway. Missing match is still `200` with all documented fields set to `null`. |
 
 ## API Gateway And Auth Rules
 
@@ -37,7 +37,7 @@ Protected pet-profile CRUD endpoints plus one public tag-lookup endpoint owned b
 | `POST /pet/profile` | Yes | `DddTokenAuthorizer` |
 | `GET /pet/profile/me` | Yes | `DddTokenAuthorizer` |
 | `GET/PATCH/DELETE /pet/profile/{petId}` | Yes | `DddTokenAuthorizer` |
-| `GET /pet/profile/by-tag/{tagId}` | No | None |
+| `GET /pet/profile/by-tag/{tagId}` | Yes | None |
 
 Protected deployed requests must send:
 
@@ -247,7 +247,7 @@ Not returned in list summaries:
 - `info`
 - `features`
 
-### Public Tag Lookup Shape
+### Tag Lookup Response Shape
 
 `GET /pet/profile/by-tag/{tagId}` always returns these fields inside `form`. When no pet matches, every field is `null`.
 

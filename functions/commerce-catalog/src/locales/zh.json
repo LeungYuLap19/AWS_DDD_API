@@ -1,1 +1,7 @@
-{}
+{
+  "catalog": {
+    "errors": {
+      "createEventFailed": "無法記錄目錄事件"
+    }
+  }
+}

@@ -14,10 +14,6 @@ const baseEnvSchema = z.object({
   JWT_SECRET: requiredString,
 });
 
-export const envSchema = baseEnvSchema.extend({
-  AWS_BUCKET_NAME: requiredString,
-  AWS_BUCKET_BASE_URL: requiredString,
-  AWS_BUCKET_REGION: requiredString,
-});
+export const envSchema = baseEnvSchema;
 
 export type Env = z.infer<typeof envSchema>;
