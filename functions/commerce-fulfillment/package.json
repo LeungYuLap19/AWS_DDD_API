@@ -1,0 +1,11 @@
+{
+  "name": "@aws-ddd-api/commerce-fulfillment",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "mongoose": "^9.5.0",
+    "nodemailer": "^8.0.5",
+    "axios": "^1.15.2"
+  }
+}

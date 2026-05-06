@@ -4,5 +4,5 @@ import zh from '../locales/zh.json';
 
 export const response = createResponse({
   domainTranslations: { en, zh },
-  scope: 'commerce.response',
+  scope: 'commerce-orders.response',
 });
