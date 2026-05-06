@@ -252,6 +252,7 @@ Audience:
       POST
   /storefront [commerce-catalog]
     GET
+    
   /orders [commerce-orders]
     GET
     POST
@@ -259,6 +260,7 @@ Audience:
       GET
     /operations
       GET-?
+
   /fulfillment [commerce-fulfillment]
     GET
     /{orderVerificationId}

@@ -2,7 +2,7 @@
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-SF Express logistics integration — address lookups, shipment creation, and cloud waybill printing. Lookup routes are public. Token, shipment, and waybill routes require authentication.
+SF Express logistics integration — address lookups, shipment creation, and cloud waybill printing. Lookup routes require `x-api-key` but no JWT. Token, shipment, and waybill routes require full authentication.
 
 > Conventions: see shared API Gateway / auth / error-response rules below.
 
@@ -15,9 +15,9 @@ SF Express logistics integration — address lookups, shipment creation, and clo
 | Method | Path | Auth | API Key | Lambda | Purpose |
 | --- | --- | --- | --- | --- | --- |
 | POST | `/logistics/token` | Bearer JWT | Yes | `logistics` | Get SF Address API bearer token |
-| POST | `/logistics/lookups/areas` | None | No | `logistics` | List SF area metadata |
-| POST | `/logistics/lookups/net-codes` | None | No | `logistics` | List SF net codes for an area + type |
-| POST | `/logistics/lookups/pickup-locations` | None | No | `logistics` | Get pickup addresses for net codes |
+| POST | `/logistics/lookups/areas` | None | Yes | `logistics` | List SF area metadata |
+| POST | `/logistics/lookups/net-codes` | None | Yes | `logistics` | List SF net codes for an area + type |
+| POST | `/logistics/lookups/pickup-locations` | None | Yes | `logistics` | Get pickup addresses for net codes |
 | POST | `/logistics/shipments` | Bearer JWT | Yes | `logistics` | Create SF shipment and record waybill |
 | POST | `/logistics/cloud-waybill` | Bearer JWT | Yes | `logistics` | Print cloud waybill PDF and email it |
 
@@ -32,14 +32,14 @@ SF Express logistics integration — address lookups, shipment creation, and clo
 6. POST /logistics/cloud-waybill  → waybillNo + PDF emailed
 ```
 
-Step 1 (token) requires a Bearer JWT. Steps 2–4 (lookups) are public — no JWT or API key needed. Steps 5–6 require authentication.
+Step 1 (token) requires a Bearer JWT. Steps 2–4 (lookups) require `x-api-key` but no JWT. Steps 5–6 require full authentication.
 
 ### API Gateway Requirements
 
 | Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
 | `/logistics/token`, `/logistics/shipments`, `/logistics/cloud-waybill` | Yes | `DddTokenAuthorizer` |
-| `/logistics/lookups/*` | **No** | None |
+| `/logistics/lookups/*` | **Yes** | None |
 
 `OPTIONS` preflight routes are always public and do not require `x-api-key`.
 
@@ -50,9 +50,9 @@ Local SAM testing (`sam local start-api`) does not enforce `x-api-key`.
 | Route | Mechanism |
 | --- | --- |
 | `/logistics/token` | Bearer JWT required |
-| `/logistics/lookups/areas` | Public — no token needed |
-| `/logistics/lookups/net-codes` | Public — no token needed |
-| `/logistics/lookups/pickup-locations` | Public — no token needed |
+| `/logistics/lookups/areas` | No JWT, but `x-api-key` required |
+| `/logistics/lookups/net-codes` | No JWT, but `x-api-key` required |
+| `/logistics/lookups/pickup-locations` | No JWT, but `x-api-key` required |
 | `/logistics/shipments` | Bearer JWT required. Ownership check applies for non-privileged callers |
 | `/logistics/cloud-waybill` | Bearer JWT required |
 
@@ -63,7 +63,7 @@ Local SAM testing (`sam local start-api`) does not enforce `x-api-key`.
 | Scenario | Headers |
 | --- | --- |
 | Deployed: `/logistics/token`, `/logistics/shipments`, `/logistics/cloud-waybill` | `Content-Type: application/json`, `x-api-key: <key>`, `Authorization: Bearer <access-token>` |
-| Deployed: `/logistics/lookups/*` | `Content-Type: application/json` (no `x-api-key`, no `Authorization`) |
+| Deployed: `/logistics/lookups/*` | `Content-Type: application/json`, `x-api-key: <key>` (no `Authorization`) |
 | Local SAM | `Content-Type: application/json` |
 
 ### Rate Limits

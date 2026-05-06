@@ -1,1 +1,20 @@
-{}
+{
+  "orders": {
+    "errors": {
+      "missingRequiredFields": "缺少必填欄位。",
+      "invalidEmail": "電郵地址格式不正確。",
+      "invalidOption": "選項值無效。",
+      "invalidTempId": "購買編號格式不正確。",
+      "missingPhoneNumber": "電話號碼為必填項目。",
+      "invalidPhone": "電話號碼格式不正確。",
+      "invalidShopCode": "無效的商店代碼。",
+      "duplicateOrder": "此購買編號的訂單已存在。",
+      "invalidFileType": "不支援的檔案格式，只接受 JPEG、PNG、WebP 及 GIF。",
+      "fileTooLarge": "檔案大小超過 5 MB 限制。",
+      "tooManyFiles": "上傳的檔案數量過多。",
+      "missingTempId": "購買編號為必填項目。",
+      "orderNotFound": "找不到訂單。",
+      "noOrders": "找不到任何訂單。"
+    }
+  }
+}

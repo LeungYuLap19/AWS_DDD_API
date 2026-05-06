@@ -5,15 +5,15 @@
 
 Two separate subsystems share the `/pet/adoption` path:
 
-- **Public browse** — paginated listing and detail view of adoption listings sourced from an external shelter database (`ADOPTION_MONGODB_URI`). No auth required.
+- **Public browse** — paginated listing and detail view of adoption listings sourced from an external shelter database (`ADOPTION_MONGODB_URI`). Requires `x-api-key` but no Bearer JWT.
 - **Managed adoption records** — post-adoption tracking records linked to a pet in the main database (`MONGODB_URI`). Requires ownership auth.
 
 ## Overview
 
 | Method | Path | Auth | Lambda | Purpose |
 | --- | --- | --- | --- | --- |
-| GET | `/pet/adoption` | None | `pet-adoption` | Browse paginated adoption listing (public) |
-| GET | `/pet/adoption/{id}` | None (deployed) | `pet-adoption` | Browse detail (no auth) or managed record GET (SAM local + JWT only) |
+| GET | `/pet/adoption` | `x-api-key`, no JWT | `pet-adoption` | Browse paginated adoption listing |
+| GET | `/pet/adoption/{id}` | `x-api-key`, no JWT (deployed) | `pet-adoption` | Browse detail or managed record GET (SAM local + JWT only) |
 | POST | `/pet/adoption/{id}` | `x-api-key` + Bearer JWT | `pet-adoption` | Create a managed post-adoption record (id = petId) |
 | PATCH | `/pet/adoption/{id}` | `x-api-key` + Bearer JWT | `pet-adoption` | Update a managed post-adoption record (id = petId) |
 | DELETE | `/pet/adoption/{id}` | `x-api-key` + Bearer JWT | `pet-adoption` | Delete a managed post-adoption record (id = petId) |
@@ -41,15 +41,15 @@ Two separate subsystems share the `/pet/adoption` path:
 
 | Route | API key required | API Gateway authorizer |
 | --- | --- | --- |
-| `GET /pet/adoption` | No | None |
-| `GET /pet/adoption/{id}` | No | None |
+| `GET /pet/adoption` | Yes | None |
+| `GET /pet/adoption/{id}` | Yes | None |
 | `POST /pet/adoption/{id}` | Yes | `DddTokenAuthorizer` |
 | `PATCH /pet/adoption/{id}` | Yes | `DddTokenAuthorizer` |
 | `DELETE /pet/adoption/{id}` | Yes | `DddTokenAuthorizer` |
 | `OPTIONS /pet/adoption` | No | None |
 | `OPTIONS /pet/adoption/{id}` | No | None |
 
-Public browse requests (`GET /pet/adoption`, `GET /pet/adoption/{id}`) require neither an API key nor an Authorization header when hitting the deployed gateway.
+Public browse requests (`GET /pet/adoption`, `GET /pet/adoption/{id}`) require `x-api-key` but no Authorization header when hitting the deployed gateway.
 
 Protected managed requests must send:
 

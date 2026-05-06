@@ -1,1 +1,7 @@
-{}
+{
+  "catalog": {
+    "errors": {
+      "createEventFailed": "Failed to record catalog event"
+    }
+  }
+}

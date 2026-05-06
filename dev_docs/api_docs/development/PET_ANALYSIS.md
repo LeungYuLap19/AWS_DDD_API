@@ -10,7 +10,7 @@ AI-powered pet health analysis for the PetPetClub platform. Covers eye disease d
 
 | Method | Path | Auth | Lambda | Purpose |
 | --- | --- | --- | --- | --- |
-| GET | `/pet/analysis/eye/{identifier}` | No API key, no JWT; Lambda-level auth for ObjectId branch | `pet-analysis` | Look up eye disease by name (public) or retrieve pet eye analysis log (authenticated) |
+| GET | `/pet/analysis/eye/{identifier}` | `x-api-key`, no JWT; Lambda-level auth for ObjectId branch | `pet-analysis` | Look up eye disease by name or retrieve pet eye analysis log (authenticated) |
 | POST | `/pet/analysis/eye/{identifier}` | `x-api-key` + Bearer JWT | `pet-analysis` | Submit eye image for ML analysis |
 | PATCH | `/pet/analysis/eye/{identifier}` | `x-api-key` + Bearer JWT | `pet-analysis` | Append left/right eye image URLs to pet record |
 | POST | `/pet/analysis/breed` | `x-api-key` + Bearer JWT | `pet-analysis` | Identify breed from image URL via ML |
@@ -31,7 +31,7 @@ Breed analysis:
 1. `POST /pet/analysis/uploads/breed-image` to upload a pet photo
 2. `POST /pet/analysis/breed` with `species` and the image URL to get a breed prediction
 
-Disease lookup (public, no auth):
+Disease lookup (no JWT; `x-api-key` required):
 
 1. `GET /pet/analysis/eye/{diseaseName}` with an English disease name string
 
@@ -41,7 +41,7 @@ Disease lookup (public, no auth):
 
 | Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| `GET /pet/analysis/eye/{identifier}` | No (`ApiKeyRequired: false`) | None (`Authorizer: NONE`) |
+| `GET /pet/analysis/eye/{identifier}` | Yes | None (`Authorizer: NONE`) |
 | All other `POST` / `PATCH` routes | Yes (default) | `DddTokenAuthorizer` (default) |
 
 `OPTIONS` preflight routes (`/pet/analysis/eye/{proxy+}`, `/pet/analysis/breed`, `/pet/analysis/uploads/{proxy+}`) remain public and do not require `x-api-key`. They return `204` with CORS headers.
@@ -50,8 +50,8 @@ Disease lookup (public, no auth):
 
 | Scenario | Requirement |
 | --- | --- |
-| Disease lookup (GET with non-ObjectId identifier) | No `x-api-key`, no Bearer JWT |
-| Eye log retrieval (GET with ObjectId identifier) | No `x-api-key`, no Bearer JWT |
+| Disease lookup (GET with non-ObjectId identifier) | `x-api-key` required, no Bearer JWT |
+| Eye log retrieval (GET with ObjectId identifier) | `x-api-key` required, no Bearer JWT |
 | Eye analysis POST, eye PATCH | `x-api-key` + `Authorization: Bearer <access-token>` + pet ownership |
 | Breed analysis POST | `x-api-key` + `Authorization: Bearer <access-token>` |
 | Upload POST routes | `x-api-key` + `Authorization: Bearer <access-token>` |
@@ -62,8 +62,8 @@ Disease lookup (public, no auth):
 | --- | --- |
 | JSON body routes (PATCH eye, POST breed) | `Content-Type: application/json`, `x-api-key: <key>`, `Authorization: Bearer <token>` |
 | Multipart routes (POST eye, POST uploads) | `Content-Type: multipart/form-data`, `x-api-key: <key>`, `Authorization: Bearer <token>` |
-| Public disease lookup | None required |
-| Eye log retrieval | None required |
+| Disease lookup | `x-api-key: <key>` |
+| Eye log retrieval | `x-api-key: <key>` |
 
 ### Authorization Model
 

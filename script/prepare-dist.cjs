@@ -87,9 +87,19 @@ copyFile(
   'dist/functions/commerce-orders/package.json'
 );
 
+copyDirectory(
+  'functions/commerce-orders/static',
+  'dist/functions/commerce-orders/static'
+);
+
 copyFile(
   'functions/commerce-fulfillment/package.json',
   'dist/functions/commerce-fulfillment/package.json'
+);
+
+copyFile(
+  'functions/commerce-fulfillment/static',
+  'dist/functions/commerce-fulfillment/static'
 );
 
 if (fs.existsSync(path.join(repoRoot, 'functions/request-authorizer/package-lock.json'))) {
