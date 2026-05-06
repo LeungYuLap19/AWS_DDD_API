@@ -314,24 +314,25 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
 
   const newOrderVerificationId = savedVerification!['_id'];
 
-  // 12. Send confirmation email (non-fatal)
-  await sendOrderEmail(
-    email,
-    `PTag 訂單資料：${tempId}`,
-    {
-      lastName, phoneNumber, address, email, option, type, tempId,
-      petImg: petImgUrl, paymentWay, shopCode, delivery, price: canonicalPrice,
-      promotionCode, petContact, petName, optionColor, optionSize, isPTagAir,
-    },
-    'support@ptag.com.hk',
-    newOrderVerificationId
-  ).catch(() => {});
-
-  // 13. Send WhatsApp notification (non-fatal)
-  await sendWhatsAppOrderMessage(
-    { phoneNumber, lastName, option, tempId, lang },
-    newOrderVerificationId
-  ).catch(() => {});
+  // 12 & 13. Send confirmation email + WhatsApp notification in parallel (both non-fatal).
+  // Running sequentially risks cutt.ly(3s) + SMTP(4s) + WhatsApp(4s) = 11s > Lambda 10s limit.
+  await Promise.all([
+    sendOrderEmail(
+      email,
+      `PTag 訂單資料：${tempId}`,
+      {
+        lastName, phoneNumber, address, email, option, type, tempId,
+        petImg: petImgUrl, paymentWay, shopCode, delivery, price: canonicalPrice,
+        promotionCode, petContact, petName, optionColor, optionSize, isPTagAir,
+      },
+      'support@ptag.com.hk',
+      newOrderVerificationId
+    ).catch(() => {}),
+    sendWhatsAppOrderMessage(
+      { phoneNumber, lastName, option, tempId, lang },
+      newOrderVerificationId
+    ).catch(() => {}),
+  ]);
 
 return response.successResponse(200, ctx.event, {
   message: 'Order placed successfully.',
