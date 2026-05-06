@@ -86,9 +86,9 @@ jobs:
             CommerceSmtpUser="${{ secrets.DEV_COMMERCE_SMTP_USER }}" \
             CommerceSmtpPass="${{ secrets.DEV_COMMERCE_SMTP_PASS }}" \
             CommerceSmtpFrom="${{ secrets.DEV_COMMERCE_SMTP_FROM }}" \
-            WhatsappBearerToken="${{ secrets.DEV_WHATSAPP_BEARER_TOKEN }}" \
-            WhatsappPhoneNumberId="${{ secrets.DEV_WHATSAPP_PHONE_NUMBER_ID }}" \
-            CuttlyApiKey="${{ secrets.DEV_CUTTLY_API_KEY }}" \
+            CommerceWhatsappBearerToken="${{ secrets.DEV_WHATSAPP_BEARER_TOKEN }}" \
+            CommerceWhatsappPhoneNumberId="${{ secrets.DEV_WHATSAPP_PHONE_NUMBER_ID }}" \
+            CommerceCuttlyApiKey="${{ secrets.DEV_CUTTLY_API_KEY }}" \
             SfCustomerCode="${{ secrets.DEV_SF_CUSTOMER_CODE }}" \
             SfProductionCheckCode="${{ secrets.DEV_SF_PRODUCTION_CHECK_CODE }}" \
             SfSandboxCheckCode="${{ secrets.DEV_SF_SANDBOX_CHECK_CODE }}" \
@@ -178,9 +178,9 @@ jobs:
             CommerceSmtpUser="${{ secrets.PROD_COMMERCE_SMTP_USER }}" \
             CommerceSmtpPass="${{ secrets.PROD_COMMERCE_SMTP_PASS }}" \
             CommerceSmtpFrom="${{ secrets.PROD_COMMERCE_SMTP_FROM }}" \
-            WhatsappBearerToken="${{ secrets.PROD_WHATSAPP_BEARER_TOKEN }}" \
-            WhatsappPhoneNumberId="${{ secrets.PROD_WHATSAPP_PHONE_NUMBER_ID }}" \
-            CuttlyApiKey="${{ secrets.PROD_CUTTLY_API_KEY }}" \
+            CommerceWhatsappBearerToken="${{ secrets.PROD_WHATSAPP_BEARER_TOKEN }}" \
+            CommerceWhatsappPhoneNumberId="${{ secrets.PROD_WHATSAPP_PHONE_NUMBER_ID }}" \
+            CommerceCuttlyApiKey="${{ secrets.PROD_CUTTLY_API_KEY }}" \
             SfCustomerCode="${{ secrets.PROD_SF_CUSTOMER_CODE }}" \
             SfProductionCheckCode="${{ secrets.PROD_SF_PRODUCTION_CHECK_CODE }}" \
             SfSandboxCheckCode="${{ secrets.PROD_SF_SANDBOX_CHECK_CODE }}" \

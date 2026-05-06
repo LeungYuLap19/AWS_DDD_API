@@ -142,15 +142,15 @@ Parameters:
     Type: String
     Default: ''
     NoEcho: true
-  WhatsappBearerToken:
+  CommerceWhatsappBearerToken:
     Type: String
     Default: ''
     NoEcho: true
-  WhatsappPhoneNumberId:
+  CommerceWhatsappPhoneNumberId:
     Type: String
     Default: ''
     NoEcho: true
-  CuttlyApiKey:
+  CommerceCuttlyApiKey:
     Type: String
     Default: ''
     NoEcho: true
@@ -1640,11 +1640,94 @@ Resources:
               Authorizer: NONE
               ApiKeyRequired: false
 
-  CommerceFunction:
+  CommerceCatalogFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${ProjectName}-${StageName}-commerce'
-      CodeUri: dist/functions/commerce/
+      FunctionName: !Sub '${ProjectName}-${StageName}-commerce-catalog'
+      CodeUri: dist/functions/commerce-catalog/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
+      Environment:
+        Variables:
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
+      Events:
+        CommerceCatalogGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog
+            Method: GET
+        CommerceCatalogPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceCatalogProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog/{proxy+}
+            Method: GET
+        CommerceCatalogProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceStorefrontGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/storefront
+            Method: GET
+        CommerceCatalogOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceCatalogProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceStorefrontOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/storefront
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+
+  CommerceOrdersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-commerce-orders'
+      CodeUri: dist/functions/commerce-orders/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
@@ -1661,108 +1744,143 @@ Resources:
           SMTP_USER: !Ref CommerceSmtpUser
           SMTP_PASS: !Ref CommerceSmtpPass
           SMTP_FROM: !Ref CommerceSmtpFrom
-          WHATSAPP_BEARER_TOKEN: !Ref WhatsappBearerToken
-          WHATSAPP_PHONE_NUMBER_ID: !Ref WhatsappPhoneNumberId
-          CUTTLY_API_KEY: !Ref CuttlyApiKey
+          WHATSAPP_BEARER_TOKEN: !Ref CommerceWhatsappBearerToken
+          WHATSAPP_PHONE_NUMBER_ID: !Ref CommerceWhatsappPhoneNumberId
+          CUTTLY_API_KEY: !Ref CommerceCuttlyApiKey
       Events:
-        CommerceRootGET:
+        CommerceOrdersGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce
+            Path: /commerce/orders
             Method: GET
-        CommerceRootDELETE:
+        CommerceOrdersPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce
-            Method: DELETE
-        CommerceRootPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce
+            Path: /commerce/orders
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        CommerceRootPUT:
+        CommerceOrdersProxyGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        CommerceRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        CommerceProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce/{proxy+}
+            Path: /commerce/orders/{proxy+}
             Method: GET
-        CommerceProxyDELETE:
+        CommerceOrdersOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/{proxy+}
-            Method: DELETE
-        CommerceProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce/{proxy+}
-            Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        CommerceProxyPUT:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        CommerceProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        CommerceRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /commerce
+            Path: /commerce/orders
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        CommerceProxyOPTIONS:
+        CommerceOrdersProxyOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /commerce/{proxy+}
+            Path: /commerce/orders/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+
+  CommerceFulfillmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-commerce-fulfillment'
+      CodeUri: dist/functions/commerce-fulfillment/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
+      Environment:
+        Variables:
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
+          SMTP_HOST: !Ref CommerceSmtpHost
+          SMTP_PORT: !Ref CommerceSmtpPort
+          SMTP_USER: !Ref CommerceSmtpUser
+          SMTP_PASS: !Ref CommerceSmtpPass
+          SMTP_FROM: !Ref CommerceSmtpFrom
+          WHATSAPP_BEARER_TOKEN: !Ref CommerceWhatsappBearerToken
+          WHATSAPP_PHONE_NUMBER_ID: !Ref CommerceWhatsappPhoneNumberId
+          CUTTLY_API_KEY: !Ref CommerceCuttlyApiKey
+      Events:
+        CommerceFulfillmentGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment
+            Method: GET
+        CommerceFulfillmentDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment
+            Method: DELETE
+        CommerceFulfillmentProxyGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment/{proxy+}
+            Method: GET
+        CommerceFulfillmentProxyPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment/{proxy+}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceFulfillmentProxyDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment/{proxy+}
+            Method: DELETE
+        CommerceCommandsProxyPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/commands/{proxy+}
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        CommerceFulfillmentOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceFulfillmentProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/fulfillment/{proxy+}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceCommandsProxyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/commands/{proxy+}
             Method: OPTIONS
             Auth:
               Authorizer: NONE

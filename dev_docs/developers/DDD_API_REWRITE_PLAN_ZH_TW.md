@@ -75,6 +75,11 @@ Audience:
   - `/biometric`
 - `/notifications`
 - `/commerce`
+  - `/catalog` → `commerce-catalog` lambda
+  - `/storefront` → `commerce-catalog` lambda
+  - `/orders` → `commerce-orders` lambda
+  - `/fulfillment` → `commerce-fulfillment` lambda
+  - `/commands` → `commerce-fulfillment` lambda
 - `/logistics`
 
 這裡的重點是：
@@ -237,24 +242,24 @@ Audience:
     GET
     /{notificationId}
       PATCH
-  /dispatch - no admin jwt (not tested)
+  /dispatch
     POST
 
-/commerce (need further optimization)
-  /catalog
+/commerce - split into 3 lambdas
+  /catalog [commerce-catalog]
     GET
     /events
       POST
-  /storefront
+  /storefront [commerce-catalog]
     GET
-  /orders
+  /orders [commerce-orders]
     GET
     POST
     /{tempId}
       GET
     /operations
       GET-?
-  /fulfillment
+  /fulfillment [commerce-fulfillment]
     GET
     /{orderVerificationId}
       DELETE
@@ -270,7 +275,7 @@ Audience:
       /whatsapp
         /{_id}
           GET
-  /commands
+  /commands [commerce-fulfillment]
     /ptag-detection-email
       POST
 
@@ -794,23 +799,25 @@ sam deploy --config-env production
 
 ### 7.13 Commerce
 
-| 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
-| --- | --- | --- | --- |
-| `GET /commerce/catalog` | `GET /product/productList` | `GetBreed` | product catalog / reference list。 |
-| `POST /commerce/catalog/events` | `POST /product/productLog` | `GetBreed` | product access/view event logging。 |
-| `GET /commerce/storefront` | `GET /purchase/shop-info` | `purchaseConfirmation` | checkout/storefront metadata。 |
-| `GET /commerce/orders` | `GET /purchase/orders` | `purchaseConfirmation` | order list。 |
-| `POST /commerce/orders` | `POST /purchase/confirmation` | `purchaseConfirmation` | 建立 order + order verification + tag data。 |
-| `GET /commerce/orders/{tempId}` | `GET /v2/orderVerification/ordersInfo/{tempId}` | `OrderVerification` | 取得 linked order info / pet contact summary。 |
-| `GET /commerce/orders/operations` | `GET /v2/orderVerification/getAllOrders` | `OrderVerification` | admin/developer operations order list。 |
-| `GET /commerce/fulfillment` | `GET /purchase/order-verification` | `purchaseConfirmation` | fulfillment / order-verification 管理列表。 |
-| `DELETE /commerce/fulfillment/{orderVerificationId}` | `DELETE /purchase/order-verification/{orderVerificationId}` | `purchaseConfirmation` | 取消 order verification。 |
-| `GET /commerce/fulfillment/tags/{tagId}` | `GET /v2/orderVerification/{tagId}` | `OrderVerification` | 以 tagId 取得 fulfillment / verification 資料。 |
-| `PATCH /commerce/fulfillment/tags/{tagId}` | `PUT /v2/orderVerification/{tagId}` | `OrderVerification` | 更新 tag-bound verification 資料。 |
-| `GET /commerce/fulfillment/suppliers/{orderId}` | `GET /v2/orderVerification/supplier/{orderId}` | `OrderVerification` | supplier 取得 order verification view。 |
-| `PATCH /commerce/fulfillment/suppliers/{orderId}` | `PUT /v2/orderVerification/supplier/{orderId}` | `OrderVerification` | supplier 更新 verification fields。 |
-| `GET /commerce/fulfillment/share-links/whatsapp/{_id}` | `GET /v2/orderVerification/whatsapp-order-link/{_id}` | `OrderVerification` | WhatsApp deep-link 資料。 |
-| `POST /commerce/commands/ptag-detection-email` | `POST /purchase/send-ptag-detection-email` | `purchaseConfirmation` | 發送 PTag detection email command。 |
+> Commerce 拆分成 3 個 Lambda：`commerce-catalog`、`commerce-orders`、`commerce-fulfillment`。
+
+| 新 Endpoint | Legacy Endpoint | Legacy Lambda | DDD Lambda | 功能 |
+| --- | --- | --- | --- | --- |
+| `GET /commerce/catalog` | `GET /product/productList` | `GetBreed` | `commerce-catalog` | product catalog / reference list。 |
+| `POST /commerce/catalog/events` | `POST /product/productLog` | `GetBreed` | `commerce-catalog` | product access/view event logging。 |
+| `GET /commerce/storefront` | `GET /purchase/shop-info` | `purchaseConfirmation` | `commerce-catalog` | checkout/storefront metadata。 |
+| `GET /commerce/orders` | `GET /purchase/orders` | `purchaseConfirmation` | `commerce-orders` | order list。 |
+| `POST /commerce/orders` | `POST /purchase/confirmation` | `purchaseConfirmation` | `commerce-orders` | 建立 order + order verification + tag data。 |
+| `GET /commerce/orders/{tempId}` | `GET /v2/orderVerification/ordersInfo/{tempId}` | `OrderVerification` | `commerce-orders` | 取得 linked order info / pet contact summary。 |
+| `GET /commerce/orders/operations` | `GET /v2/orderVerification/getAllOrders` | `OrderVerification` | `commerce-orders` | admin/developer operations order list。 |
+| `GET /commerce/fulfillment` | `GET /purchase/order-verification` | `purchaseConfirmation` | `commerce-fulfillment` | fulfillment / order-verification 管理列表。 |
+| `DELETE /commerce/fulfillment/{orderVerificationId}` | `DELETE /purchase/order-verification/{orderVerificationId}` | `purchaseConfirmation` | `commerce-fulfillment` | 取消 order verification。 |
+| `GET /commerce/fulfillment/tags/{tagId}` | `GET /v2/orderVerification/{tagId}` | `OrderVerification` | `commerce-fulfillment` | 以 tagId 取得 fulfillment / verification 資料。 |
+| `PATCH /commerce/fulfillment/tags/{tagId}` | `PUT /v2/orderVerification/{tagId}` | `OrderVerification` | `commerce-fulfillment` | 更新 tag-bound verification 資料。 |
+| `GET /commerce/fulfillment/suppliers/{orderId}` | `GET /v2/orderVerification/supplier/{orderId}` | `OrderVerification` | `commerce-fulfillment` | supplier 取得 order verification view。 |
+| `PATCH /commerce/fulfillment/suppliers/{orderId}` | `PUT /v2/orderVerification/supplier/{orderId}` | `OrderVerification` | `commerce-fulfillment` | supplier 更新 verification fields。 |
+| `GET /commerce/fulfillment/share-links/whatsapp/{_id}` | `GET /v2/orderVerification/whatsapp-order-link/{_id}` | `OrderVerification` | `commerce-fulfillment` | WhatsApp deep-link 資料。 |
+| `POST /commerce/commands/ptag-detection-email` | `POST /purchase/send-ptag-detection-email` | `purchaseConfirmation` | `commerce-fulfillment` | 發送 PTag detection email command。 |
 
 ### 7.14 Logistics
 
@@ -833,7 +840,8 @@ sam deploy --config-env production
 4. 先做 `/auth`、`/user`、`/ngo`
 5. 再做 `/pet/profile`、`/pet/source`、`/pet/transfer`
 6. 再做 `/pet/adoption`、`/pet/medical`、`/pet/analysis`
-7. 最後做 `/notifications`、`/commerce`、`/logistics`
+7. 最後做 `/notifications`、`/logistics`
+8. `/commerce` 拆成 3 個 lambda：`commerce-catalog`、`commerce-orders`、`commerce-fulfillment`，依此順序實作
 
 ---
 

@@ -77,6 +77,21 @@ copyFile(
   'dist/functions/logistics/package.json'
 );
 
+copyFile(
+  'functions/commerce-catalog/package.json',
+  'dist/functions/commerce-catalog/package.json'
+);
+
+copyFile(
+  'functions/commerce-orders/package.json',
+  'dist/functions/commerce-orders/package.json'
+);
+
+copyFile(
+  'functions/commerce-fulfillment/package.json',
+  'dist/functions/commerce-fulfillment/package.json'
+);
+
 if (fs.existsSync(path.join(repoRoot, 'functions/request-authorizer/package-lock.json'))) {
   copyFile(
     'functions/request-authorizer/package-lock.json',
