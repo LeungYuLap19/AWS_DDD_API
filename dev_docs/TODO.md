@@ -32,3 +32,5 @@
   Session persistence after delete: old refresh/access tokens must stop working after account deletion.
   Cross-origin exposure: verify CORS behavior for allowed and disallowed origins.
   Raw error leakage: unhandled exceptions and validation failures must not expose internals.
+
+- [logistics] SF address client uses `hksfaddsit.sf-express.com` (SIT/staging environment) for area, netCode, and address lookups. Only the login URL uses the production `hksfadd` subdomain. Carried over from legacy unchanged. Confirm with SF Express whether separate production URLs exist for these endpoints. Revisit after frontend integration tests.

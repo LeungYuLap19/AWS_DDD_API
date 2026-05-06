@@ -1,1 +1,19 @@
-{}
+{
+  "logistics": {
+    "validation": {
+      "lastNameRequired": "必須提供姓氏",
+      "phoneNumberRequired": "必須提供電話號碼",
+      "addressRequired": "必須提供地址",
+      "waybillNoRequired": "必須提供運單號",
+      "tokenRequired": "必須提供 Token",
+      "typeIdRequired": "必須提供 typeId",
+      "areaIdRequired": "必須提供 areaId",
+      "netCodeListRequired": "netCode 必須為非空陣列"
+    },
+    "sfApiError": "順豐 API 請求失敗",
+    "invalidSfResponse": "順豐 API 回應格式不正確",
+    "missingWaybill": "順豐 API 未回傳運單",
+    "missingPrintFile": "順豐未回傳列印檔案"
+  }
+}
+
