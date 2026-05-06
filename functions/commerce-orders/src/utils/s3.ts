@@ -99,7 +99,7 @@ export async function addImageFileToStorage(
 export async function uploadQrCodeImage(shortUrl: string): Promise<string> {
   const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shortUrl)}`;
   try {
-    const axiosResponse = await axios.get<ArrayBuffer>(qrApiUrl, { responseType: 'arraybuffer' });
+    const axiosResponse = await axios.get<ArrayBuffer>(qrApiUrl, { responseType: 'arraybuffer', timeout: 4000 });
     const imageBuffer = Buffer.from(axiosResponse.data);
 
     const ImageCollection = mongoose.model('ImageCollection');

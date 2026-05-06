@@ -4,6 +4,7 @@ import multipart from 'lambda-multipart-parser';
 import axios from 'axios';
 import {
   getFirstZodIssueMessage,
+  logInfo,
   requireAuthContext,
   requireRole,
 } from '@aws-ddd-api/shared';
@@ -154,6 +155,7 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
  */
 export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
+  logInfo('[orders] step 1: auth ok', { event: ctx.event });
 
   // 1. Rate limit (per IP, 10 requests/hour)
   const rateLimitResult = await applyRateLimit({
@@ -163,12 +165,15 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     windowSeconds: 3600,
   });
   if (rateLimitResult) return rateLimitResult;
+  logInfo('[orders] step 2: rate limit ok', { event: ctx.event });
 
   // 2. Connect to DB
   await connectToMongoDB();
+  logInfo('[orders] step 3: db connected', { event: ctx.event });
 
   // 3. Parse multipart form data
   const parsed = await multipart.parse(ctx.event);
+  logInfo('[orders] step 4: multipart parsed', { event: ctx.event });
 
   // 4. Zod validation
   const parseResult = purchaseConfirmationSchema.safeParse(parsed);
@@ -197,6 +202,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   if (fileError) {
     return response.errorResponse(400, fileError, ctx.event);
   }
+  logInfo('[orders] step 6: file validation ok', { event: ctx.event });
 
   let petImgUrl = '';
   if (petImgFiles.length > 0) {
@@ -231,6 +237,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   if (await Order.findOne({ tempId }, { _id: 1 }).lean()) {
     return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
   }
+  logInfo('[orders] step 8: dup tempId check ok', { event: ctx.event });
 
   // 7. Resolve server-authoritative price
   const priceResult = await resolveCanonicalPrice(shopCode);
@@ -238,6 +245,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     return response.errorResponse(400, 'orders.errors.invalidShopCode', ctx.event);
   }
   const { canonicalPrice } = priceResult;
+  logInfo('[orders] step 9: price resolved', { event: ctx.event, extra: { canonicalPrice } });
 
   // 8. Create Order
   const isPTagAir = option === 'PTagAir' || option === 'PTagAir_member';
@@ -257,6 +265,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     });
     await newOrder.save();
     order = newOrder as unknown as Record<string, unknown>;
+    logInfo('[orders] step 10: Order.save ok', { event: ctx.event });
   } catch (saveErr) {
     if ((saveErr as { code?: number })?.code === 11000) {
       return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
@@ -274,11 +283,15 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     let tagIdAttempt = 0;
     while (true) {
       const tagId = await generateUniqueTagId();
+      logInfo('[orders] step 11: tagId generated', { event: ctx.event, extra: { tagId } });
 
       const shortUrl = await resolveShortUrl(isPTagAir, tagId);
+      logInfo('[orders] step 12: shortUrl resolved', { event: ctx.event, extra: { shortUrl } });
+
       const qrUrl = isPTagAir
         ? `${env.AWS_BUCKET_BASE_URL}/pet-images/ptag+id.png`
         : await uploadQrCodeImage(shortUrl);
+      logInfo('[orders] step 13: qrUrl ready', { event: ctx.event, extra: { qrUrl } });
 
       try {
         const OVModel = OrderVerification as unknown as new (data: Record<string, unknown>) => {
@@ -298,6 +311,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
         });
         await ov.save();
         savedVerification = ov as unknown as Record<string, unknown>;
+        logInfo('[orders] step 14: OrderVerification.save ok', { event: ctx.event });
         break;
       } catch (ovErr) {
         if ((ovErr as { code?: number })?.code === 11000 && ++tagIdAttempt < TAG_ID_MAX_RETRIES) {
@@ -316,6 +330,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
 
   // 12 & 13. Send confirmation email + WhatsApp notification in parallel (both non-fatal).
   // Running sequentially risks cutt.ly(3s) + SMTP(4s) + WhatsApp(4s) = 11s > Lambda 10s limit.
+  logInfo('[orders] step 15: starting email+whatsapp (parallel)', { event: ctx.event });
   await Promise.all([
     sendOrderEmail(
       email,
@@ -333,6 +348,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
       newOrderVerificationId
     ).catch(() => {}),
   ]);
+  logInfo('[orders] step 16: done, returning 200', { event: ctx.event });
 
 return response.successResponse(200, ctx.event, {
   message: 'Order placed successfully.',
