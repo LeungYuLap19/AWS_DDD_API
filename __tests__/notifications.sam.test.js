@@ -773,9 +773,11 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       expect(res.status).toBe(400);
     });
 
-    test('mass assignment — unknown extra fields in body do not reach DB', async () => {
+    test('strict schema — unknown fields in dispatch body are rejected with 400 and no record is created', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
+
+      const countBefore = await notificationsCol().countDocuments({ userId: state.primaryUserId });
 
       const res = await req(
         'POST',
@@ -789,16 +791,10 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
         authHeaders(state.adminToken)
       );
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
 
-      const createdId = new mongoose.Types.ObjectId(res.body.notification._id);
-      state.createdNotificationIds.push(createdId);
-
-      const persisted = await notificationsCol().findOne({ _id: createdId });
-      // Zod strips unknown fields — isArchived injected from body must not affect DB value
-      expect(persisted.isArchived).toBe(false);
-      // userId must be the targetUserId, not the injected string
-      expect(String(persisted.userId)).toBe(String(state.primaryUserId));
+      const countAfter = await notificationsCol().countDocuments({ userId: state.primaryUserId });
+      expect(countAfter).toBe(countBefore);
     });
   });
 

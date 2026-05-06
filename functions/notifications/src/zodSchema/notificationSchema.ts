@@ -42,6 +42,6 @@ export const dispatchNotificationSchema = z.object({
     .nullable()
     .refine((v) => v == null || isValidDateString(v), { message: 'notifications.errors.invalidDate' }),
   nearbyPetLost: z.string().optional().nullable(),
-});
+}).strict();
 
 export type DispatchNotificationBody = z.infer<typeof dispatchNotificationSchema>;

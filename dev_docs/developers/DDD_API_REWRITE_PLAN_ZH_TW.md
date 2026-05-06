@@ -232,12 +232,12 @@ Audience:
     /verifications
       POST
 
-/notifications
+/notifications - manual deployment tested 
   /me
     GET
     /{notificationId}
       PATCH
-  /dispatch
+  /dispatch - no admin jwt (not tested)
     POST
 
 /commerce (need further optimization)
@@ -274,7 +274,7 @@ Audience:
     /ptag-detection-email
       POST
 
-/logistics
+/logistics - manual deployment tested 
   /lookups
     /areas
       POST
@@ -284,9 +284,9 @@ Audience:
       POST
   /token
     POST
-  /shipments
+  /shipments - no sandbox env (not tested)
     POST
-  /cloud-waybill
+  /cloud-waybill - no sandbox env (not tested)
     POST
 ```
 
