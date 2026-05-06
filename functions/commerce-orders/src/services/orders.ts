@@ -157,6 +157,10 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   requireAuthContext(ctx.event);
   logInfo('[orders] step 1: auth ok', { event: ctx.event });
 
+  // 2. Connect to DB first — rate limiter uses mongoose and needs an open connection
+  await connectToMongoDB();
+  logInfo('[orders] step 2: db connected', { event: ctx.event });
+
   // 1. Rate limit (per IP, 10 requests/hour)
   const rateLimitResult = await applyRateLimit({
     action: 'submit-order',
@@ -165,11 +169,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     windowSeconds: 3600,
   });
   if (rateLimitResult) return rateLimitResult;
-  logInfo('[orders] step 2: rate limit ok', { event: ctx.event });
-
-  // 2. Connect to DB
-  await connectToMongoDB();
-  logInfo('[orders] step 3: db connected', { event: ctx.event });
+  logInfo('[orders] step 3: rate limit ok', { event: ctx.event });
 
   // 3. Parse multipart form data
   const parsed = await multipart.parse(ctx.event);
