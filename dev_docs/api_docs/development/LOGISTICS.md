@@ -123,7 +123,7 @@ Fetch an SF Address API bearer token. The returned token is passed as-is to the 
 **Rate limit:** 10 / 300 s  
 **Env dependency:** `SF_ADDRESS_API_KEY`
 
-**Body:** Not required. The handler does not parse or validate the request body — any body is ignored.
+**Body:** The Lambda handler does not parse or validate the request body — any body content is ignored. However, the deployed API Gateway requires a valid JSON object body; sending no body returns a `400` from API Gateway before the Lambda runs. Send `{}` as the minimal valid body.
 
 **Example request:**
 
@@ -132,6 +132,8 @@ POST /logistics/token HTTP/1.1
 Authorization: Bearer <access-token>
 x-api-key: <api-key>
 Content-Type: application/json
+
+{}
 ```
 
 **Success (200):**
@@ -196,7 +198,8 @@ Unknown fields are rejected (`.strict()` schema).
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
-| 400 | `logistics.validation.tokenRequired` | `token` missing or empty |
+| 400 | `logistics.validation.tokenRequired` | `token` field present but empty string |
+| 400 | `common.missingBodyParams` | `token` field absent from the request body entirely |
 | 400 | `common.invalidJSON` | Malformed JSON body |
 | 429 | `common.rateLimited` | Rate limit exceeded |
 | 500 | `common.internalError` | SF upstream failure |
@@ -434,7 +437,8 @@ Unknown fields are rejected (`.strict()` schema).
 
 | Status | errorKey | Cause |
 | --- | --- | --- |
-| 400 | `logistics.validation.waybillNoRequired` | `waybillNo` missing or empty |
+| 400 | `logistics.validation.waybillNoRequired` | `waybillNo` field present but empty string |
+| 400 | `common.missingBodyParams` | `waybillNo` field absent from the request body entirely |
 | 400 | `common.invalidJSON` | Malformed JSON body |
 | 401 | `common.unauthorized` | Missing or invalid Bearer JWT |
 | 429 | `common.rateLimited` | Rate limit exceeded |

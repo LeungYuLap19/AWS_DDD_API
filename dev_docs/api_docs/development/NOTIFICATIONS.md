@@ -133,7 +133,7 @@ x-api-key: <api-key>
 ```json
 {
   "success": true,
-  "message": "success.retrieved",
+  "message": "Retrieved successfully",
   "count": 2,
   "notifications": [
     {
@@ -272,7 +272,7 @@ Unknown fields are rejected (`.strict()` schema).
 | 400 | `notifications.errors.typeRequired` | `type` missing or not one of the supported enum values |
 | 400 | `notifications.errors.invalidDate` | `nextEventDate` provided but not valid ISO 8601 or `DD/MM/YYYY` |
 | 400 | `common.invalidObjectId` | `targetUserId` or `petId` is not a valid MongoDB ObjectId |
-| 400 | `common.invalidJSON` | Malformed JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON body, or request body contains unrecognized fields (strict schema) |
 | 401 | `common.unauthorized` | Missing or invalid Bearer token |
 | 403 | `common.forbidden` | Caller role is not `admin` |
 | 500 | `common.internalError` | Unexpected error |
@@ -332,4 +332,4 @@ Content-Type: application/json
 }
 ```
 
-Non-admin callers receive `403 common.unauthorized`.
+Non-admin callers receive `403 common.forbidden`.

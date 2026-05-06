@@ -815,12 +815,12 @@ describe('Tier 2 — notifications handler integration', () => {
       expect(parsed.body.errorKey).toBe('common.invalidObjectId');
     });
 
-    test('mass assignment — extra unknown fields in dispatch body are stripped by Zod schema', async () => {
+    test('mass assignment — unknown fields in dispatch body are rejected with 400 (strict schema)', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
       const targetUserId = new mongoose.Types.ObjectId().toString();
 
       const { handler, notificationsModel } = loadHandlerWithMocks();
-      await handler(
+      const res = await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
@@ -835,10 +835,10 @@ describe('Tier 2 — notifications handler integration', () => {
         }),
         createContext()
       );
-      const createArg = notificationsModel.create.mock.calls[0]?.[0];
-      // Injected fields must not reach the DB call
-      expect(createArg.isArchived).toBeUndefined();
-      expect(createArg.userId).not.toBe('injected-id');
+      const parsed = parseResponse(res);
+      // strict() rejects unknown fields — no DB write should occur
+      expect(parsed.statusCode).toBe(400);
+      expect(notificationsModel.create).not.toHaveBeenCalled();
     });
 
     test('replay abuse — duplicate archive requests when already archived return 404 (matchedCount 0)', async () => {
