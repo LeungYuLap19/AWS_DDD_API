@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createBloodTestSchema = z
   .object({
     bloodTestDate: z
-      .string({ error: 'petMedicalRecord.errors.bloodTest.invalidDateFormat' })
+      .string({ error: 'petMedical.errors.bloodTest.invalidDateFormat' })
       .optional(),
     heartworm: z.string().optional(),
     lymeDisease: z.string().optional(),

@@ -12,11 +12,11 @@ export function getValidatedPetId(event: RouteContext['event']): string {
   const petId = event.pathParameters?.petId;
 
   if (!petId) {
-    throw new AuthContextError('petTransfer.errors.missingPetId', 400);
+    throw new AuthContextError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('petTransfer.errors.invalidPetId', 400);
+    throw new AuthContextError('common.invalidObjectId', 400);
   }
 
   return petId;
@@ -26,11 +26,11 @@ export function getValidatedTransferId(event: RouteContext['event']): string {
   const transferId = event.pathParameters?.transferId;
 
   if (!transferId) {
-    throw new AuthContextError('petTransfer.errors.transfer.missingTransferId', 400);
+    throw new AuthContextError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(transferId)) {
-    throw new AuthContextError('petTransfer.errors.transfer.invalidTransferId', 400);
+    throw new AuthContextError('common.invalidObjectId', 400);
   }
 
   return transferId;

@@ -21,7 +21,7 @@ export async function loadAuthorizedPet(
   const allowNgo = options.allowNgo !== false;
 
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new HttpError(400, 'petAnalysis.errors.invalidPetIdFormat');
+    throw new HttpError(400, 'common.invalidObjectId');
   }
 
   const Pet = mongoose.model('Pet');

@@ -2,9 +2,8 @@
 
 ## Standardization
 
-- [ ] service function flow
+- [x] service function flow
   - audit: [SERVICE_FUNCTION_FLOW_AUDIT.md](SERVICE_FUNCTION_FLOW_AUDIT.md)
-- [ ] SoC
 - [ ] locale keys
 - [ ] response format
 - [ ] error handling
@@ -16,7 +15,7 @@
 
 ## Optimization, Security Scan and Hardening
 
-- [ ] what can be extract to shared
+- [ ] what can be extract to shared (SoC)
   - db connection, service standard flow, s3 client
 - [ ] template
   - iam roles, multipart

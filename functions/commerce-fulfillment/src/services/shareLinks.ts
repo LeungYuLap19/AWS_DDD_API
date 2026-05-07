@@ -32,11 +32,11 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
   const verificationId = ctx.event.pathParameters?.verificationId ?? '';
 
   if (!verificationId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingVerificationId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   if (!isValidObjectId(verificationId)) {
-    return response.errorResponse(400, 'fulfillment.errors.invalidVerificationId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   await connectToMongoDB();

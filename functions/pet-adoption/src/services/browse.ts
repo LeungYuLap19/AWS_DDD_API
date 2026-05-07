@@ -122,7 +122,7 @@ export async function handleGetAdoptionList(ctx: RouteContext): Promise<APIGatew
   ]);
 
   return response.successResponse(200, ctx.event, {
-    message: 'petAdoption.success.browse.listRetrieved',
+    message: 'success.retrieved',
     adoptionList: adoptionList.map(sanitizeBrowseAdoption),
     maxPage,
     totalResult,
@@ -138,7 +138,7 @@ export async function handleGetBrowseDetail(
   adoptionId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(adoptionId)) {
-    return response.errorResponse(400, 'petAdoption.errors.browse.invalidIdFormat', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const browseConn = await connectBrowseDB();
@@ -152,7 +152,7 @@ export async function handleGetBrowseDetail(
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petAdoption.success.browse.detailRetrieved',
+    message: 'success.retrieved',
     pet: sanitizeBrowseAdoption(pet),
   });
 }

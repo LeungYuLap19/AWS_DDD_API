@@ -28,7 +28,7 @@ export async function loadAuthorizedPet(
   // null `pathParameters` collapses to '' here. `isValidObjectId('')` returns
   // false, producing a 400 instead of a downstream Mongoose CastError.
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new HttpError(400, 'petMedicalRecord.errors.invalidPetIdFormat');
+    throw new HttpError(400, 'common.invalidObjectId');
   }
 
   const Pet = mongoose.model('Pet');
@@ -37,7 +37,7 @@ export async function loadAuthorizedPet(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new HttpError(404, 'petMedicalRecord.errors.petNotFound');
+    throw new HttpError(404, 'petMedical.errors.petNotFound');
   }
 
   const isOwner =

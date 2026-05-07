@@ -59,7 +59,7 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
           eyeDiseaseCause: null,
           eyeDiseaseSolution: null,
         },
-        message: 'petAnalysis.success.eyeDiseaseRetrieved',
+        message: 'success.retrieved',
       });
     }
 
@@ -69,7 +69,7 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
 
     return response.successResponse(201, ctx.event, {
       result: eyeDisease,
-      message: 'petAnalysis.success.eyeDiseaseRetrieved',
+      message: 'success.retrieved',
     });
   }
 
@@ -81,7 +81,7 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
     .lean()) as Record<string, unknown>[];
 
   return response.successResponse(200, ctx.event, {
-    message: 'petAnalysis.success.eyeLogRetrievedSuccessfully',
+    message: 'success.retrieved',
     result: eyeAnalysisLogList.map(sanitizeEyeLog),
   });
 }
@@ -104,7 +104,7 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
 
   const petId = toTrimmedString(ctx.event.pathParameters?.identifier);
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAnalysis.errors.invalidObjectId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const ApiLog = mongoose.model('ApiLog');
@@ -243,7 +243,7 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
   const routePetId = toTrimmedString(ctx.event.pathParameters?.identifier);
 
   if (!mongoose.isValidObjectId(petId) || routePetId !== petId) {
-    return response.errorResponse(400, 'petAnalysis.errors.updatePetEye.invalidPetIdFormat', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   if (!isValidDateFormat(date)) {
@@ -269,7 +269,7 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
 
   if (updatedPet) {
     return response.successResponse(201, ctx.event, {
-      message: 'petAnalysis.success.petEyeUpdated',
+      message: 'success.updated',
       result: sanitizePet(updatedPet),
     });
   }

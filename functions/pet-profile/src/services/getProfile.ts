@@ -26,7 +26,7 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
     sanitizePetFull(pet);
 
   return response.successResponse(200, ctx.event, {
-    message: 'petProfile.success.retrieved',
+    message: 'success.retrieved',
     view,
     form,
     id: pet._id,
@@ -38,7 +38,7 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
 
   const tagId = ctx.event.pathParameters?.tagId;
   if (!tagId) {
-    return response.errorResponse(400, 'petProfile.errors.missingTagId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   const Pet = mongoose.model('Pet');
@@ -51,7 +51,7 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
   ).lean();
 
   return response.successResponse(200, ctx.event, {
-    message: 'petProfile.success.tagLookupProcessed',
+    message: 'success.completed',
     form: sanitizePublicTagLookupPet(pet),
   });
 }
@@ -109,7 +109,7 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
     }
 
     return response.successResponse(200, ctx.event, {
-      message: 'petProfile.success.listRetrieved',
+      message: 'success.retrieved',
       pets: sanitizePetListSummary(pets),
       total: totalNumber,
       currentPage: pageNumber,
@@ -128,7 +128,7 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
   ]);
 
   return response.successResponse(200, ctx.event, {
-    message: 'petProfile.success.listRetrieved',
+    message: 'success.retrieved',
     pets: sanitizePetListSummary(pets),
     total: totalNumber,
   });

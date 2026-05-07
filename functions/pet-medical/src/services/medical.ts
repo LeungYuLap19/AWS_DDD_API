@@ -32,7 +32,7 @@ export async function handleListMedicalRecords(
     .lean();
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.medicalRecord.getSuccess',
+    message: 'success.retrieved',
     form: { medical: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
     petId,
   });
@@ -54,7 +54,7 @@ export async function handleCreateMedicalRecord(
   if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidDateFormat',
+      'petMedical.errors.medicalRecord.invalidDateFormat',
       ctx.event
     );
   }
@@ -62,7 +62,7 @@ export async function handleCreateMedicalRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.create',
+    action: 'petMedical.create',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 20,
@@ -86,7 +86,7 @@ export async function handleCreateMedicalRecord(
   });
 
   return response.successResponse(201, ctx.event, {
-    message: 'petMedicalRecord.success.medicalRecord.created',
+    message: 'success.created',
     form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
     petId,
     medicalRecordId: newRecord._id,
@@ -104,7 +104,7 @@ export async function handleUpdateMedicalRecord(
   if (!mongoose.isValidObjectId(medicalId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat',
+      'common.invalidObjectId',
       ctx.event
     );
   }
@@ -118,7 +118,7 @@ export async function handleUpdateMedicalRecord(
   if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidDateFormat',
+      'petMedical.errors.medicalRecord.invalidDateFormat',
       ctx.event
     );
   }
@@ -126,7 +126,7 @@ export async function handleUpdateMedicalRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.update',
+    action: 'petMedical.update',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 30,
@@ -157,13 +157,13 @@ export async function handleUpdateMedicalRecord(
   if (!updated) {
     return response.errorResponse(
       404,
-      'petMedicalRecord.errors.medicalRecord.notFound',
+      'petMedical.errors.medicalRecord.notFound',
       ctx.event
     );
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.medicalRecord.updated',
+    message: 'success.updated',
     petId,
     medicalRecordId: medicalId,
     form: sanitizeRecord(updated as Record<string, unknown>),
@@ -181,7 +181,7 @@ export async function handleDeleteMedicalRecord(
   if (!mongoose.isValidObjectId(medicalId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat',
+      'common.invalidObjectId',
       ctx.event
     );
   }
@@ -189,7 +189,7 @@ export async function handleDeleteMedicalRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.delete',
+    action: 'petMedical.delete',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 10,
@@ -207,13 +207,13 @@ export async function handleDeleteMedicalRecord(
   if (deleted.deletedCount === 0) {
     return response.errorResponse(
       404,
-      'petMedicalRecord.errors.medicalRecord.notFound',
+      'petMedical.errors.medicalRecord.notFound',
       ctx.event
     );
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.medicalRecord.deleted',
+    message: 'success.deleted',
     petId,
     medicalRecordId: medicalId,
   });

@@ -30,7 +30,7 @@ export async function loadAuthorizedPet(
   const forbiddenKey = options.forbiddenKey || 'common.forbidden';
 
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('petProfile.errors.invalidPetId', 400);
+    throw new AuthContextError('common.invalidObjectId', 400);
   }
 
   const Pet = mongoose.model('Pet');

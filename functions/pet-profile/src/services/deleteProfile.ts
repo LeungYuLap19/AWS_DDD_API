@@ -35,7 +35,7 @@ export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGate
 
   if (deletedPet) {
     return response.successResponse(200, ctx.event, {
-      message: 'petProfile.success.deleted',
+      message: 'success.deleted',
       petId: ctx.event.pathParameters?.petId,
     });
   }

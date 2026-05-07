@@ -1,0 +1,39 @@
+1. standardization on camelCase of domain name 
+    - petMedicalRecord -> petMedical
+
+2. shared locale keys
+    - http-level or format-level 
+    - no domain meaning
+
+3. domain locale keys
+    - what resource and what rule failed
+    - traceability comes from the key being emitted in the log alongside the lambda name
+    - the key itself only needs to be specific enough
+    - {domainKey}.errors.{subResource?}.{category}
+
+    With sub-resources (domain manages multiple distinct record types like pet-medical):
+        petMedical.errors.bloodTest.notFound
+        petMedical.errors.bloodTest.invalidDateFormat
+        petMedical.errors.medicalRecord.notFound
+
+    Without sub-resources (domain has one primary resource):
+        petProfile.errors.petNotFound
+        petProfile.errors.duplicatePetTag
+        petTransfer.errors.transfer.notFound       ← sub-resource
+        petTransfer.errors.ngoTransfer.userIdentityMismatch  ← sub-resource
+
+
+    - cut from domains (redundant with common.*)
+        - currently exist as domain keys but should just use common.*
+        - Keep in domain even if they look generic
+        — because they identify which resource:
+            petProfile.errors.petNotFound → not the same as common.notFound; tells you exactly it's a pet
+            petMedical.errors.bloodTest.notFound → sub-resource specific
+
+4. success keys should not be domain specific
+
+Key naming rules
+notFound — always keep domain-specific (identifies the resource type in logs)
+invalidXxxFormat → split: if it's an ObjectId → common.invalidObjectId; if it's a date → keep domain-specific invalidDateFormat since the expected format may differ per domain
+missingXxx — if it's just a required field missing → common.missingBodyParams; if it's a business-rule missing (e.g. auth.registration.user.verificationRequired) → keep domain-specific
+Key should not repeat the namespace: inside petMedical.errors.bloodTest.*, the key invalidBloodTestIdFormat → just invalidIdFormat (you already know it's a blood test ID)

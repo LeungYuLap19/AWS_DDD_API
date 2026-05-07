@@ -68,7 +68,7 @@ export async function handleCreateTransfer(ctx: RouteContext): Promise<APIGatewa
   }
 
   return response.successResponse(201, ctx.event, {
-    message: 'petTransfer.success.transfer.created',
+    message: 'success.created',
     form: newRecord,
     petId,
     transferId: String(transferRecordId),
@@ -139,7 +139,7 @@ export async function handleUpdateTransfer(ctx: RouteContext): Promise<APIGatewa
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petTransfer.success.transfer.updated',
+    message: 'success.updated',
     form: data,
     petId,
     transferId,
@@ -164,7 +164,7 @@ export async function handleDeleteTransfer(ctx: RouteContext): Promise<APIGatewa
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petTransfer.success.transfer.deleted',
+    message: 'success.deleted',
     petId,
     transferId,
   });
@@ -294,7 +294,7 @@ export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayPr
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petTransfer.success.ngoTransfer.completed',
+    message: 'success.completed',
     form: data,
     petId,
   });

@@ -3,22 +3,22 @@ import { z } from 'zod';
 export const ptagDetectionEmailSchema = z
   .object({
     name: z
-      .string({ message: 'fulfillment.errors.missingFields' })
-      .min(1, 'fulfillment.errors.missingFields'),
+      .string({ message: 'common.missingBodyParams' })
+      .min(1, 'common.missingBodyParams'),
     tagId: z
-      .string({ message: 'fulfillment.errors.missingFields' })
-      .min(1, 'fulfillment.errors.missingFields'),
+      .string({ message: 'common.missingBodyParams' })
+      .min(1, 'common.missingBodyParams'),
     dateTime: z
-      .string({ message: 'fulfillment.errors.missingFields' })
-      .min(1, 'fulfillment.errors.missingFields'),
+      .string({ message: 'common.missingBodyParams' })
+      .min(1, 'common.missingBodyParams'),
     locationURL: z
-      .string({ message: 'fulfillment.errors.missingFields' })
-      .min(1, 'fulfillment.errors.missingFields')
+      .string({ message: 'common.missingBodyParams' })
+      .min(1, 'common.missingBodyParams')
       .url('fulfillment.errors.invalidLocationURL')
       .refine((url) => url.startsWith('https://'), 'fulfillment.errors.invalidLocationURL'),
     email: z
-      .string({ message: 'fulfillment.errors.missingFields' })
-      .min(1, 'fulfillment.errors.missingFields')
+      .string({ message: 'common.missingBodyParams' })
+      .min(1, 'common.missingBodyParams')
       .email('fulfillment.errors.invalidEmail'),
   })
   .strict();

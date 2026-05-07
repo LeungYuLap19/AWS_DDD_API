@@ -33,7 +33,7 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
   const orderId = ctx.event.pathParameters?.orderId ?? '';
 
   if (!orderId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   await connectToMongoDB();
@@ -100,7 +100,7 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
   const orderId = ctx.event.pathParameters?.orderId ?? '';
 
   if (!orderId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   const parsed = parseBody(ctx.body, supplierUpdateSchema);
@@ -143,7 +143,7 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
   if (payload.petUrl) setFields['petUrl'] = payload.petUrl;
 
   if (Object.keys(setFields).length === 0 && !payload.petContact) {
-    return response.errorResponse(400, 'common.missingParams', ctx.event);
+    return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
   }
 
   if (payload.petContact && existingOrderVerification.orderId) {

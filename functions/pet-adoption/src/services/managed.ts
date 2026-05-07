@@ -26,7 +26,7 @@ export async function handleGetManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const authContext = requireAuthContext(ctx.event);
@@ -40,7 +40,7 @@ export async function handleGetManagedRecord(
 
   if (!record) {
     return response.successResponse(200, ctx.event, {
-      message: 'petAdoption.success.managed.retrieved',
+      message: 'success.retrieved',
       form: null,
       petId,
     });
@@ -48,7 +48,7 @@ export async function handleGetManagedRecord(
 
   const raw = record as Record<string, unknown>;
   return response.successResponse(200, ctx.event, {
-    message: 'petAdoption.success.managed.retrieved',
+    message: 'success.retrieved',
     form: sanitizeManagedAdoption(record),
     petId,
     adoptionId: String(raw._id),
@@ -65,7 +65,7 @@ export async function handleCreateManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const authContext = requireAuthContext(ctx.event);
@@ -108,7 +108,7 @@ export async function handleCreateManagedRecord(
   }
 
   return response.successResponse(201, ctx.event, {
-    message: 'petAdoption.success.managed.created',
+    message: 'success.created',
     form: sanitizeManagedAdoption(newRecord),
     petId,
     adoptionId: String((newRecord as Record<string, unknown>)._id),
@@ -126,7 +126,7 @@ export async function handleUpdateManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const authContext = requireAuthContext(ctx.event);
@@ -158,7 +158,7 @@ export async function handleUpdateManagedRecord(
     return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
   }
 
-  return response.successResponse(200, ctx.event, { message: 'petAdoption.success.managed.updated', petId });
+  return response.successResponse(200, ctx.event, { message: 'success.updated', petId });
 }
 
 /**
@@ -172,7 +172,7 @@ export async function handleDeleteManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const authContext = requireAuthContext(ctx.event);
@@ -186,7 +186,7 @@ export async function handleDeleteManagedRecord(
     return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
   }
 
-  return response.successResponse(200, ctx.event, { message: 'petAdoption.success.managed.deleted', petId });
+  return response.successResponse(200, ctx.event, { message: 'success.deleted', petId });
 }
 
 // ---------------------------------------------------------------------------

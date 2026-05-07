@@ -90,7 +90,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
 
   // 3. Parse multipart form data + Zod validation
   const multiResult = await parseMultipartBody(ctx.event, purchaseConfirmationSchema, {
-    fallbackErrorKey: 'orders.errors.missingRequiredFields',
+    fallbackErrorKey: 'common.missingBodyParams',
   });
   if (!multiResult.ok) {
     return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
@@ -269,7 +269,7 @@ export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGate
   const tempId = ctx.event.pathParameters?.['tempId'];
 
   if (!tempId) {
-    return response.errorResponse(400, 'orders.errors.missingTempId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   await connectToMongoDB();

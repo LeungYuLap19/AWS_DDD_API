@@ -32,7 +32,7 @@ export async function handleListDewormRecords(
     .lean();
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.dewormRecord.getSuccess',
+    message: 'success.retrieved',
     form: { deworm: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
     petId,
   });
@@ -54,14 +54,14 @@ export async function handleCreateDewormRecord(
   if (data.date && !isValidDateFormat(data.date)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
+      'petMedical.errors.dewormRecord.invalidDateFormat',
       ctx.event
     );
   }
   if (data.nextDewormDate && !isValidDateFormat(data.nextDewormDate)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
+      'petMedical.errors.dewormRecord.invalidDateFormat',
       ctx.event
     );
   }
@@ -69,7 +69,7 @@ export async function handleCreateDewormRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.create',
+    action: 'petMedical.create',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 20,
@@ -101,7 +101,7 @@ export async function handleCreateDewormRecord(
   });
 
   return response.successResponse(201, ctx.event, {
-    message: 'petMedicalRecord.success.dewormRecord.created',
+    message: 'success.created',
     form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
     petId,
     dewormRecordId: newRecord._id,
@@ -119,7 +119,7 @@ export async function handleUpdateDewormRecord(
   if (!mongoose.isValidObjectId(dewormId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.dewormRecord.invalidDewormIdFormat',
+      'common.invalidObjectId',
       ctx.event
     );
   }
@@ -133,14 +133,14 @@ export async function handleUpdateDewormRecord(
   if (data.date && !isValidDateFormat(data.date)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
+      'petMedical.errors.dewormRecord.invalidDateFormat',
       ctx.event
     );
   }
   if (data.nextDewormDate && !isValidDateFormat(data.nextDewormDate)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.dewormRecord.invalidDateFormat',
+      'petMedical.errors.dewormRecord.invalidDateFormat',
       ctx.event
     );
   }
@@ -148,7 +148,7 @@ export async function handleUpdateDewormRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.update',
+    action: 'petMedical.update',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 30,
@@ -185,13 +185,13 @@ export async function handleUpdateDewormRecord(
   if (!updated) {
     return response.errorResponse(
       404,
-      'petMedicalRecord.errors.dewormRecord.notFound',
+      'petMedical.errors.dewormRecord.notFound',
       ctx.event
     );
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.dewormRecord.updated',
+    message: 'success.updated',
     petId,
     dewormRecordId: dewormId,
     form: sanitizeRecord(updated as Record<string, unknown>),
@@ -209,7 +209,7 @@ export async function handleDeleteDewormRecord(
   if (!mongoose.isValidObjectId(dewormId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.dewormRecord.invalidDewormIdFormat',
+      'common.invalidObjectId',
       ctx.event
     );
   }
@@ -217,7 +217,7 @@ export async function handleDeleteDewormRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.delete',
+    action: 'petMedical.delete',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 10,
@@ -235,13 +235,13 @@ export async function handleDeleteDewormRecord(
   if (deleted.deletedCount === 0) {
     return response.errorResponse(
       404,
-      'petMedicalRecord.errors.dewormRecord.notFound',
+      'petMedical.errors.dewormRecord.notFound',
       ctx.event
     );
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.dewormRecord.deleted',
+    message: 'success.deleted',
     petId,
     dewormRecordId: dewormId,
   });

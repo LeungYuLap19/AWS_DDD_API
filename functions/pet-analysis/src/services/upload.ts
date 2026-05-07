@@ -49,7 +49,7 @@ export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayPr
   });
 
   return response.successResponse(200, ctx.event, {
-    message: 'petAnalysis.success.imageUploaded',
+    message: 'success.created',
     url,
   });
 }
@@ -105,7 +105,7 @@ export async function handleUploadPetBreedImage(
   });
 
   return response.successResponse(200, ctx.event, {
-    message: 'petAnalysis.success.imageUploaded',
+    message: 'success.created',
     url,
   });
 }

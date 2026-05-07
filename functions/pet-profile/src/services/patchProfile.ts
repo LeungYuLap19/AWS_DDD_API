@@ -22,7 +22,7 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
 
   const petId = String(ctx.event.pathParameters?.petId || '');
   if (!mongoose.isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petProfile.errors.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const contentType = (
@@ -37,7 +37,7 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
     const multiResult = await parseMultipartBody(ctx.event, patchPetBodySchema, {
       validate: (rawFields) => {
         const unknownField = Object.keys(rawFields).find((key) => !patchPetAllowedFields.has(key));
-        return unknownField ? 'petProfile.errors.invalidBodyParams' : null;
+        return unknownField ? 'common.invalidBodyParams' : null;
       },
       normalize: (rawFields) =>
         Object.fromEntries(
@@ -53,7 +53,7 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
     const rawFields = (ctx.body as Record<string, unknown>) || {};
     const unknownField = Object.keys(rawFields).find((key) => !patchPetAllowedFields.has(key));
     if (unknownField) {
-      return response.errorResponse(400, 'petProfile.errors.invalidBodyParams', ctx.event);
+      return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
     }
     const filteredBody = Object.fromEntries(
       Object.entries(rawFields).filter(([key]) => patchPetAllowedFields.has(key))
@@ -130,7 +130,7 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
   await mutablePet.save({ validateBeforeSave: true });
 
   return response.successResponse(200, ctx.event, {
-    message: 'petProfile.success.updated',
+    message: 'success.updated',
     id: mutablePet._id,
   });
 }

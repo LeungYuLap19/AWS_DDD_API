@@ -124,7 +124,7 @@ export async function handleCreatePetProfile(ctx: RouteContext): Promise<APIGate
   });
 
   return response.successResponse(201, ctx.event, {
-    message: 'petProfile.success.created',
+    message: 'success.created',
     id: pet._id,
     result: sanitizePetDetail(pet),
   });

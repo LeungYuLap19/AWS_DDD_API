@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 
 const objectIdString = z
   .string()
-  .refine((v) => mongoose.Types.ObjectId.isValid(v), 'petRecovery.errors.petLost.invalidPetId');
+  .refine((v) => mongoose.Types.ObjectId.isValid(v), 'common.invalidObjectId');
 
 export const createPetLostSchema = z.object({
   petId: objectIdString.optional(),

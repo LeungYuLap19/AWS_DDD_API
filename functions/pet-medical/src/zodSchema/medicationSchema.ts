@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createMedicationRecordSchema = z
   .object({
     medicationDate: z
-      .string({ error: 'petMedicalRecord.errors.medicationRecord.invalidDateFormat' })
+      .string({ error: 'petMedical.errors.medicationRecord.invalidDateFormat' })
       .optional(),
     drugName: z.string().optional(),
     drugPurpose: z.string().optional(),

@@ -32,7 +32,7 @@ export async function handleListBloodTestRecords(
     .lean();
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.bloodTest.getSuccess',
+    message: 'success.retrieved',
     form: { blood_test: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
     petId,
   });
@@ -54,7 +54,7 @@ export async function handleCreateBloodTestRecord(
   if (data.bloodTestDate && !isValidDateFormat(data.bloodTestDate)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.bloodTest.invalidDateFormat',
+      'petMedical.errors.bloodTest.invalidDateFormat',
       ctx.event
     );
   }
@@ -62,7 +62,7 @@ export async function handleCreateBloodTestRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.create',
+    action: 'petMedical.create',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 20,
@@ -89,7 +89,7 @@ export async function handleCreateBloodTestRecord(
   });
 
   return response.successResponse(201, ctx.event, {
-    message: 'petMedicalRecord.success.bloodTest.created',
+    message: 'success.created',
     form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
     petId,
     bloodTestRecordId: newRecord._id,
@@ -107,7 +107,7 @@ export async function handleUpdateBloodTestRecord(
   if (!mongoose.isValidObjectId(bloodTestId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.bloodTest.invalidBloodTestIdFormat',
+      'common.invalidObjectId',
       ctx.event
     );
   }
@@ -121,7 +121,7 @@ export async function handleUpdateBloodTestRecord(
   if (data.bloodTestDate && !isValidDateFormat(data.bloodTestDate)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.bloodTest.invalidDateFormat',
+      'petMedical.errors.bloodTest.invalidDateFormat',
       ctx.event
     );
   }
@@ -129,7 +129,7 @@ export async function handleUpdateBloodTestRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.update',
+    action: 'petMedical.update',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 30,
@@ -163,13 +163,13 @@ export async function handleUpdateBloodTestRecord(
   if (!updated) {
     return response.errorResponse(
       404,
-      'petMedicalRecord.errors.bloodTest.notFound',
+      'petMedical.errors.bloodTest.notFound',
       ctx.event
     );
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.bloodTest.updated',
+    message: 'success.updated',
     petId,
     bloodTestRecordId: bloodTestId,
     form: sanitizeRecord(updated as Record<string, unknown>),
@@ -187,7 +187,7 @@ export async function handleDeleteBloodTestRecord(
   if (!mongoose.isValidObjectId(bloodTestId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.bloodTest.invalidBloodTestIdFormat',
+      'common.invalidObjectId',
       ctx.event
     );
   }
@@ -195,7 +195,7 @@ export async function handleDeleteBloodTestRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.delete',
+    action: 'petMedical.delete',
     event: ctx.event,
     identifier: authContext.userId,
     limit: 10,
@@ -213,13 +213,13 @@ export async function handleDeleteBloodTestRecord(
   if (deleted.deletedCount === 0) {
     return response.errorResponse(
       404,
-      'petMedicalRecord.errors.bloodTest.notFound',
+      'petMedical.errors.bloodTest.notFound',
       ctx.event
     );
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petMedicalRecord.success.bloodTest.deleted',
+    message: 'success.deleted',
     petId,
     bloodTestRecordId: bloodTestId,
   });

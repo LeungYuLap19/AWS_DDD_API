@@ -31,11 +31,11 @@ export function getValidatedPetId(event: RouteContext['event']): string {
   const petId = event.pathParameters?.petId;
 
   if (!petId) {
-    throw new AuthContextError('petSource.errors.missingPetId', 400);
+    throw new AuthContextError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('petSource.errors.invalidPetId', 400);
+    throw new AuthContextError('common.invalidObjectId', 400);
   }
 
   return petId;

@@ -21,7 +21,7 @@ export async function handleListPetLost(ctx: RouteContext): Promise<APIGatewayPr
   const records = await PetLost.find({}).select('-__v').sort({ lostDate: -1 }).lean();
 
   return response.successResponse(200, ctx.event, {
-    message: 'petRecovery.success.petLost.listRetrieved',
+    message: 'success.retrieved',
     count: records.length,
     pets: records.map(sanitizePetLost),
   });
@@ -117,7 +117,7 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
   });
 
   return response.successResponse(201, ctx.event, {
-    message: 'petRecovery.success.petLost.created',
+    message: 'success.created',
     id: record._id,
   });
 }
@@ -127,7 +127,7 @@ export async function handleDeletePetLost(ctx: RouteContext): Promise<APIGateway
   const petLostID = ctx.event.pathParameters?.petLostID;
 
   if (!petLostID || !mongoose.Types.ObjectId.isValid(petLostID)) {
-    return response.errorResponse(400, 'petRecovery.errors.petLost.invalidId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   await connectToMongoDB();
@@ -148,6 +148,6 @@ export async function handleDeletePetLost(ctx: RouteContext): Promise<APIGateway
   await PetLost.deleteOne({ _id: petLostID });
 
   return response.successResponse(200, ctx.event, {
-    message: 'petRecovery.success.petLost.deleted',
+    message: 'success.deleted',
   });
 }

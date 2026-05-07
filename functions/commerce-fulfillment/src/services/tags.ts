@@ -157,7 +157,7 @@ export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGa
   const tagId = ctx.event.pathParameters?.tagId ?? '';
 
   if (!tagId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingTagId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   await connectToMongoDB();
@@ -218,7 +218,7 @@ export async function handlePatchTagVerification(ctx: RouteContext): Promise<API
   const tagId = ctx.event.pathParameters?.tagId ?? '';
 
   if (!tagId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingTagId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   const parsed = parseBody(ctx.body, tagUpdateSchema);
@@ -266,7 +266,7 @@ export async function handlePatchTagVerification(ctx: RouteContext): Promise<API
   if (payload.petHuman) setFields['petHuman'] = payload.petHuman;
 
   if (Object.keys(setFields).length === 0) {
-    return response.errorResponse(400, 'common.missingParams', ctx.event);
+    return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
   }
 
   await OrderVerification.updateOne({ tagId }, { $set: setFields });

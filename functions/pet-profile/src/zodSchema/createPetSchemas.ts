@@ -63,5 +63,5 @@ export const createPetBodySchema = z
   })
   .passthrough()
   .superRefine((body, ctx) => {
-    rejectUnknownFields(body, ctx, createPetAllowedFields, 'petProfile.errors.invalidBodyParams');
+    rejectUnknownFields(body, ctx, createPetAllowedFields, 'common.invalidBodyParams');
   });

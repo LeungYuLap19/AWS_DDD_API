@@ -6,39 +6,39 @@ import { z } from 'zod';
  */
 export const purchaseConfirmationSchema = z.object({
   lastName: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' }),
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' }),
   email: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' })
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' })
     .email({ message: 'orders.errors.invalidEmail' }),
   address: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' }),
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' }),
   option: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' })
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' })
     .max(64, { message: 'orders.errors.invalidOption' })
     .regex(/^[a-zA-Z0-9_-]+$/, { message: 'orders.errors.invalidOption' }),
   tempId: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' })
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' })
     .max(64, { message: 'orders.errors.invalidTempId' })
     .regex(/^[a-zA-Z0-9_-]+$/, { message: 'orders.errors.invalidTempId' }),
   paymentWay: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' })
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' })
     .max(128),
   delivery: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' })
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' })
     .max(128),
   petName: z
-    .string({ message: 'orders.errors.missingRequiredFields' })
-    .min(1, { message: 'orders.errors.missingRequiredFields' }),
+    .string({ message: 'common.missingBodyParams' })
+    .min(1, { message: 'common.missingBodyParams' }),
   phoneNumber: z
     .string()
-    .min(1, { message: 'orders.errors.missingPhoneNumber' })
+    .min(1, { message: 'common.missingBodyParams' })
     .regex(/^\d{7,15}$/, { message: 'orders.errors.invalidPhone' }),
   type: z.string().max(64).optional().default(''),
   shopCode: z

@@ -18,7 +18,7 @@ export async function handleCancelOrderVerification(ctx: RouteContext): Promise<
   const orderVerificationId = ctx.event.pathParameters?.orderVerificationId ?? '';
 
   if (!orderVerificationId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingVerificationId', ctx.event);
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
   }
 
   if (!isValidObjectId(orderVerificationId)) {
