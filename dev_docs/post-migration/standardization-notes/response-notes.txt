@@ -1,0 +1,55 @@
+- success response issues
+    - Duplicate IDs — fields appearing both inside form and at the top level
+    - Inconsistent data container field name 
+        Field name used	Where
+        form	pet-medical, pet-transfer, pet-source, pet-adoption, pet-profile, commerce-orders GET by tempId
+        result	pet-analysis/eye, pet-profile createProfile
+        user	user service GET/PATCH me
+        pet	pet-adoption browse detail
+        pets	pet-profile list, pet-recovery list
+        notification	notifications dispatch
+        items / shops / orders / allOrders / adoptionList / userList	commerce-catalog, commerce-orders, pet-adoption, ngo
+        (no wrapper — flat top-level fields)	logistics sfMetadata (bearer_token, area_list, netCode, addresses), sfWaybill, sfShipment
+    - Inconsistent message field
+        - Most services: i18n locale key
+        - commerce-orders: raw English strings — 'Order placed successfully.', 'Order info retrieved successfully.', 'Latest PTag orders retrieved successfully.'
+        - commerce-fulfillment/commands.ts: 'Email sent successfully.'
+        - ngo GET me + GET members: no message at all
+        - commerce-catalog all three handlers: no message
+        - logistics sfMetadata/sfWaybill/sfShipment: no message
+        - pet-analysis/eye POST analysis: no message
+
+    - Inconsistent count/redundant metadata fields
+        - petLost, petFound, notifications LIST all include a count field alongside the array — redundant since array.length is always available client-side
+        - pet-profile NGO list includes currentPage, perPage; user list omits them
+
+    - Junk fields in body
+        - pet-analysis/eye.ts POST analysis: includes status: 200 inside the data body — redundant with HTTP status
+        - commerce-orders CREATE: uses purchase_code and _id (snake_case + raw underscore prefix)
+        - pet-analysis/eye.ts POST: request_id, time_taken (snake_case)
+        - logistics/sfMetadata.ts: bearer_token, area_list (snake_case)
+
+
+- success response standards
+
+    // LIST
+    { message: 'success.retrieved', data: T[], pagination?: {...} }
+
+    // GET single
+    { message: 'success.retrieved', data: T }  // T includes id, petId etc — no top-level duplication
+
+    // CREATE
+    { message: 'success.created', data: T }   // T has _id — no separate top-level id field
+
+    // UPDATE
+    { message: 'success.updated', data: T }   // or just { message } if no return body needed
+
+    // DELETE
+    { message: 'success.deleted' }
+
+- error response issues 
+    - commerce-orders handleGetOperations returns 404 for empty list
+    - Raw English string error keys in commerce-orders
+        - All error keys there ('orders.errors.xxx') follow the i18n pattern — but they're mixed with raw-English success messages in the same file, creating inconsistency.
+
+- no domain lambda custom response should be used or created, (eg. httpError)

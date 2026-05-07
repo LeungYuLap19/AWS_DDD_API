@@ -122,8 +122,8 @@ export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayP
     200,
     ctx.event,
     {
-      accessToken: accessTokenResult.token,
-      id: user._id.toString(),
+      message: 'success.completed',
+      data: { accessToken: accessTokenResult.token, id: user._id.toString() },
     },
     {
       'Set-Cookie': buildRefreshCookie(newRefreshToken, ctx.event),

@@ -3,10 +3,10 @@
 ## Standardization
 
 - [x] service function flow
-  - audit: [SERVICE_FUNCTION_FLOW_AUDIT.md](SERVICE_FUNCTION_FLOW_AUDIT.md)
-- [ ] locale keys
-- [ ] response format
+- [x] locale keys
+- [x] response format
 - [ ] error handling
+- [ ] all list need pagination
 - [ ] S3 and multipart
   - formadata only in mutipart route (do not mix json + multipart)
 - [ ] retest, api docs update

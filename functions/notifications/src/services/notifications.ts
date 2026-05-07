@@ -36,8 +36,7 @@ export async function handleListNotifications(ctx: RouteContext): Promise<APIGat
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    count: notifications.length,
-    notifications,
+    data: notifications,
   });
 }
 
@@ -67,7 +66,6 @@ export async function handleArchiveNotification(ctx: RouteContext): Promise<APIG
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    notificationId,
   });
 }
 
@@ -95,6 +93,6 @@ export async function handleDispatchNotification(ctx: RouteContext): Promise<API
 
   return response.successResponse(200, ctx.event, {
     message: 'success.created',
-    notification: sanitizeNotification(notification),
+    data: sanitizeNotification(notification),
   });
 }

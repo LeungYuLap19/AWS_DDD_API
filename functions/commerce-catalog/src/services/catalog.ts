@@ -10,7 +10,7 @@ export async function handleGetCatalog(ctx: RouteContext): Promise<APIGatewayPro
   await connectToMongoDB();
   const ProductList = mongoose.model('ProductList');
   const items = await ProductList.find({}).lean();
-  return response.successResponse(200, ctx.event, { items });
+  return response.successResponse(200, ctx.event, { message: 'success.retrieved', data: items });
 }
 
 export async function handleCreateCatalogEvent(ctx: RouteContext): Promise<APIGatewayProxyResult> {
@@ -31,5 +31,5 @@ export async function handleCreateCatalogEvent(ctx: RouteContext): Promise<APIGa
     accessAt: accessAt ? new Date(accessAt) : null,
   });
 
-  return response.successResponse(201, ctx.event, { id: log._id });
+  return response.successResponse(201, ctx.event, { message: 'success.created', data: { id: log._id } });
 }

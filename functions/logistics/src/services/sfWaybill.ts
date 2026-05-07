@@ -69,5 +69,5 @@ export async function printCloudWaybill({
     pdfBuffer,
   });
 
-  return response.successResponse(200, event, { waybillNo });
+  return response.successResponse(200, event, { message: 'success.created', data: { waybillNo } });
 }

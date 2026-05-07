@@ -51,15 +51,15 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
       | null;
 
     if (!eyeDisease && decodeURIComponent(identifier) === 'Normal') {
-      return response.successResponse(201, ctx.event, {
-        result: {
+      return response.successResponse(200, ctx.event, {
+        message: 'success.retrieved',
+        data: {
           id: null,
           eyeDiseaseEng: null,
           eyeDiseaseChi: null,
           eyeDiseaseCause: null,
           eyeDiseaseSolution: null,
         },
-        message: 'success.retrieved',
       });
     }
 
@@ -67,9 +67,9 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
       return response.errorResponse(404, 'petAnalysis.errors.eyeDiseaseNotFound', ctx.event);
     }
 
-    return response.successResponse(201, ctx.event, {
-      result: eyeDisease,
+    return response.successResponse(200, ctx.event, {
       message: 'success.retrieved',
+      data: eyeDisease,
     });
   }
 
@@ -82,12 +82,11 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    result: eyeAnalysisLogList.map(sanitizeEyeLog),
+    data: eyeAnalysisLogList.map(sanitizeEyeLog),
   });
 }
 
 export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const startTime = performance.now();
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
 
@@ -198,14 +197,9 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
       heatmap,
     });
 
-    const timeTaken = performance.now() - startTime;
-
     return response.successResponse(200, ctx.event, {
-      result: analysis.value,
-      heatmap,
-      request_id: activityLog._id,
-      time_taken: `${timeTaken} ms`,
-      status: 200,
+      message: 'success.created',
+      data: { result: analysis.value, heatmap, requestId: String(activityLog._id) },
     });
   } catch (error) {
     try {
@@ -268,9 +262,9 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
   )) as Record<string, unknown> | null;
 
   if (updatedPet) {
-    return response.successResponse(201, ctx.event, {
+    return response.successResponse(200, ctx.event, {
       message: 'success.updated',
-      result: sanitizePet(updatedPet),
+      data: sanitizePet(updatedPet),
     });
   }
 

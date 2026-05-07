@@ -81,9 +81,8 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
   };
 
   return response.successResponse(200, ctx.event, {
-    message: 'Order Verification info retrieved successfully',
-    form,
-    id: safeEntity._id,
+    message: 'success.retrieved',
+    data: { id: safeEntity._id, ...form },
   });
 }
 
@@ -165,6 +164,6 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'Tag info updated successfully',
+    message: 'success.updated',
   });
 }

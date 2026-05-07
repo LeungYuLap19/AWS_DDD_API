@@ -47,7 +47,6 @@ export async function handleCancelOrderVerification(ctx: RouteContext): Promise<
   );
 
   return response.successResponse(200, ctx.event, {
-    message: 'Cancelled successfully.',
-    orderVerificationId,
+    message: 'success.updated',
   });
 }

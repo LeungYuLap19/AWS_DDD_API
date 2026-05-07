@@ -168,10 +168,7 @@ export async function handleUserRegistration(ctx: RouteContext): Promise<APIGate
 
   return response.successResponse(201, ctx.event, {
     message: 'auth.registration.user.createSuccessful',
-    userId: user._id,
-    role: user.role,
-    isVerified: true,
-    token,
+    data: { userId: user._id, role: user.role, isVerified: true, token },
   }, {
     'Set-Cookie': buildRefreshCookie(refreshToken, ctx.event),
   });
@@ -307,13 +304,15 @@ export async function handleNgoRegistration(ctx: RouteContext): Promise<APIGatew
 
     return response.successResponse(201, ctx.event, {
       message: 'auth.registration.ngo.createSuccessful',
-      userId: newUser._id,
-      role: newUser.role,
-      isVerified: true,
-      token,
-      ngoId: newNgo._id,
-      ngoUserAccessId: newNgoUserAccess._id,
-      ngoCounterId: newNgoCounter._id,
+      data: {
+        userId: newUser._id,
+        role: newUser.role,
+        isVerified: true,
+        token,
+        ngoId: newNgo._id,
+        ngoUserAccessId: newNgoUserAccess._id,
+        ngoCounterId: newNgoCounter._id,
+      },
     }, {
       'Set-Cookie': buildRefreshCookie(refreshToken, ctx.event),
     });

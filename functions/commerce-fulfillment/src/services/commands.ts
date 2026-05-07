@@ -75,6 +75,6 @@ export async function handleSendPtagDetectionEmail(ctx: RouteContext): Promise<A
   });
 
   return response.successResponse(200, ctx.event, {
-    message: 'Email sent successfully.',
+    message: 'success.created',
   });
 }

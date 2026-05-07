@@ -105,8 +105,7 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
   };
 
   return response.successResponse(200, ctx.event, {
-    message: 'Order Verification info retrieved successfully',
-    form,
-    id: safeEntity._id,
+    message: 'success.retrieved',
+    data: { id: safeEntity._id, ...form },
   });
 }

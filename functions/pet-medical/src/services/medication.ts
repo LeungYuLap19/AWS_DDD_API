@@ -33,8 +33,7 @@ export async function handleListMedicationRecords(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    form: { medication: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
-    petId,
+    data: records.map((r) => sanitizeRecord(r as Record<string, unknown>)),
   });
 }
 
@@ -88,9 +87,7 @@ export async function handleCreateMedicationRecord(
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
-    petId,
-    medicationRecordId: newRecord._id,
+    data: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
   });
 }
 
@@ -168,9 +165,7 @@ export async function handleUpdateMedicationRecord(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    petId,
-    medicationRecordId: medicationId,
-    form: sanitizeRecord(updated as Record<string, unknown>),
+    data: sanitizeRecord(updated as Record<string, unknown>),
   });
 }
 
@@ -218,7 +213,5 @@ export async function handleDeleteMedicationRecord(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.deleted',
-    petId,
-    medicationRecordId: medicationId,
   });
 }

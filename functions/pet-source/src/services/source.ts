@@ -35,16 +35,13 @@ export async function handleGetPetSource(ctx: RouteContext): Promise<APIGatewayP
   if (!record) {
     return response.successResponse(200, ctx.event, {
       message: 'success.retrieved',
-      form: null,
-      petId,
+      data: null,
     });
   }
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    form: sanitizeSource(record),
-    petId,
-    sourceId: String(record._id),
+    data: { id: String(record._id), ...sanitizeSource(record) },
   });
 }
 
@@ -89,9 +86,7 @@ export async function handleCreatePetSource(ctx: RouteContext): Promise<APIGatew
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    form: sanitizeSource(createdRecord),
-    petId,
-    sourceId: String(createdRecord._id),
+    data: { id: String(createdRecord._id), ...sanitizeSource(createdRecord) },
   });
 }
 
@@ -132,7 +127,5 @@ export async function handlePatchPetSource(ctx: RouteContext): Promise<APIGatewa
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    petId,
-    sourceId,
   });
 }

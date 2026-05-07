@@ -67,11 +67,10 @@ export async function handleCreateTransfer(ctx: RouteContext): Promise<APIGatewa
     return response.errorResponse(404, 'petTransfer.errors.petNotFound', ctx.event);
   }
 
+  const { _id: _transferId, ...transferFields } = newRecord;
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    form: newRecord,
-    petId,
-    transferId: String(transferRecordId),
+    data: { id: String(transferRecordId), petId, ...transferFields },
   });
 }
 
@@ -140,9 +139,6 @@ export async function handleUpdateTransfer(ctx: RouteContext): Promise<APIGatewa
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    form: data,
-    petId,
-    transferId,
   });
 }
 
@@ -165,8 +161,6 @@ export async function handleDeleteTransfer(ctx: RouteContext): Promise<APIGatewa
 
   return response.successResponse(200, ctx.event, {
     message: 'success.deleted',
-    petId,
-    transferId,
   });
 }
 
@@ -294,8 +288,6 @@ export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayPr
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'success.completed',
-    form: data,
-    petId,
+    message: 'success.updated',
   });
 }

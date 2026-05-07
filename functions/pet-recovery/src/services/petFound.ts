@@ -20,8 +20,7 @@ export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayP
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    count: records.length,
-    pets: records.map(sanitizePetFound),
+    data: records.map(sanitizePetFound),
   });
 }
 
@@ -91,7 +90,7 @@ export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewa
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    id: record._id,
+    data: { id: record._id },
   });
 }
 

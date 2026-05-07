@@ -198,10 +198,8 @@ export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGa
   };
 
   return response.successResponse(200, ctx.event, {
-    message: 'Order Verification info retrieved successfully',
-    form,
-    id: safeEntity._id,
-    sf: linkedOrder?.sfWayBillNumber,
+    message: 'success.retrieved',
+    data: { id: safeEntity._id, ...form, sf: linkedOrder?.sfWayBillNumber },
   });
 }
 
@@ -289,8 +287,6 @@ export async function handlePatchTagVerification(ctx: RouteContext): Promise<API
   } catch { }
 
   return response.successResponse(200, ctx.event, {
-    message: 'Tag info updated successfully',
-    id: existing._id,
-    notificationDispatched,
+    message: 'success.updated',
   });
 }

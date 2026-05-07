@@ -88,11 +88,7 @@ export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxy
 
   return response.successResponse(200, ctx.event, {
     message: 'auth.login.ngo.successful',
-    userId: user._id,
-    role: user.role,
-    isVerified: user.verified,
-    token,
-    ngoId: ngo._id,
+    data: { userId: user._id, role: user.role, isVerified: user.verified, token, ngoId: ngo._id },
   }, {
     'Set-Cookie': buildRefreshCookie(refreshToken, ctx.event),
   });

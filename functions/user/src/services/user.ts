@@ -38,7 +38,7 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    user: sanitizeUser(user),
+    data: sanitizeUser(user),
   });
 }
 
@@ -129,7 +129,7 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    user: sanitizeUser(updatedUser),
+    data: sanitizeUser(updatedUser),
   });
 }
 
@@ -152,6 +152,5 @@ export async function handleDeleteMe(ctx: RouteContext): Promise<APIGatewayProxy
 
   return response.successResponse(200, ctx.event, {
     message: 'success.deleted',
-    userId: user._id,
   });
 }

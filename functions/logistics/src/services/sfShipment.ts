@@ -135,7 +135,7 @@ export async function createShipment({
   }
 
   return response.successResponse(200, event, {
-    tempIdList: customerDetails.tempIdList,
-    trackingNumber,
+    message: 'success.created',
+    data: { tempIdList: customerDetails.tempIdList, trackingNumber },
   });
 }

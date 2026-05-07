@@ -123,9 +123,8 @@ export async function handleGetAdoptionList(ctx: RouteContext): Promise<APIGatew
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    adoptionList: adoptionList.map(sanitizeBrowseAdoption),
-    maxPage,
-    totalResult,
+    data: adoptionList.map(sanitizeBrowseAdoption),
+    pagination: { page, limit: PAGE_SIZE, total: totalResult, maxPage },
   });
 }
 
@@ -153,6 +152,6 @@ export async function handleGetBrowseDetail(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    pet: sanitizeBrowseAdoption(pet),
+    data: sanitizeBrowseAdoption(pet),
   });
 }

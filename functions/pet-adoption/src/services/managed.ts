@@ -41,17 +41,13 @@ export async function handleGetManagedRecord(
   if (!record) {
     return response.successResponse(200, ctx.event, {
       message: 'success.retrieved',
-      form: null,
-      petId,
+      data: null,
     });
   }
 
-  const raw = record as Record<string, unknown>;
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    form: sanitizeManagedAdoption(record),
-    petId,
-    adoptionId: String(raw._id),
+    data: sanitizeManagedAdoption(record),
   });
 }
 
@@ -109,9 +105,7 @@ export async function handleCreateManagedRecord(
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    form: sanitizeManagedAdoption(newRecord),
-    petId,
-    adoptionId: String((newRecord as Record<string, unknown>)._id),
+    data: sanitizeManagedAdoption(newRecord),
   });
 }
 
@@ -158,7 +152,7 @@ export async function handleUpdateManagedRecord(
     return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
   }
 
-  return response.successResponse(200, ctx.event, { message: 'success.updated', petId });
+  return response.successResponse(200, ctx.event, { message: 'success.updated' });
 }
 
 /**
@@ -186,7 +180,7 @@ export async function handleDeleteManagedRecord(
     return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
   }
 
-  return response.successResponse(200, ctx.event, { message: 'success.deleted', petId });
+  return response.successResponse(200, ctx.event, { message: 'success.deleted' });
 }
 
 // ---------------------------------------------------------------------------

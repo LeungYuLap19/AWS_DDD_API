@@ -27,9 +27,7 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    view,
-    form,
-    id: pet._id,
+    data: { id: pet._id, ...(form ?? {}) },
   });
 }
 
@@ -51,8 +49,8 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
   ).lean();
 
   return response.successResponse(200, ctx.event, {
-    message: 'success.completed',
-    form: sanitizePublicTagLookupPet(pet),
+    message: 'success.retrieved',
+    data: sanitizePublicTagLookupPet(pet),
   });
 }
 
@@ -104,16 +102,10 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
       Pet.countDocuments(query),
     ]);
 
-    if (!pets.length) {
-      return response.errorResponse(404, 'petProfile.errors.noPetsFound', ctx.event);
-    }
-
     return response.successResponse(200, ctx.event, {
       message: 'success.retrieved',
-      pets: sanitizePetListSummary(pets),
-      total: totalNumber,
-      currentPage: pageNumber,
-      perPage: 30,
+      data: sanitizePetListSummary(pets),
+      pagination: { page: pageNumber, limit: 30, total: totalNumber },
     });
   }
 
@@ -129,7 +121,7 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    pets: sanitizePetListSummary(pets),
-    total: totalNumber,
+    data: sanitizePetListSummary(pets),
+    pagination: { page: pageNumber, limit: 10, total: totalNumber },
   });
 }

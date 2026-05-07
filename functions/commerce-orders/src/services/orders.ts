@@ -58,7 +58,8 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
   ]);
 
   return response.successResponse(200, ctx.event, {
-    orders: (orders as Record<string, unknown>[]).map(sanitizeOrder),
+    message: 'success.retrieved',
+    data: (orders as Record<string, unknown>[]).map(sanitizeOrder),
     pagination: { page, limit, total },
   });
 }
@@ -250,10 +251,8 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   ]);
 
 return response.successResponse(200, ctx.event, {
-  message: 'Order placed successfully.',
-  purchase_code: tempId,
-  price: canonicalPrice,
-  _id: String(newOrderVerificationId),
+  message: 'success.created',
+  data: { id: String(newOrderVerificationId), purchaseCode: tempId, price: canonicalPrice },
 });
 }
 
@@ -295,9 +294,8 @@ export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGate
 
   const safeOrder = sanitizeOrder(order);
   return response.successResponse(200, ctx.event, {
-    message: 'Order info retrieved successfully.',
-    form: { petContact: safeOrder['petContact'] as string | undefined },
-    id: String(safeOrder['_id']),
+    message: 'success.retrieved',
+    data: { id: String(safeOrder['_id']), petContact: safeOrder['petContact'] as string | undefined },
   });
 }
 
@@ -334,13 +332,9 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
     OrderVerification.countDocuments(filter),
   ]);
 
-  if (!allOrders || allOrders.length === 0) {
-    return response.errorResponse(404, 'orders.errors.noOrders', ctx.event);
-  }
-
   return response.successResponse(200, ctx.event, {
-    message: 'Latest PTag orders retrieved successfully.',
-    allOrders: allOrders.map(sanitizeOrderVerification),
+    message: 'success.retrieved',
+    data: allOrders.map(sanitizeOrderVerification),
     pagination: { page, limit, total },
   });
 }

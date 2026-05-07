@@ -83,10 +83,13 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
   };
 
   return response.successResponse(200, ctx.event, {
-    userProfile: sanitizeUser(pick(0) as UserDocument | null),
-    ngoProfile: sanitizeNgo(authorizedNgo.ngo),
-    ngoUserAccessProfile: sanitizeNgoUserAccess(authorizedNgo.ngoUserAccess),
-    ngoCounters: sanitizeNgoCounters(pick(1) as Record<string, unknown> | null),
+    message: 'success.retrieved',
+    data: {
+      userProfile: sanitizeUser(pick(0) as UserDocument | null),
+      ngoProfile: sanitizeNgo(authorizedNgo.ngo),
+      ngoUserAccessProfile: sanitizeNgoUserAccess(authorizedNgo.ngoUserAccess),
+      ngoCounters: sanitizeNgoCounters(pick(1) as Record<string, unknown> | null),
+    },
     warnings: {
       userProfile: warningKey(0, 'userProfile'),
       ngoCounters: warningKey(1, 'ngoCounters'),
@@ -113,9 +116,9 @@ export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayPro
   });
 
   return response.successResponse(200, ctx.event, {
-    userList: members,
-    totalPages,
-    totalDocs,
+    message: 'success.retrieved',
+    data: members,
+    pagination: { totalPages, totalDocs },
   });
 }
 
@@ -286,7 +289,6 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
     return response.successResponse(200, ctx.event, {
       message: 'success.updated',
-      updated: Object.keys(responseData),
       data: responseData,
     });
   } catch (error) {

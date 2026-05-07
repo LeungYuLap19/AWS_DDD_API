@@ -11,5 +11,5 @@ export async function handleGetStorefront(ctx: RouteContext): Promise<APIGateway
     {},
     { shopCode: 1, shopName: 1, shopAddress: 1, shopContact: 1, shopContactPerson: 1, price: 1 }
   ).lean();
-  return response.successResponse(200, ctx.event, { shops });
+  return response.successResponse(200, ctx.event, { message: 'success.retrieved', data: shops });
 }

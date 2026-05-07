@@ -33,8 +33,7 @@ export async function handleListBloodTestRecords(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    form: { blood_test: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
-    petId,
+    data: records.map((r) => sanitizeRecord(r as Record<string, unknown>)),
   });
 }
 
@@ -90,9 +89,7 @@ export async function handleCreateBloodTestRecord(
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
-    petId,
-    bloodTestRecordId: newRecord._id,
+    data: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
   });
 }
 
@@ -170,9 +167,7 @@ export async function handleUpdateBloodTestRecord(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    petId,
-    bloodTestRecordId: bloodTestId,
-    form: sanitizeRecord(updated as Record<string, unknown>),
+    data: sanitizeRecord(updated as Record<string, unknown>),
   });
 }
 
@@ -220,7 +215,5 @@ export async function handleDeleteBloodTestRecord(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.deleted',
-    petId,
-    bloodTestRecordId: bloodTestId,
   });
 }

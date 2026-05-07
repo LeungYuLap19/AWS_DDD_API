@@ -33,8 +33,7 @@ export async function handleListDewormRecords(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    form: { deworm: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
-    petId,
+    data: records.map((r) => sanitizeRecord(r as Record<string, unknown>)),
   });
 }
 
@@ -102,9 +101,7 @@ export async function handleCreateDewormRecord(
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
-    petId,
-    dewormRecordId: newRecord._id,
+    data: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
   });
 }
 
@@ -192,9 +189,7 @@ export async function handleUpdateDewormRecord(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    petId,
-    dewormRecordId: dewormId,
-    form: sanitizeRecord(updated as Record<string, unknown>),
+    data: sanitizeRecord(updated as Record<string, unknown>),
   });
 }
 
@@ -242,7 +237,5 @@ export async function handleDeleteDewormRecord(
 
   return response.successResponse(200, ctx.event, {
     message: 'success.deleted',
-    petId,
-    dewormRecordId: dewormId,
   });
 }

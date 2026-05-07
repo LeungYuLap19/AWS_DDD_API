@@ -43,6 +43,6 @@ export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGateway
 
   return response.successResponse(200, ctx.event, {
     message: 'success.completed',
-    result,
+    data: result,
   });
 }

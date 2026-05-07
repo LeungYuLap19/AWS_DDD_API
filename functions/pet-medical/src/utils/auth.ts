@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import { requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext, AuthContextError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
-import { HttpError } from './httpError';
 
 export { requireAuthContext };
 
@@ -15,7 +14,7 @@ export interface AuthorizedPet {
 /**
  * Loads a pet by id and enforces ownership: the requester must either own the
  * pet (matching `userId`) or be an NGO whose `ngoId` matches the pet's
- * `ngoId`. Throws an `HttpError` (404 / 403) on failure that the shared
+ * `ngoId`. Throws an `AuthContextError` (404 / 403) on failure that the shared
  * handler maps to the right response.
  */
 export async function loadAuthorizedPet(
@@ -28,7 +27,7 @@ export async function loadAuthorizedPet(
   // null `pathParameters` collapses to '' here. `isValidObjectId('')` returns
   // false, producing a 400 instead of a downstream Mongoose CastError.
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new HttpError(400, 'common.invalidObjectId');
+    throw new AuthContextError('common.invalidObjectId', 400);
   }
 
   const Pet = mongoose.model('Pet');
@@ -37,7 +36,7 @@ export async function loadAuthorizedPet(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new HttpError(404, 'petMedical.errors.petNotFound');
+    throw new AuthContextError('petMedical.errors.petNotFound', 404);
   }
 
   const isOwner =
@@ -51,7 +50,7 @@ export async function loadAuthorizedPet(
     String(pet.ngoId) === String(authContext.ngoId);
 
   if (!isOwner && !isNgoOwner) {
-    throw new HttpError(403, 'common.forbidden');
+    throw new AuthContextError('common.forbidden', 403);
   }
 
   return pet;

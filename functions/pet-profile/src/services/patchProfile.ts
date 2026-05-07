@@ -131,6 +131,5 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    id: mutablePet._id,
   });
 }

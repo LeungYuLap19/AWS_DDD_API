@@ -237,12 +237,7 @@ async function verifyEmailChallenge(
 
     return response.successResponse(200, event, {
       message: 'auth.challenge.verifySuccessful',
-      verified: true,
-      isNewUser: false,
-      userId: currentUser._id,
-      role: currentUser.role,
-      isVerified: true,
-      linked: { email },
+      data: { verified: true, isNewUser: false, userId: currentUser._id, role: currentUser.role, isVerified: true, linked: { email } },
     });
   }
 
@@ -253,8 +248,7 @@ async function verifyEmailChallenge(
   if (!user) {
     return response.successResponse(200, event, {
       message: 'auth.challenge.verifySuccessful',
-      verified: true,
-      isNewUser: true,
+      data: { verified: true, isNewUser: true },
     });
   }
 
@@ -273,12 +267,7 @@ async function verifyEmailChallenge(
     event,
     {
       message: 'auth.challenge.verifySuccessful',
-      verified: true,
-      isNewUser: false,
-      userId: user._id,
-      role: user.role,
-      isVerified: true,
-      token,
+      data: { verified: true, isNewUser: false, userId: user._id, role: user.role, isVerified: true, token },
     },
     {
       'Set-Cookie': buildRefreshCookie(refreshToken, event),
@@ -377,12 +366,7 @@ async function verifySmsChallenge(
 
     return response.successResponse(200, event, {
       message: 'auth.challenge.verifySuccessful',
-      verified: true,
-      isNewUser: false,
-      userId: currentUser._id,
-      role: currentUser.role,
-      isVerified: true,
-      linked: { phoneNumber },
+      data: { verified: true, isNewUser: false, userId: currentUser._id, role: currentUser.role, isVerified: true, linked: { phoneNumber } },
     });
   }
 
@@ -391,8 +375,7 @@ async function verifySmsChallenge(
   if (!user) {
     return response.successResponse(200, event, {
       message: 'auth.challenge.verifySuccessful',
-      verified: true,
-      isNewUser: true,
+      data: { verified: true, isNewUser: true },
     });
   }
 
@@ -411,12 +394,7 @@ async function verifySmsChallenge(
     event,
     {
       message: 'auth.challenge.verifySuccessful',
-      verified: true,
-      isNewUser: false,
-      userId: user._id,
-      role: user.role,
-      isVerified: true,
-      token,
+      data: { verified: true, isNewUser: false, userId: user._id, role: user.role, isVerified: true, token },
     },
     {
       'Set-Cookie': buildRefreshCookie(refreshToken, event),

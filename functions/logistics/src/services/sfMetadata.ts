@@ -29,7 +29,7 @@ export async function getToken({ event }: RouteContext): Promise<APIGatewayProxy
   if (rateLimitResult) return rateLimitResult;
 
   const bearerToken = await fetchAddressToken();
-  return response.successResponse(200, event, { bearer_token: bearerToken });
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { bearerToken } });
 }
 
 export async function getArea({ event, body }: RouteContext): Promise<APIGatewayProxyResult> {
@@ -48,7 +48,7 @@ export async function getArea({ event, body }: RouteContext): Promise<APIGateway
   if (rateLimitResult) return rateLimitResult;
 
   const areaList = await fetchAreaList(parsed.data.token);
-  return response.successResponse(200, event, { area_list: areaList });
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { areaList } });
 }
 
 export async function getNetCode({ event, body }: RouteContext): Promise<APIGatewayProxyResult> {
@@ -67,7 +67,7 @@ export async function getNetCode({ event, body }: RouteContext): Promise<APIGate
   if (rateLimitResult) return rateLimitResult;
 
   const netCode = await fetchNetCodeList(parsed.data);
-  return response.successResponse(200, event, { netCode });
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { netCode } });
 }
 
 export async function getPickupLocations({
@@ -89,6 +89,6 @@ export async function getPickupLocations({
   if (rateLimitResult) return rateLimitResult;
 
   const addresses = await fetchPickupAddresses(parsed.data);
-  return response.successResponse(200, event, { addresses });
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { addresses } });
 }
 

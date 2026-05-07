@@ -50,7 +50,8 @@ export async function handleGetVerificationList(ctx: RouteContext): Promise<APIG
   ]);
 
   return response.successResponse(200, ctx.event, {
-    orderVerification: (records as Record<string, unknown>[]).map(sanitizeOrderVerification),
+    message: 'success.retrieved',
+    data: (records as Record<string, unknown>[]).map(sanitizeOrderVerification),
     pagination: { page, limit, total },
   });
 }

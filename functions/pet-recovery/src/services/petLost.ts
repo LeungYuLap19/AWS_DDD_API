@@ -22,8 +22,7 @@ export async function handleListPetLost(ctx: RouteContext): Promise<APIGatewayPr
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    count: records.length,
-    pets: records.map(sanitizePetLost),
+    data: records.map(sanitizePetLost),
   });
 }
 
@@ -118,7 +117,7 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
-    id: record._id,
+    data: { id: record._id },
   });
 }
 
