@@ -260,8 +260,9 @@ If `OrderVerification` creation fails after `Order` is saved, the `Order` is del
 | 400 | `orders.errors.invalidPhone` | `phoneNumber` fails digit-only regex |
 | 400 | `orders.errors.invalidShopCode` | `shopCode` not found in `ShopInfo` collection |
 | 400 | `orders.errors.invalidFileType` | Uploaded file MIME type not allowed |
-| 400 | `orders.errors.fileTooLarge` | Uploaded file exceeds 5 MB |
+| 400 | `orders.errors.fileTooLarge` | Uploaded file exceeds 4 MB |
 | 400 | `orders.errors.tooManyFiles` | More than 1 file per field |
+| 413 | *(Lambda invocation limit)* | Base64-encoded request body exceeds Lambda's 6 MB synchronous payload limit (raw file > ~4.5 MB); API GW returns 413 before Lambda runs. API GW's own limit is 10 MB. |
 | 401 | `common.unauthorized` | Missing or invalid JWT |
 | 409 | `orders.errors.duplicateOrder` | `tempId` already exists in `Order` collection |
 | 429 | `common.rateLimited` | Rate limit exceeded (10 req / hour per IP) |

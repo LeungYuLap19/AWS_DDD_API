@@ -35,4 +35,5 @@
 
 - [logistics] SF address client uses `hksfaddsit.sf-express.com` (SIT/staging environment) for area, netCode, and address lookups. Only the login URL uses the production `hksfadd` subdomain. Carried over from legacy unchanged. Confirm with SF Express whether separate production URLs exist for these endpoints. Revisit after frontend integration tests.
 
-- [commerce-orders] POST /commerce/orders times out at 10 s (Lambda hard limit) on every valid payload (502 to client). Validation and shopCode DB lookup succeed. The hang occurs silently after both — no log output between START and END. Candidates: tagId uniqueness query, Order/OrderVerification write, or a missing timeout on the confirmation email or WhatsApp notification call. requestId: 3088d40e-bc04-45ec-83bb-90ae15f8d40a (2026-05-06T08:57:19Z). Fix the hang; also raise Lambda timeout above 10 s if side-effect calls (email, WhatsApp) are legitimately slow.
+- [commerce-orders] Remove temporary step-by-step `logInfo` checkpoints (steps 1–16) added to `handleCreateOrder` in `orders.ts` during the 502 debugging session. They are no longer needed and add log noise.
+

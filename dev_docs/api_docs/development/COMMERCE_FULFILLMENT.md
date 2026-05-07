@@ -296,7 +296,7 @@ Updates allowed fields on the tag-bound `OrderVerification`. On success, attempt
 | Field | Type | Notes |
 | --- | --- | --- |
 | `contact` | string | Phone number; normalized to digits only |
-| `verifyDate` | string | Date in `DD/MM/YYYY` format; e.g. `"15/01/2025"` |
+| `verifyDate` | string | Date in `DD/MM/YYYY` or ISO 8601 (`YYYY-MM-DD`) format; e.g. `"15/01/2025"` or `"2025-01-15"` |
 | `petName` | string | |
 | `shortUrl` | string | |
 | `masterEmail` | string | Normalized to lowercase |
@@ -339,7 +339,7 @@ Updates allowed fields on the tag-bound `OrderVerification`. On success, attempt
 | 400 | `common.missingBodyParams` | Body is missing or empty |
 | 400 | `common.invalidBodyParams` | Malformed JSON or unknown field key (strict schema) |
 | 400 | `common.missingParams` | Body is valid but all field values are empty or non-updatable |
-| 400 | `fulfillment.errors.invalidDate` | `verifyDate` is not in `DD/MM/YYYY` format |
+| 400 | `fulfillment.errors.invalidDate` | `verifyDate` cannot be parsed as a date (e.g. `"not-a-date"`); both `DD/MM/YYYY` and ISO 8601 are accepted |
 | 400 | `fulfillment.errors.invalidField` | A provided field failed type validation |
 | 401 | `common.unauthorized` | Missing or invalid JWT |
 | 404 | `fulfillment.errors.notFound` | No `OrderVerification` with this `tagId` |
@@ -465,7 +465,7 @@ Updates supplier-editable fields on the verification record. Accepts JSON only.
 | 400 | `fulfillment.errors.invalidField` | A provided field failed type validation |
 | 400 | `fulfillment.errors.invalidPendingStatus` | `pendingStatus` is not a boolean |
 | 401 | `common.unauthorized` | Missing or invalid JWT |
-| 403 | `common.unauthorized` | Ownership check failed |
+| 403 | `common.unauthorized` | Ownership check failed — **note:** body validation runs before the ownership check; an authenticated non-owner sending an invalid or unknown field will get `400`, not `403` |
 | 404 | `fulfillment.errors.notFound` | No matching `OrderVerification` found |
 | 500 | `common.internalError` | Unexpected error |
 

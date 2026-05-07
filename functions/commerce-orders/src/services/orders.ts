@@ -1,10 +1,8 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
 import multipart from 'lambda-multipart-parser';
-import axios from 'axios';
 import {
   getFirstZodIssueMessage,
-  logInfo,
   requireAuthContext,
   requireRole,
 } from '@aws-ddd-api/shared';
@@ -13,13 +11,15 @@ import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
 import { purchaseConfirmationSchema } from '../zodSchema/orderSchema';
 import { sanitizeOrder, sanitizeOrderVerification } from '../utils/sanitize';
+import { addImageFileToStorage, uploadQrCodeImage } from '../utils/s3';
 import {
-  addImageFileToStorage,
-  uploadQrCodeImage,
-  ALLOWED_UPLOAD_MIME,
-  MAX_UPLOAD_BYTES,
-  detectMimeFromBuffer,
-} from '../utils/s3';
+  normalizeEmail,
+  validateUploadFiles,
+  generateUniqueTagId,
+  resolveCanonicalPrice,
+  resolveShortUrl,
+  type MultipartFile,
+} from '../utils/helpers';
 import { sendOrderEmail } from '../utils/smtp';
 import { sendWhatsAppOrderMessage } from '../utils/whatsapp';
 import { applyRateLimit } from '../utils/rateLimit';
@@ -28,85 +28,6 @@ import { response } from '../utils/response';
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 
 const PRIVILEGED_ROLES = new Set(['admin', 'developer']);
-
-function normalizeEmail(email: unknown): string {
-  return typeof email === 'string' ? email.trim().toLowerCase() : '';
-}
-
-// ── File validation ──────────────────────────────────────────────────────────
-
-interface MultipartFile {
-  content: Buffer;
-  filename: string;
-  fieldname: string;
-  contentType: string;
-  encoding: string;
-}
-
-function validateUploadFiles(files: MultipartFile[], maxCount = 1): string | null {
-  if (files.length > maxCount) return 'orders.errors.tooManyFiles';
-  for (const f of files) {
-    if (f.content.length > MAX_UPLOAD_BYTES) return 'orders.errors.fileTooLarge';
-    const detectedMime = detectMimeFromBuffer(f.content);
-    if (!detectedMime || !ALLOWED_UPLOAD_MIME.has(detectedMime)) return 'orders.errors.invalidFileType';
-  }
-  return null;
-}
-
-// ── Tag ID generation ────────────────────────────────────────────────────────
-
-const ALPHABET = 'ACDEFGHJKLMNPQRTUVWXYZ';
-const NUMBERS = '23456789';
-
-function pick(chars: string): string {
-  return chars[Math.floor(Math.random() * chars.length)];
-}
-
-function generateTagId(): string {
-  return pick(ALPHABET) + pick(NUMBERS) + pick(ALPHABET) + pick(NUMBERS) + pick(ALPHABET) + pick(NUMBERS);
-}
-
-async function generateUniqueTagId(): Promise<string> {
-  const OrderVerification = mongoose.model('OrderVerification');
-  let tagId: string;
-  do {
-    tagId = generateTagId();
-  } while (await OrderVerification.findOne({ tagId }, { _id: 1 }).lean());
-  return tagId;
-}
-
-// ── Pricing ──────────────────────────────────────────────────────────────────
-
-async function resolveCanonicalPrice(shopCode: string): Promise<{ canonicalPrice: number } | null> {
-  if (!shopCode) return null;
-  const ShopInfo = mongoose.model('ShopInfo');
-  const shop = (await ShopInfo.findOne({ shopCode }, { price: 1 }).lean()) as { price?: unknown } | null;
-  if (!shop) return null;
-  const canonicalPrice = typeof shop.price === 'number' ? shop.price : parseFloat(String(shop.price)) || 0;
-  return { canonicalPrice };
-}
-
-// ── URL shortening ────────────────────────────────────────────────────────────
-
-async function shortenUrl(longUrl: string): Promise<string> {
-  const apiKey = env.CUTTLY_API_KEY;
-  if (!apiKey) return longUrl;
-  try {
-    const res = await axios.get<{ url?: { shortLink?: string } }>('https://cutt.ly/api/api.php', {
-      params: { key: apiKey, short: longUrl },
-      timeout: 3000,
-    });
-    if (res.data?.url?.shortLink) return res.data.url.shortLink;
-    return longUrl;
-  } catch {
-    return longUrl;
-  }
-}
-
-async function resolveShortUrl(isPTagAir: boolean, tagId: string): Promise<string> {
-  if (isPTagAir) return 'www.ptag.com.hk/landing';
-  return shortenUrl(`https://www.ptag.com.hk/php/qr_info.php?qr=${tagId}`);
-}
 
 // ── GET /commerce/orders ─────────────────────────────────────────────────────
 
@@ -155,11 +76,9 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
  */
 export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
-  logInfo('[orders] step 1: auth ok', { event: ctx.event });
 
   // 2. Connect to DB first — rate limiter uses mongoose and needs an open connection
   await connectToMongoDB();
-  logInfo('[orders] step 2: db connected', { event: ctx.event });
 
   // 1. Rate limit (per IP, 10 requests/hour)
   const rateLimitResult = await applyRateLimit({
@@ -169,11 +88,9 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     windowSeconds: 3600,
   });
   if (rateLimitResult) return rateLimitResult;
-  logInfo('[orders] step 3: rate limit ok', { event: ctx.event });
 
   // 3. Parse multipart form data
   const parsed = await multipart.parse(ctx.event);
-  logInfo('[orders] step 4: multipart parsed', { event: ctx.event });
 
   // 4. Zod validation
   const parseResult = purchaseConfirmationSchema.safeParse(parsed);
@@ -202,7 +119,6 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   if (fileError) {
     return response.errorResponse(400, fileError, ctx.event);
   }
-  logInfo('[orders] step 6: file validation ok', { event: ctx.event });
 
   let petImgUrl = '';
   if (petImgFiles.length > 0) {
@@ -237,7 +153,6 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   if (await Order.findOne({ tempId }, { _id: 1 }).lean()) {
     return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
   }
-  logInfo('[orders] step 8: dup tempId check ok', { event: ctx.event });
 
   // 7. Resolve server-authoritative price
   const priceResult = await resolveCanonicalPrice(shopCode);
@@ -245,7 +160,6 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     return response.errorResponse(400, 'orders.errors.invalidShopCode', ctx.event);
   }
   const { canonicalPrice } = priceResult;
-  logInfo('[orders] step 9: price resolved', { event: ctx.event, extra: { canonicalPrice } });
 
   // 8. Create Order
   const isPTagAir = option === 'PTagAir' || option === 'PTagAir_member';
@@ -265,7 +179,6 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     });
     await newOrder.save();
     order = newOrder as unknown as Record<string, unknown>;
-    logInfo('[orders] step 10: Order.save ok', { event: ctx.event });
   } catch (saveErr) {
     if ((saveErr as { code?: number })?.code === 11000) {
       return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
@@ -283,15 +196,10 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     let tagIdAttempt = 0;
     while (true) {
       const tagId = await generateUniqueTagId();
-      logInfo('[orders] step 11: tagId generated', { event: ctx.event, extra: { tagId } });
-
       const shortUrl = await resolveShortUrl(isPTagAir, tagId);
-      logInfo('[orders] step 12: shortUrl resolved', { event: ctx.event, extra: { shortUrl } });
-
       const qrUrl = isPTagAir
         ? `${env.AWS_BUCKET_BASE_URL}/pet-images/ptag+id.png`
         : await uploadQrCodeImage(shortUrl);
-      logInfo('[orders] step 13: qrUrl ready', { event: ctx.event, extra: { qrUrl } });
 
       try {
         const OVModel = OrderVerification as unknown as new (data: Record<string, unknown>) => {
@@ -311,7 +219,6 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
         });
         await ov.save();
         savedVerification = ov as unknown as Record<string, unknown>;
-        logInfo('[orders] step 14: OrderVerification.save ok', { event: ctx.event });
         break;
       } catch (ovErr) {
         if ((ovErr as { code?: number })?.code === 11000 && ++tagIdAttempt < TAG_ID_MAX_RETRIES) {
@@ -330,7 +237,6 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
 
   // 12 & 13. Send confirmation email + WhatsApp notification in parallel (both non-fatal).
   // Running sequentially risks cutt.ly(3s) + SMTP(4s) + WhatsApp(4s) = 11s > Lambda 10s limit.
-  logInfo('[orders] step 15: starting email+whatsapp (parallel)', { event: ctx.event });
   await Promise.all([
     sendOrderEmail(
       email,
@@ -348,7 +254,6 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
       newOrderVerificationId
     ).catch(() => {}),
   ]);
-  logInfo('[orders] step 16: done, returning 200', { event: ctx.event });
 
 return response.successResponse(200, ctx.event, {
   message: 'Order placed successfully.',

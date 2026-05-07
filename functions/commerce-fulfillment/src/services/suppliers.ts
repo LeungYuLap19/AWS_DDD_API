@@ -28,71 +28,63 @@ type RawDocument = Record<string, unknown>;
  * Legacy: GET /v2/orderVerification/supplier/{orderId} (OrderVerification)
  */
 export async function handleGetSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  try {
-    requireAuthContext(ctx.event);
+  requireAuthContext(ctx.event);
 
-    const orderId = ctx.event.pathParameters?.orderId ?? '';
+  const orderId = ctx.event.pathParameters?.orderId ?? '';
 
-    if (!orderId) {
-      return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
-    }
-
-    await connectToMongoDB();
-    const OrderVerification = mongoose.model('OrderVerification') as mongoose.Model<RawDocument>;
-    const Order = mongoose.model('Order') as mongoose.Model<RawDocument>;
-
-    const authorization = await loadAuthorizedSupplierOrderVerification(
-      ctx.event,
-      OrderVerification,
-      Order,
-      orderId,
-      ORDER_VERIFICATION_READ_PROJECTION
-    );
-
-    if (!authorization.isValid) {
-      return authorization.error!;
-    }
-
-    const orderVerify = authorization.orderVerification;
-    if (!orderVerify) {
-      return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
-    }
-
-    const safeEntity = sanitizeOrderVerification(orderVerify) as RawDocument;
-    const form = {
-      tagId: safeEntity.tagId,
-      staffVerification: safeEntity.staffVerification,
-      contact: safeEntity.contact,
-      verifyDate: safeEntity.verifyDate,
-      tagCreationDate: safeEntity.tagCreationDate,
-      petName: safeEntity.petName,
-      shortUrl: safeEntity.shortUrl,
-      masterEmail: safeEntity.masterEmail,
-      qrUrl: safeEntity.qrUrl,
-      petUrl: safeEntity.petUrl,
-      orderId: safeEntity.orderId,
-      location: safeEntity.location,
-      petHuman: safeEntity.petHuman,
-      createdAt: safeEntity.createdAt,
-      updatedAt: safeEntity.updatedAt,
-      pendingStatus: safeEntity.pendingStatus,
-      option: safeEntity.option,
-      optionSize: safeEntity.optionSize,
-      optionColor: safeEntity.optionColor,
-    };
-
-    return response.successResponse(200, ctx.event, {
-      message: 'Order Verification info retrieved successfully',
-      form,
-      id: safeEntity._id,
-    });
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
-      return response.errorResponse(statusCode, (error as { errorKey?: string })?.errorKey ?? 'common.forbidden', ctx.event);
-    }
-    return response.errorResponse(500, 'common.internalError', ctx.event);
+  if (!orderId) {
+    return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
   }
+
+  await connectToMongoDB();
+  const OrderVerification = mongoose.model('OrderVerification') as mongoose.Model<RawDocument>;
+  const Order = mongoose.model('Order') as mongoose.Model<RawDocument>;
+
+  const authorization = await loadAuthorizedSupplierOrderVerification(
+    ctx.event,
+    OrderVerification,
+    Order,
+    orderId,
+    ORDER_VERIFICATION_READ_PROJECTION
+  );
+
+  if (!authorization.isValid) {
+    return authorization.error!;
+  }
+
+  const orderVerify = authorization.orderVerification;
+  if (!orderVerify) {
+    return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
+  }
+
+  const safeEntity = sanitizeOrderVerification(orderVerify) as RawDocument;
+  const form = {
+    tagId: safeEntity.tagId,
+    staffVerification: safeEntity.staffVerification,
+    contact: safeEntity.contact,
+    verifyDate: safeEntity.verifyDate,
+    tagCreationDate: safeEntity.tagCreationDate,
+    petName: safeEntity.petName,
+    shortUrl: safeEntity.shortUrl,
+    masterEmail: safeEntity.masterEmail,
+    qrUrl: safeEntity.qrUrl,
+    petUrl: safeEntity.petUrl,
+    orderId: safeEntity.orderId,
+    location: safeEntity.location,
+    petHuman: safeEntity.petHuman,
+    createdAt: safeEntity.createdAt,
+    updatedAt: safeEntity.updatedAt,
+    pendingStatus: safeEntity.pendingStatus,
+    option: safeEntity.option,
+    optionSize: safeEntity.optionSize,
+    optionColor: safeEntity.optionColor,
+  };
+
+  return response.successResponse(200, ctx.event, {
+    message: 'Order Verification info retrieved successfully',
+    form,
+    id: safeEntity._id,
+  });
 }
 
 /**
@@ -103,84 +95,76 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
  * Legacy: PUT /v2/orderVerification/supplier/{orderId} (OrderVerification)
  */
 export async function handlePatchSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  try {
-    requireAuthContext(ctx.event);
+  requireAuthContext(ctx.event);
 
-    const orderId = ctx.event.pathParameters?.orderId ?? '';
+  const orderId = ctx.event.pathParameters?.orderId ?? '';
 
-    if (!orderId) {
-      return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
-    }
+  if (!orderId) {
+    return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
+  }
 
-    const parsed = parseBody(ctx.body, supplierUpdateSchema);
-    if (!parsed.ok) {
-      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-    }
+  await connectToMongoDB();
+  const OrderVerification = mongoose.model('OrderVerification') as mongoose.Model<RawDocument>;
+  const Order = mongoose.model('Order') as mongoose.Model<RawDocument>;
 
-    const payload = parsed.data;
+  const authorization = await loadAuthorizedSupplierOrderVerification(
+    ctx.event,
+    OrderVerification,
+    Order,
+    orderId,
+    '_id orderId masterEmail'
+  );
 
-    await connectToMongoDB();
-    const OrderVerification = mongoose.model('OrderVerification') as mongoose.Model<RawDocument>;
-    const Order = mongoose.model('Order') as mongoose.Model<RawDocument>;
+  if (!authorization.isValid) {
+    return authorization.error!;
+  }
 
-    const authorization = await loadAuthorizedSupplierOrderVerification(
-      ctx.event,
-      OrderVerification,
-      Order,
-      orderId,
-      '_id orderId masterEmail'
+  const existingOrderVerification = authorization.orderVerification;
+  if (!existingOrderVerification) {
+    return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
+  }
+
+  const parsed = parseBody(ctx.body, supplierUpdateSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
+  const payload = parsed.data;
+
+  const setFields: Record<string, unknown> = {};
+  if (payload.contact) setFields['contact'] = normalizePhone(payload.contact);
+  if (payload.petName) setFields['petName'] = payload.petName;
+  if (payload.shortUrl) setFields['shortUrl'] = payload.shortUrl;
+  if (payload.masterEmail) setFields['masterEmail'] = normalizeEmail(payload.masterEmail);
+  if (payload.location) setFields['location'] = payload.location;
+  if (payload.petHuman) setFields['petHuman'] = payload.petHuman;
+  if (payload.pendingStatus !== undefined) setFields['pendingStatus'] = payload.pendingStatus;
+  if (payload.qrUrl) setFields['qrUrl'] = payload.qrUrl;
+  if (payload.petUrl) setFields['petUrl'] = payload.petUrl;
+
+  if (Object.keys(setFields).length === 0 && !payload.petContact) {
+    return response.errorResponse(400, 'common.missingParams', ctx.event);
+  }
+
+  if (payload.petContact && existingOrderVerification.orderId) {
+    await Order.updateOne(
+      { tempId: existingOrderVerification.orderId },
+      { $set: { petContact: normalizePhone(payload.petContact) } }
     );
+  }
 
-    if (!authorization.isValid) {
-      return authorization.error!;
-    }
+  if (Object.keys(setFields).length > 0) {
+    const updateResult = await OrderVerification.updateOne(
+      { _id: existingOrderVerification._id },
+      { $set: setFields }
+    ) as { matchedCount: number };
 
-    const existingOrderVerification = authorization.orderVerification;
-    if (!existingOrderVerification) {
+    if (updateResult.matchedCount === 0) {
       return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
     }
-
-    const setFields: Record<string, unknown> = {};
-    if (payload.contact) setFields['contact'] = normalizePhone(payload.contact);
-    if (payload.petName) setFields['petName'] = payload.petName;
-    if (payload.shortUrl) setFields['shortUrl'] = payload.shortUrl;
-    if (payload.masterEmail) setFields['masterEmail'] = normalizeEmail(payload.masterEmail);
-    if (payload.location) setFields['location'] = payload.location;
-    if (payload.petHuman) setFields['petHuman'] = payload.petHuman;
-    if (payload.pendingStatus !== undefined) setFields['pendingStatus'] = payload.pendingStatus;
-    if (payload.qrUrl) setFields['qrUrl'] = payload.qrUrl;
-    if (payload.petUrl) setFields['petUrl'] = payload.petUrl;
-
-    if (Object.keys(setFields).length === 0 && !payload.petContact) {
-      return response.errorResponse(400, 'common.missingParams', ctx.event);
-    }
-
-    if (payload.petContact && existingOrderVerification.orderId) {
-      await Order.updateOne(
-        { tempId: existingOrderVerification.orderId },
-        { $set: { petContact: normalizePhone(payload.petContact) } }
-      );
-    }
-
-    if (Object.keys(setFields).length > 0) {
-      const updateResult = await OrderVerification.updateOne(
-        { _id: existingOrderVerification._id },
-        { $set: setFields }
-      ) as { matchedCount: number };
-
-      if (updateResult.matchedCount === 0) {
-        return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
-      }
-    }
-
-    return response.successResponse(200, ctx.event, {
-      message: 'Tag info updated successfully',
-    });
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
-      return response.errorResponse(statusCode, (error as { errorKey?: string })?.errorKey ?? 'common.forbidden', ctx.event);
-    }
-    return response.errorResponse(500, 'common.internalError', ctx.event);
   }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'Tag info updated successfully',
+  });
 }
