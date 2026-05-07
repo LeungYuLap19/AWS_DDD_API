@@ -8,7 +8,8 @@
       "invalidField": "Invalid field value.",
       "invalidPendingStatus": "pendingStatus must be a boolean.",
       "invalidEmail": "Invalid email address.",
-      "invalidLocationURL": "Location URL must be a valid HTTPS address."
+      "invalidLocationURL": "Location URL must be a valid HTTPS address.",
+      "emailServiceUnavailable": "Email service is currently unavailable"
     }
   }
 }

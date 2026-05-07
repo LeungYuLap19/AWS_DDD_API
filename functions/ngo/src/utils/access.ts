@@ -1,7 +1,6 @@
-import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
+import { HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
-import { response } from './response';
 
 export type NgoAuthContext = {
   userId: string;
@@ -28,15 +27,10 @@ export type NgoUserAccessDocument = {
 export async function requireAuthorizedNgoAccess(
   ctx: RouteContext,
   authContext: NgoAuthContext
-): Promise<
-  | {
-      ngo: NgoDocument;
-      ngoUserAccess: NgoUserAccessDocument;
-    }
-  | {
-      errorResponse: APIGatewayProxyResult;
-    }
-> {
+): Promise<{
+  ngo: NgoDocument;
+  ngoUserAccess: NgoUserAccessDocument;
+}> {
   const NGO = mongoose.model('NGO');
   const NgoUserAccess = mongoose.model('NgoUserAccess');
 
@@ -50,21 +44,15 @@ export async function requireAuthorizedNgoAccess(
   ]);
 
   if (!ngo) {
-    return {
-      errorResponse: response.errorResponse(404, 'ngo.errors.notFound', ctx.event),
-    };
+    throw new HttpError('ngo.errors.notFound', 404);
   }
 
   if (!ngo.isActive || !ngo.isVerified) {
-    return {
-      errorResponse: response.errorResponse(403, 'common.unauthorized', ctx.event),
-    };
+    throw new HttpError('common.forbidden', 403);
   }
 
   if (!ngoUserAccess) {
-    return {
-      errorResponse: response.errorResponse(403, 'common.unauthorized', ctx.event),
-    };
+    throw new HttpError('common.forbidden', 403);
   }
 
   return { ngo, ngoUserAccess };

@@ -60,14 +60,14 @@ export async function createShipment({
       if (!isPrivileged) {
         const callerEmail = normalizeEmail(auth?.userEmail);
         if (!callerEmail) {
-          return response.errorResponse(403, 'common.unauthorized', event);
+          return response.errorResponse(403, 'common.forbidden', event);
         }
 
         const unauthorizedOrder = orders.find(
           (order) => normalizeEmail(order.email) !== callerEmail
         );
         if (unauthorizedOrder) {
-          return response.errorResponse(403, 'common.unauthorized', event);
+          return response.errorResponse(403, 'common.forbidden', event);
         }
       }
 

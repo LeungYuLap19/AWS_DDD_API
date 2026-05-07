@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import axios from 'axios';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { logWarn } from '@aws-ddd-api/shared';
 import env from '../config/env';
 import s3Client from '../config/s3';
 
@@ -132,7 +133,8 @@ export async function uploadQrCodeImage(shortUrl: string): Promise<string> {
     );
 
     return url;
-  } catch {
+  } catch (error) {
+    logWarn('QR code S3 upload failed, falling back to external URL', { error, scope: 'commerce-orders.utils.s3' });
     return qrApiUrl;
   }
 }

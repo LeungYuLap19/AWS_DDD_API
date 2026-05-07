@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import axios from 'axios';
+import { logWarn } from '@aws-ddd-api/shared';
 import env from '../config/env';
 import { ALLOWED_UPLOAD_MIME, MAX_UPLOAD_BYTES, detectMimeFromBuffer } from './s3';
 
@@ -74,7 +75,8 @@ async function shortenUrl(longUrl: string): Promise<string> {
     });
     if (res.data?.url?.shortLink) return res.data.url.shortLink;
     return longUrl;
-  } catch {
+  } catch (error) {
+    logWarn('URL shortening failed, falling back to original URL', { error, scope: 'commerce-orders.utils.helpers' });
     return longUrl;
   }
 }

@@ -33,13 +33,17 @@ export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGateway
   params.append('species', parsed.data.species);
   params.append('url', parsed.data.url);
 
-  const analysisResponse = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
-  });
-
-  const result = await analysisResponse.json();
+  let result: unknown;
+  try {
+    const analysisResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    result = await analysisResponse.json();
+  } catch {
+    return response.errorResponse(502, 'petAnalysis.errors.analysisError', ctx.event);
+  }
 
   return response.successResponse(200, ctx.event, {
     message: 'success.completed',

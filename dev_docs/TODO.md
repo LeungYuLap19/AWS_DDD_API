@@ -5,7 +5,7 @@
 - [x] service function flow
 - [x] locale keys
 - [x] response format
-- [ ] error handling
+- [x] error handling
 - [ ] all list need pagination
 - [ ] S3 and multipart
   - formadata only in mutipart route (do not mix json + multipart)

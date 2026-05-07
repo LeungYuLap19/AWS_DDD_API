@@ -1,7 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
 import multipart from 'lambda-multipart-parser';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseBody, requireAuthContext, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
@@ -124,7 +124,12 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
 
     await loadAuthorizedPet(ctx.event, petId, { allowNgo: true });
 
-    const formData = await multipart.parse(ctx.event);
+    let formData: Awaited<ReturnType<typeof multipart.parse>>;
+    try {
+      formData = await multipart.parse(ctx.event);
+    } catch {
+      return response.errorResponse(400, 'petAnalysis.errors.invalidMultipart', ctx.event);
+    }
     const imageUrl = toTrimmedString(formData.image_url);
     const file = formData.files?.[0];
 
@@ -205,8 +210,8 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
     try {
       activityLog.error = 'INTERNAL_ERROR';
       await activityLog.save();
-    } catch {
-      // ignore activity log failure during error flow
+    } catch (logError) {
+      logWarn('Activity log save failed during error flow', { error: logError, scope: 'pet-analysis.services.eye' });
     }
     throw error;
   }
@@ -280,5 +285,5 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
     return response.errorResponse(410, 'petAnalysis.errors.updatePetEye.petDeleted', ctx.event);
   }
 
-  return response.errorResponse(403, 'common.unauthorized', ctx.event);
+  return response.errorResponse(403, 'common.forbidden', ctx.event);
 }

@@ -55,26 +55,23 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
 
   if (!userRole || !PRIVILEGED_ROLES.has(userRole)) {
     if (orderVerify.orderId) {
-      const orderAuth = await loadAuthorizedOrderByTempId(
+      const { order } = await loadAuthorizedOrderByTempId(
         ctx.event,
         Order,
         orderVerify.orderId as string
       );
-      if (!orderAuth.isValid) {
-        return orderAuth.error!;
-      }
-      if (!orderAuth.order) {
+      if (!order) {
         const callerEmail = normalizeEmail(authContext?.userEmail);
         const ownerEmail = normalizeEmail(orderVerify.masterEmail as string | undefined);
         if (!callerEmail || !ownerEmail || callerEmail !== ownerEmail) {
-          return response.errorResponse(403, 'common.unauthorized', ctx.event);
+          return response.errorResponse(403, 'common.forbidden', ctx.event);
         }
       }
     } else {
       const callerEmail = normalizeEmail(authContext?.userEmail);
       const ownerEmail = normalizeEmail(orderVerify.masterEmail as string | undefined);
       if (!callerEmail || !ownerEmail || callerEmail !== ownerEmail) {
-        return response.errorResponse(403, 'common.unauthorized', ctx.event);
+        return response.errorResponse(403, 'common.forbidden', ctx.event);
       }
     }
   }

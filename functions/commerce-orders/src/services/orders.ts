@@ -4,6 +4,7 @@ import {
   parseMultipartBody,
   requireAuthContext,
   requireRole,
+  logWarn,
 } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
@@ -143,20 +144,15 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     discountProofUrl = urls[0] ?? '';
   }
 
-  // 6. Duplicate tempId guard
-  const Order = mongoose.model('Order');
-  if (await Order.findOne({ tempId }, { _id: 1 }).lean()) {
-    return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
-  }
-
-  // 7. Resolve server-authoritative price
+  // 6. Resolve server-authoritative price
   const priceResult = await resolveCanonicalPrice(shopCode);
   if (!priceResult) {
     return response.errorResponse(400, 'orders.errors.invalidShopCode', ctx.event);
   }
   const { canonicalPrice } = priceResult;
 
-  // 8. Create Order
+  // 7. Create Order
+  const Order = mongoose.model('Order');
   const isPTagAir = option === 'PTagAir' || option === 'PTagAir_member';
 
   let order: Record<string, unknown>;
@@ -224,7 +220,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     }
   } catch (postOrderErr) {
     // Compensate: remove dangling Order so the user can retry with the same tempId
-    await Order.deleteOne({ _id: order['_id'] }).catch(() => {});
+    await Order.deleteOne({ _id: order['_id'] }).catch((error) => logWarn('Order compensation delete failed', { event: ctx.event, error, scope: 'commerce-orders.services.orders' }));
     throw postOrderErr;
   }
 
@@ -243,11 +239,11 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
       },
       'support@ptag.com.hk',
       newOrderVerificationId
-    ).catch(() => {}),
+    ).catch((error) => logWarn('Order confirmation email dispatch failed', { event: ctx.event, error, scope: 'commerce-orders.services.orders' })),
     sendWhatsAppOrderMessage(
       { phoneNumber, lastName, option, tempId, lang },
       newOrderVerificationId
-    ).catch(() => {}),
+    ).catch((error) => logWarn('WhatsApp order notification dispatch failed', { event: ctx.event, error, scope: 'commerce-orders.services.orders' })),
   ]);
 
 return response.successResponse(200, ctx.event, {

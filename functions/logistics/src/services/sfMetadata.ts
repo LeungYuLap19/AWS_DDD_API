@@ -28,7 +28,12 @@ export async function getToken({ event }: RouteContext): Promise<APIGatewayProxy
   });
   if (rateLimitResult) return rateLimitResult;
 
-  const bearerToken = await fetchAddressToken();
+  let bearerToken: unknown;
+  try {
+    bearerToken = await fetchAddressToken();
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
+  }
   return response.successResponse(200, event, { message: 'success.retrieved', data: { bearerToken } });
 }
 
@@ -47,7 +52,12 @@ export async function getArea({ event, body }: RouteContext): Promise<APIGateway
   });
   if (rateLimitResult) return rateLimitResult;
 
-  const areaList = await fetchAreaList(parsed.data.token);
+  let areaList: unknown;
+  try {
+    areaList = await fetchAreaList(parsed.data.token);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
+  }
   return response.successResponse(200, event, { message: 'success.retrieved', data: { areaList } });
 }
 
@@ -66,7 +76,12 @@ export async function getNetCode({ event, body }: RouteContext): Promise<APIGate
   });
   if (rateLimitResult) return rateLimitResult;
 
-  const netCode = await fetchNetCodeList(parsed.data);
+  let netCode: unknown;
+  try {
+    netCode = await fetchNetCodeList(parsed.data);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
+  }
   return response.successResponse(200, event, { message: 'success.retrieved', data: { netCode } });
 }
 
@@ -88,7 +103,12 @@ export async function getPickupLocations({
   });
   if (rateLimitResult) return rateLimitResult;
 
-  const addresses = await fetchPickupAddresses(parsed.data);
+  let addresses: unknown;
+  try {
+    addresses = await fetchPickupAddresses(parsed.data);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
+  }
   return response.successResponse(200, event, { message: 'success.retrieved', data: { addresses } });
 }
 

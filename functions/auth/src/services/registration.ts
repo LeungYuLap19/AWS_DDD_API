@@ -1,5 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { isTrue, parseBody } from '@aws-ddd-api/shared';
+import { isTrue, logWarn, parseBody } from '@aws-ddd-api/shared';
 import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
 import type { RouteContext } from '../../../../types/lambda';
@@ -45,12 +45,16 @@ async function hasRecentVerificationProof(email?: string, phoneNumber?: string):
 async function consumeVerificationProofs(email?: string, phoneNumber?: string) {
   if (email) {
     const EmailVerificationCode = mongoose.model('EmailVerificationCode');
-    await EmailVerificationCode.deleteOne({ _id: email }).catch(() => undefined);
+    await EmailVerificationCode.deleteOne({ _id: email }).catch((error) =>
+      logWarn('Verification cleanup failed for email code', { error, scope: 'auth.services.registration' })
+    );
   }
 
   if (phoneNumber) {
     const SmsVerificationCode = mongoose.model('SmsVerificationCode');
-    await SmsVerificationCode.deleteOne({ _id: phoneNumber }).catch(() => undefined);
+    await SmsVerificationCode.deleteOne({ _id: phoneNumber }).catch((error) =>
+      logWarn('Verification cleanup failed for SMS code', { error, scope: 'auth.services.registration' })
+    );
   }
 }
 

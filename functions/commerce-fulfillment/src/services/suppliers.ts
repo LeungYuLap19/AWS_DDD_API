@@ -48,10 +48,6 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
     ORDER_VERIFICATION_READ_PROJECTION
   );
 
-  if (!authorization.isValid) {
-    return authorization.error!;
-  }
-
   const orderVerify = authorization.orderVerification;
   if (!orderVerify) {
     return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
@@ -118,10 +114,6 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
     orderId,
     '_id orderId masterEmail'
   );
-
-  if (!authorization.isValid) {
-    return authorization.error!;
-  }
 
   const existingOrderVerification = authorization.orderVerification;
   if (!existingOrderVerification) {

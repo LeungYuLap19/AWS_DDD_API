@@ -44,7 +44,7 @@ export async function loadAuthorizedPet(
     String(pet.ngoId) === String(authContext.ngoId);
 
   if (!isOwner && !isNgoOwner) {
-    throw new HttpError('common.unauthorized', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 
   return pet;

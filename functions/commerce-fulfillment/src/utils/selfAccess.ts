@@ -1,7 +1,6 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { getAuthContext } from '@aws-ddd-api/shared';
-import { response } from './response';
+import { getAuthContext, HttpError } from '@aws-ddd-api/shared';
 import { normalizeEmail } from './normalize';
 
 const PRIVILEGED_ROLES = new Set(['admin', 'developer']);
@@ -16,42 +15,26 @@ function getCallerEmail(event: APIGatewayProxyEvent): string | undefined {
   return normalizeEmail(authContext?.userEmail);
 }
 
-interface OwnerValidation {
-  isValid: boolean;
-  error?: ReturnType<typeof response.errorResponse>;
-}
-
-function validateOwnerEmail(event: APIGatewayProxyEvent, ownerEmail: string | undefined): OwnerValidation {
-  if (isPrivilegedCaller(event)) {
-    return { isValid: true };
-  }
+function validateOwnerEmail(event: APIGatewayProxyEvent, ownerEmail: string | undefined): void {
+  if (isPrivilegedCaller(event)) return;
 
   const callerEmail = getCallerEmail(event);
   const normalizedOwnerEmail = normalizeEmail(ownerEmail);
 
   if (!callerEmail || !normalizedOwnerEmail || callerEmail !== normalizedOwnerEmail) {
-    return {
-      isValid: false,
-      error: response.errorResponse(403, 'common.unauthorized', event),
-    };
+    throw new HttpError('common.forbidden', 403);
   }
-
-  return { isValid: true };
 }
 
 type RawDocument = Record<string, unknown>;
 
-interface OrderAuthorization {
-  isValid: boolean;
-  error?: ReturnType<typeof response.errorResponse>;
-  order?: RawDocument | null;
+interface OrderResult {
+  order: RawDocument | null;
 }
 
-interface OrderVerificationAuthorization {
-  isValid: boolean;
-  error?: ReturnType<typeof response.errorResponse>;
-  orderVerification?: RawDocument | null;
-  order?: RawDocument | null;
+interface OrderVerificationResult {
+  orderVerification: RawDocument | null;
+  order: RawDocument | null;
 }
 
 const ORDER_OWNERSHIP_PROJECTION = '_id tempId email';
@@ -61,18 +44,15 @@ export async function loadAuthorizedOrderByTempId(
   Order: mongoose.Model<RawDocument>,
   tempId: string,
   projection = ORDER_OWNERSHIP_PROJECTION
-): Promise<OrderAuthorization> {
+): Promise<OrderResult> {
   const order = await Order.findOne({ tempId }).select(projection).lean() as RawDocument | null;
   if (!order) {
-    return { isValid: true, order: null };
+    return { order: null };
   }
 
-  const validation = validateOwnerEmail(event, order.email as string | undefined);
-  if (!validation.isValid) {
-    return validation;
-  }
+  validateOwnerEmail(event, order.email as string | undefined);
 
-  return { isValid: true, order };
+  return { order };
 }
 
 export async function loadAuthorizedSupplierOrderVerification(
@@ -81,7 +61,7 @@ export async function loadAuthorizedSupplierOrderVerification(
   Order: mongoose.Model<RawDocument>,
   identifier: string,
   projection: string
-): Promise<OrderVerificationAuthorization> {
+): Promise<OrderVerificationResult> {
   let orderVerification = (await OrderVerification.findOne({ orderId: identifier }).select(projection).lean()) as RawDocument | null;
   if (!orderVerification) {
     orderVerification = (await OrderVerification.findOne({ contact: identifier }).select(projection).lean()) as RawDocument | null;
@@ -91,31 +71,25 @@ export async function loadAuthorizedSupplierOrderVerification(
   }
 
   if (!orderVerification) {
-    return { isValid: true, orderVerification: null, order: null };
+    return { orderVerification: null, order: null };
   }
 
   if (isPrivilegedCaller(event)) {
-    return { isValid: true, orderVerification, order: null };
+    return { orderVerification, order: null };
   }
 
   if (orderVerification.orderId) {
-    const orderAuth = await loadAuthorizedOrderByTempId(
+    const { order } = await loadAuthorizedOrderByTempId(
       event,
       Order,
       orderVerification.orderId as string
     );
-    if (!orderAuth.isValid) {
-      return orderAuth;
-    }
-    if (orderAuth.order) {
-      return { isValid: true, orderVerification, order: orderAuth.order };
+    if (order) {
+      return { orderVerification, order };
     }
   }
 
-  const fallback = validateOwnerEmail(event, orderVerification.masterEmail as string | undefined);
-  if (!fallback.isValid) {
-    return fallback;
-  }
+  validateOwnerEmail(event, orderVerification.masterEmail as string | undefined);
 
-  return { isValid: true, orderVerification, order: null };
+  return { orderVerification, order: null };
 }

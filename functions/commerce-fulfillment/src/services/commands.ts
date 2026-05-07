@@ -66,13 +66,17 @@ export async function handleSendPtagDetectionEmail(ctx: RouteContext): Promise<A
 
   const html = renderPtagDetectionEmail(name, tagId, dateTime, locationURL);
 
-  await createSmtpTransporter().sendMail({
-    from: process.env.SMTP_FROM,
-    to: email,
-    cc: 'notification@ptag.com.hk',
-    subject: `PTag | 您的寵物 ${name} (${tagId}) 最新位置更新 | Your pet ${name} (${tagId}) Latest location update`,
-    html,
-  });
+  try {
+    await createSmtpTransporter().sendMail({
+      from: process.env.SMTP_FROM,
+      to: email,
+      cc: 'notification@ptag.com.hk',
+      subject: `PTag | 您的寵物 ${name} (${tagId}) 最新位置更新 | Your pet ${name} (${tagId}) Latest location update`,
+      html,
+    });
+  } catch {
+    return response.errorResponse(503, 'fulfillment.errors.emailServiceUnavailable', ctx.event);
+  }
 
   return response.successResponse(200, ctx.event, {
     message: 'success.created',

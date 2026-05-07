@@ -8,7 +8,8 @@
       "invalidField": "欄位值不正確。",
       "invalidPendingStatus": "pendingStatus 必須為布林値。",
       "invalidEmail": "電郵地址格式無效。",
-      "invalidLocationURL": "位置連結必須是有效的 HTTPS 地址。"
+      "invalidLocationURL": "位置連結必須是有效的 HTTPS 地址。",
+      "emailServiceUnavailable": "電郵服務暫時無法使用"
     }
   }
 }

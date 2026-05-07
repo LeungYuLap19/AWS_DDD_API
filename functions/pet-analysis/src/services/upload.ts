@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import multipart from 'lambda-multipart-parser';
-import { requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { applyRateLimit } from '../utils/rateLimit';
@@ -26,7 +26,13 @@ export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayPr
     return rateLimitResponse;
   }
 
-  const formData = await multipart.parse(ctx.event);
+  let formData: Awaited<ReturnType<typeof multipart.parse>>;
+  try {
+    formData = await multipart.parse(ctx.event);
+  } catch (error) {
+    logWarn('Multipart parse failed', { event: ctx.event, error, scope: 'pet-analysis.services.upload.handleUploadImage' });
+    return response.errorResponse(400, 'petAnalysis.errors.invalidMultipart', ctx.event);
+  }
   const files = formData.files || [];
 
   if (files.length === 0) {
@@ -71,7 +77,13 @@ export async function handleUploadPetBreedImage(
     return rateLimitResponse;
   }
 
-  const formData = await multipart.parse(ctx.event);
+  let formData: Awaited<ReturnType<typeof multipart.parse>>;
+  try {
+    formData = await multipart.parse(ctx.event);
+  } catch (error) {
+    logWarn('Multipart parse failed', { event: ctx.event, error, scope: 'pet-analysis.services.upload.handleUploadPetBreedImage' });
+    return response.errorResponse(400, 'petAnalysis.errors.invalidMultipart', ctx.event);
+  }
   const firstFile = formData.files?.[0];
 
   if (!firstFile) {

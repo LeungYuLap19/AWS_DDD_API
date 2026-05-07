@@ -37,7 +37,7 @@ type UserDocument = {
 function requireNgoContext(ctx: RouteContext): NgoAuthContext {
   const authContext = requireAuthContext(ctx.event);
   if (authContext.userRole !== 'ngo' || !authContext.ngoId) {
-    throw new HttpError('common.unauthorized', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 
   return authContext;
@@ -51,9 +51,6 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
   const NgoCounters = mongoose.model('NgoCounters');
 
   const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
-  if ('errorResponse' in authorizedNgo) {
-    return authorizedNgo.errorResponse;
-  }
 
   const results = await Promise.allSettled([
     User.findOne({ _id: authContext.userId, deleted: false }).lean(),
@@ -89,10 +86,10 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
       ngoProfile: sanitizeNgo(authorizedNgo.ngo),
       ngoUserAccessProfile: sanitizeNgoUserAccess(authorizedNgo.ngoUserAccess),
       ngoCounters: sanitizeNgoCounters(pick(1) as Record<string, unknown> | null),
-    },
-    warnings: {
-      userProfile: warningKey(0, 'userProfile'),
-      ngoCounters: warningKey(1, 'ngoCounters'),
+      warnings: {
+        userProfile: warningKey(0, 'userProfile'),
+        ngoCounters: warningKey(1, 'ngoCounters'),
+      },
     },
   });
 }
@@ -101,9 +98,6 @@ export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayPro
   const authContext = requireNgoContext(ctx);
   await connectToMongoDB();
   const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
-  if ('errorResponse' in authorizedNgo) {
-    return authorizedNgo.errorResponse;
-  }
 
   const searchRaw = (ctx.event.queryStringParameters?.search || '').trim();
   const search = escapeRegex(searchRaw);
@@ -142,9 +136,6 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   try {
     const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
-    if ('errorResponse' in authorizedNgo) {
-      return authorizedNgo.errorResponse;
-    }
 
     const USER_ALLOWED = new Set(['firstName', 'lastName', 'email', 'phoneNumber', 'gender']);
     const NGO_ALLOWED = new Set([
@@ -195,7 +186,7 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
       typeof ngoDot.registrationNumber === 'string' ? ngoDot.registrationNumber : undefined;
 
     if (!isAdmin && (hasKeys(ngoDot) || hasKeys(countersDot) || hasKeys(accessDot))) {
-      return response.errorResponse(403, 'common.unauthorized', ctx.event);
+      return response.errorResponse(403, 'common.forbidden', ctx.event);
     }
 
     if (userDot.email) {
@@ -274,7 +265,7 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
       if (!responseData.ngoUserAccessProfile) {
         await session.abortTransaction();
-        return response.errorResponse(403, 'common.unauthorized', ctx.event);
+        return response.errorResponse(403, 'common.forbidden', ctx.event);
       }
     }
 
