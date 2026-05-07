@@ -73,16 +73,26 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
     });
   }
 
+  const params = ctx.event.queryStringParameters ?? {};
+  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(params.limit ?? '20', 10) || 20));
+  const skip = (page - 1) * limit;
+
   const EyeAnalysis = mongoose.model('EyeAnalysisRecord');
-  const eyeAnalysisLogList = (await EyeAnalysis.find({ petId: identifier })
-    .select('_id petId image eyeSide result createdAt updatedAt')
-    .sort({ createdAt: -1 })
-    .limit(100)
-    .lean()) as Record<string, unknown>[];
+  const [eyeAnalysisLogList, total] = (await Promise.all([
+    EyeAnalysis.find({ petId: identifier })
+      .select('_id petId image eyeSide result createdAt updatedAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    EyeAnalysis.countDocuments({ petId: identifier }),
+  ])) as [Record<string, unknown>[], number];
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: eyeAnalysisLogList.map(sanitizeEyeLog),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 

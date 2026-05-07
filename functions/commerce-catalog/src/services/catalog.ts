@@ -8,9 +8,23 @@ import { response } from '../utils/response';
 
 export async function handleGetCatalog(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
+
+  const params = ctx.event.queryStringParameters ?? {};
+  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(params.limit ?? '100', 10) || 100));
+  const skip = (page - 1) * limit;
+
   const ProductList = mongoose.model('ProductList');
-  const items = await ProductList.find({}).lean();
-  return response.successResponse(200, ctx.event, { message: 'success.retrieved', data: items });
+  const [items, total] = await Promise.all([
+    ProductList.find({}).skip(skip).limit(limit).lean(),
+    ProductList.countDocuments({}),
+  ]);
+
+  return response.successResponse(200, ctx.event, {
+    message: 'success.retrieved',
+    data: items,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  });
 }
 
 export async function handleCreateCatalogEvent(ctx: RouteContext): Promise<APIGatewayProxyResult> {

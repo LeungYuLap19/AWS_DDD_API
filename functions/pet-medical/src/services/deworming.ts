@@ -26,14 +26,21 @@ export async function handleListDewormRecords(
 
   await loadAuthorizedPet(ctx.event, petId);
 
+  const params = ctx.event.queryStringParameters ?? {};
+  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(params.limit ?? '20', 10) || 20));
+  const skip = (page - 1) * limit;
+
   const DewormRecords = mongoose.model('Deworm_Records');
-  const records = await DewormRecords.find({ petId })
-    .select(PROJECTION)
-    .lean();
+  const [records, total] = await Promise.all([
+    DewormRecords.find({ petId }).select(PROJECTION).skip(skip).limit(limit).lean(),
+    DewormRecords.countDocuments({ petId }),
+  ]);
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: records.map((r) => sanitizeRecord(r as Record<string, unknown>)),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 

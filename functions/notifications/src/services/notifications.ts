@@ -28,15 +28,26 @@ export async function handleListNotifications(ctx: RouteContext): Promise<APIGat
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
 
+  const params = ctx.event.queryStringParameters ?? {};
+  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(params.limit ?? '20', 10) || 20));
+  const skip = (page - 1) * limit;
+
   const Notifications = mongoose.model('Notifications');
-  const notifications = (await Notifications.find({ userId: authContext.userId })
-    .select('-__v')
-    .sort({ createdAt: -1 })
-    .lean()) as Record<string, unknown>[];
+  const [notifications, total] = (await Promise.all([
+    Notifications.find({ userId: authContext.userId })
+      .select('-__v')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Notifications.countDocuments({ userId: authContext.userId }),
+  ])) as [Record<string, unknown>[], number];
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: notifications,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 

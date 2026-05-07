@@ -6,7 +6,7 @@
 - [x] locale keys
 - [x] response format
 - [x] error handling
-- [ ] all list need pagination
+- [x] all list enforce pagination
 - [ ] S3 and multipart
   - formadata only in mutipart route (do not mix json + multipart)
 - [ ] retest, api docs update

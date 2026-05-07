@@ -61,7 +61,7 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: (orders as Record<string, unknown>[]).map(sanitizeOrder),
-    pagination: { page, limit, total },
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 
@@ -331,7 +331,7 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: allOrders.map(sanitizeOrderVerification),
-    pagination: { page, limit, total },
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 

@@ -15,12 +15,21 @@ export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayP
   requireAuthContext(ctx.event);
   await connectToMongoDB();
 
+  const params = ctx.event.queryStringParameters ?? {};
+  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(params.limit ?? '20', 10) || 20));
+  const skip = (page - 1) * limit;
+
   const PetFound = mongoose.model('PetFound');
-  const records = await PetFound.find({}).select('-__v').sort({ foundDate: -1 }).lean();
+  const [records, total] = await Promise.all([
+    PetFound.find({}).select('-__v').sort({ foundDate: -1 }).skip(skip).limit(limit).lean(),
+    PetFound.countDocuments({}),
+  ]);
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: records.map(sanitizePetFound),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 

@@ -124,7 +124,7 @@ export async function handleGetAdoptionList(ctx: RouteContext): Promise<APIGatew
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: adoptionList.map(sanitizeBrowseAdoption),
-    pagination: { page, limit: PAGE_SIZE, total: totalResult, maxPage },
+    pagination: { page, limit: PAGE_SIZE, total: totalResult, totalPages: Math.ceil(totalResult / PAGE_SIZE) },
   });
 }
 

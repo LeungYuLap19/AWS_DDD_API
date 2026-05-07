@@ -112,7 +112,7 @@ export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayPro
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: members,
-    pagination: { totalPages, totalDocs },
+    pagination: { page, limit: 50, total: totalDocs, totalPages },
   });
 }
 

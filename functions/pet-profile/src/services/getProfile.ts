@@ -105,7 +105,7 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
     return response.successResponse(200, ctx.event, {
       message: 'success.retrieved',
       data: sanitizePetListSummary(pets),
-      pagination: { page: pageNumber, limit: 30, total: totalNumber },
+      pagination: { page: pageNumber, limit: 30, total: totalNumber, totalPages: Math.ceil(totalNumber / 30) },
     });
   }
 
@@ -122,6 +122,6 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: sanitizePetListSummary(pets),
-    pagination: { page: pageNumber, limit: 10, total: totalNumber },
+    pagination: { page: pageNumber, limit: 10, total: totalNumber, totalPages: Math.ceil(totalNumber / 10) },
   });
 }
