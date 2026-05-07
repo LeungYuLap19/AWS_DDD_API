@@ -245,7 +245,7 @@ Audience:
   /dispatch
     POST
 
-/commerce - split into 3 lambdas
+/commerce - manual deployment tested 
   /catalog [commerce-catalog]
     GET
     /events

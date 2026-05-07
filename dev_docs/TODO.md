@@ -1,39 +1,26 @@
 # TODO
 
-- Claude opus 4.7 for a full scale locale keys standardization + response format standardization + error handling standardization
+## Standardization with Opus
 
-- mongodb indexing issues
+- [ ] service function flow
+- [ ] locale keys
+- [ ] response format
+- [ ] error handling
+- [ ] S3 and multipart
+- [ ] Tsdoc
+- [ ] Api docs
 
-- error keys standardization
+## Optimization, Security Scan and Hardening
 
-- schema
-  - userRegistrationBodySchema: subscribe, promotion, district, image, birthday, gender should not accepted on register
+- [ ] mongodb indexing
+- [ ] business logics optimisation
+- [ ] Cold start optimisation
+- [ ] Checkov, semgrep, snyk, CodeGuru Security
+- [ ] schema and sanitizing tightening
+- [ ] path optimization (consider move PATCH pet profile by {petId} to /pet-profile/me)
+- [ ] Replace current basic rate limiting with layered rate limiting:
+  - Add per-IP, per-identifier, and per-account limits.
+  - Add separate failure counters/cooldowns for login, OTP verify, refresh abuse, and destructive routes.
+  - Consider WAF rate-based rules later if infra scope allows.
 
-- sanitize PRIVATE_DETAIL_FIELDS in pet-profile need narrower the return fields
-
-- consider move PATCH pet profile by {petId} to /pet-profile/me
-
-- Replace current basic rate limiting with layered rate limiting:
-  Add per-IP, per-identifier, and per-account limits.
-  Add separate failure counters/cooldowns for login, OTP verify, refresh abuse, and destructive routes.
-  Consider WAF rate-based rules later if infra scope allows.
-
-- Add security regression tests:
-  Broken authentication: protected routes must fail without valid JWT.
-  IDOR / horizontal privilege escalation: cannot read/write another user's or NGO's data.
-  Unauthorized delete: cannot delete accounts/pets without ownership checks.
-  Account takeover: registration/auth flows must not issue tokens for the wrong identity.
-  Enumeration: public auth endpoints should not leak whether user/phone/entity exists.
-  Brute-force / automation abuse: login, registration, OTP, refresh, destructive routes need abuse tests.
-  JWT tampering: expired token, bad signature, wrong secret, `alg:none`.
-  Mass assignment: reject writes to governance fields like `role`, `deleted`, `owner`, `ngoId`, `tagId`.
-  Sensitive data exposure: responses must not leak password hash, deleted flag, internal state, or raw documents.
-  NoSQL-style payload abuse: object/operator payloads must be rejected for scalar fields.
-  Session persistence after delete: old refresh/access tokens must stop working after account deletion.
-  Cross-origin exposure: verify CORS behavior for allowed and disallowed origins.
-  Raw error leakage: unhandled exceptions and validation failures must not expose internals.
-
-- [logistics] SF address client uses `hksfaddsit.sf-express.com` (SIT/staging environment) for area, netCode, and address lookups. Only the login URL uses the production `hksfadd` subdomain. Carried over from legacy unchanged. Confirm with SF Express whether separate production URLs exist for these endpoints. Revisit after frontend integration tests.
-
-- [commerce-orders] Remove temporary step-by-step `logInfo` checkpoints (steps 1–16) added to `handleCreateOrder` in `orders.ts` during the 502 debugging session. They are no longer needed and add log noise.
-
+- [logistics] SF address client uses `hksfaddsit.sf-express.com` (SIT/staging environment) for area, netCode, and address lookups. Only the login URL uses the production `hksfadd` subdomain. Carried over from legacy unchanged. Confirm with SF Express whether separate production URLs exist for these endpoints. Revisit after frontend integration tests

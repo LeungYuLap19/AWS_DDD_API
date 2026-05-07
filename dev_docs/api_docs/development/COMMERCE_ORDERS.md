@@ -193,7 +193,7 @@ Submits a new PTag order. Authenticated users only.
 **Content-Type:** `multipart/form-data`
 
 **File upload rules:**
-- Field `pet_img`: optional; max 1 file; max 5 MB; accepted MIME types: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
+- Field `pet_img`: optional; max 1 file; max 4 MB; accepted MIME types: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
 - Field `discount_proof`: optional; max 1 file; same size and type constraints as `pet_img`
 - MIME type is detected from file content (magic bytes), not from the `Content-Type` claim
 

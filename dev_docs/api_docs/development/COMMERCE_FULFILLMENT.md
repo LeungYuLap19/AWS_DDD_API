@@ -295,7 +295,7 @@ Updates allowed fields on the tag-bound `OrderVerification`. On success, attempt
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `contact` | string | Phone number; normalized to digits only |
+| `contact` | string | Phone number; whitespace-trimmed |
 | `verifyDate` | string | Date in `DD/MM/YYYY` or ISO 8601 (`YYYY-MM-DD`) format; e.g. `"15/01/2025"` or `"2025-01-15"` |
 | `petName` | string | |
 | `shortUrl` | string | |
@@ -432,7 +432,7 @@ Updates supplier-editable fields on the verification record. Accepts JSON only.
 | `pendingStatus` | boolean | Updates `OrderVerification.pendingStatus` |
 | `qrUrl` | string | Updates `OrderVerification.qrUrl` |
 | `petUrl` | string | Updates `OrderVerification.petUrl` |
-| `petContact` | string | Updates the linked `Order.petContact`; normalized to digits only |
+| `petContact` | string | Updates the linked `Order.petContact`; whitespace-trimmed |
 
 **Example:**
 
