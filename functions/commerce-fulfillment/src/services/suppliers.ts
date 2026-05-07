@@ -103,6 +103,11 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
     return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
   }
 
+  const parsed = parseBody(ctx.body, supplierUpdateSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification') as mongoose.Model<RawDocument>;
   const Order = mongoose.model('Order') as mongoose.Model<RawDocument>;
@@ -122,11 +127,6 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
   const existingOrderVerification = authorization.orderVerification;
   if (!existingOrderVerification) {
     return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
-  }
-
-  const parsed = parseBody(ctx.body, supplierUpdateSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   const payload = parsed.data;

@@ -1984,6 +1984,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /logistics/token
             Method: POST
+            Auth:
+              Authorizer: NONE
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false

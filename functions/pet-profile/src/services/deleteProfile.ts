@@ -6,7 +6,6 @@ import { connectToMongoDB } from '../config/db';
 import { buildOwnershipFilter, loadAuthorizedPet } from '../utils/auth';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
-import { handleKnownError } from './profileHelpers';
 
 export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
@@ -23,13 +22,7 @@ export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGate
     return rateLimitResponse;
   }
 
-  try {
-    await loadAuthorizedPet(ctx.event);
-  } catch (error) {
-    const knownError = handleKnownError(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
-  }
+  await loadAuthorizedPet(ctx.event);
 
   const Pet = mongoose.model('Pet');
   const petId = String(ctx.event.pathParameters?.petId || '');

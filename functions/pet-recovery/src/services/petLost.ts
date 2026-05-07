@@ -1,14 +1,13 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseMultipartBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 import { sanitizePetLost } from '../utils/sanitize';
 import { parseFlexibleDate } from '../utils/date';
 import { uploadImageFile, getNextSerialNumber } from '../utils/upload';
-import { normalizeLostMultipartBody, type ParsedMultipartForm } from '../utils/multipart';
+import { normalizeLostMultipartBody } from '../utils/multipart';
 import { createPetLostSchema } from '../zodSchema/petLostSchema';
 import { connectToMongoDB } from '../config/db';
 
@@ -30,6 +29,15 @@ export async function handleListPetLost(ctx: RouteContext): Promise<APIGatewayPr
 
 export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
+
+  const multiResult = await parseMultipartBody(ctx.event, createPetLostSchema, {
+    normalize: normalizeLostMultipartBody,
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
+  }
+  const { data, files } = multiResult;
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
@@ -41,21 +49,6 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
   });
   if (rateLimitResponse) return rateLimitResponse;
 
-  let form: ParsedMultipartForm;
-  try {
-    form = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
-  } catch {
-    return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
-  }
-
-  const { files, ...rawFields } = form;
-  const normalized = normalizeLostMultipartBody(rawFields);
-  const parsed = parseBody(normalized, createPetLostSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-  }
-
-  const data = parsed.data;
   const lostDate = parseFlexibleDate(data.lostDate);
   if (!lostDate || isNaN(lostDate.getTime())) {
     return response.errorResponse(400, 'petRecovery.errors.petLost.lostDateRequired', ctx.event);

@@ -34,31 +34,23 @@ const LIST_PROJECTION = {
  * Legacy: GET /purchase/order-verification (purchaseConfirmation)
  */
 export async function handleGetVerificationList(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  try {
-    requireRole(ctx.event, ['admin', 'developer']);
+  requireRole(ctx.event, ['admin', 'developer']);
 
-    const queryParams = ctx.event.queryStringParameters || {};
-    const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-    const limit = Math.min(500, Math.max(1, parseInt(queryParams['limit'] ?? '100', 10) || 100));
-    const skip = (page - 1) * limit;
+  const queryParams = ctx.event.queryStringParameters || {};
+  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(queryParams['limit'] ?? '100', 10) || 100));
+  const skip = (page - 1) * limit;
 
-    await connectToMongoDB();
-    const OrderVerification = mongoose.model('OrderVerification');
+  await connectToMongoDB();
+  const OrderVerification = mongoose.model('OrderVerification');
 
-    const [records, total] = await Promise.all([
-      OrderVerification.find({}, LIST_PROJECTION).skip(skip).limit(limit).lean(),
-      OrderVerification.countDocuments({}),
-    ]);
+  const [records, total] = await Promise.all([
+    OrderVerification.find({}, LIST_PROJECTION).skip(skip).limit(limit).lean(),
+    OrderVerification.countDocuments({}),
+  ]);
 
-    return response.successResponse(200, ctx.event, {
-      orderVerification: (records as Record<string, unknown>[]).map(sanitizeOrderVerification),
-      pagination: { page, limit, total },
-    });
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
-      return response.errorResponse(statusCode, (error as { errorKey?: string })?.errorKey ?? 'common.forbidden', ctx.event);
-    }
-    return response.errorResponse(500, 'common.internalError', ctx.event);
-  }
+  return response.successResponse(200, ctx.event, {
+    orderVerification: (records as Record<string, unknown>[]).map(sanitizeOrderVerification),
+    pagination: { page, limit, total },
+  });
 }

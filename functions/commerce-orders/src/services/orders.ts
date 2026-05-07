@@ -1,8 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
 import {
-  getFirstZodIssueMessage,
+  parseMultipartBody,
   requireAuthContext,
   requireRole,
 } from '@aws-ddd-api/shared';
@@ -89,29 +88,24 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   });
   if (rateLimitResult) return rateLimitResult;
 
-  // 3. Parse multipart form data
-  const parsed = await multipart.parse(ctx.event);
-
-  // 4. Zod validation
-  const parseResult = purchaseConfirmationSchema.safeParse(parsed);
-  if (!parseResult.success) {
-    return response.errorResponse(
-      400,
-      getFirstZodIssueMessage(parseResult.error) ?? 'orders.errors.missingRequiredFields',
-      ctx.event
-    );
+  // 3. Parse multipart form data + Zod validation
+  const multiResult = await parseMultipartBody(ctx.event, purchaseConfirmationSchema, {
+    fallbackErrorKey: 'orders.errors.missingRequiredFields',
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
   }
 
   const {
     lastName, phoneNumber, address, email: rawEmail, option, type, tempId,
     paymentWay, shopCode, delivery, promotionCode, petContact,
     petName, optionSize, optionColor, lang,
-  } = parseResult.data;
+  } = multiResult.data;
 
   const email = normalizeEmail(rawEmail);
 
   // 5. Validate and upload image files
-  const allFiles = parsed.files || [];
+  const allFiles = multiResult.files as MultipartFile[];
   const petImgFiles = allFiles.filter((f) => f.fieldname === 'pet_img');
   const discountProofFiles = allFiles.filter((f) => f.fieldname === 'discount_proof');
 

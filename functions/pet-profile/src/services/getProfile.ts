@@ -6,7 +6,7 @@ import { connectToMongoDB } from '../config/db';
 import { loadAuthorizedPet } from '../utils/auth';
 import { response } from '../utils/response';
 import { sanitizePetBasic, sanitizePetFull, sanitizePetLineage, sanitizePetListSummary, sanitizePublicTagLookupPet } from '../utils/sanitize';
-import { PUBLIC_TAG_PROJECTION, handleKnownError } from './profileHelpers';
+import { PUBLIC_TAG_PROJECTION } from './profileHelpers';
 
 const PET_VIEWS = new Set(['basic', 'detail', 'full']);
 
@@ -19,24 +19,18 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
     return response.errorResponse(400, 'petProfile.errors.invalidView', ctx.event);
   }
 
-  try {
-    const pet = await loadAuthorizedPet(ctx.event);
-    const form =
-      view === 'basic' ? sanitizePetBasic(pet) :
-      view === 'detail' ? sanitizePetLineage(pet) :
-      sanitizePetFull(pet);
+  const pet = await loadAuthorizedPet(ctx.event);
+  const form =
+    view === 'basic' ? sanitizePetBasic(pet) :
+    view === 'detail' ? sanitizePetLineage(pet) :
+    sanitizePetFull(pet);
 
-    return response.successResponse(200, ctx.event, {
-      message: 'petProfile.success.retrieved',
-      view,
-      form,
-      id: pet._id,
-    });
-  } catch (error) {
-    const knownError = handleKnownError(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
-  }
+  return response.successResponse(200, ctx.event, {
+    message: 'petProfile.success.retrieved',
+    view,
+    form,
+    id: pet._id,
+  });
 }
 
 export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGatewayProxyResult> {

@@ -9,6 +9,12 @@ import env from '../config/env';
 
 export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
+
+  const parsed = parseBody(ctx.body, breedAnalysisSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
@@ -20,11 +26,6 @@ export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGateway
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
-  }
-
-  const parsed = parseBody(ctx.body, breedAnalysisSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   const endpoint = `${env.VM_BREED_PUBLIC_IP}${env.BREED_DOCKER_IMAGE}`;

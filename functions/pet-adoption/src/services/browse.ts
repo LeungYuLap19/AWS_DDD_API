@@ -12,7 +12,6 @@ import {
   normalizeCsvValues,
   parsePositiveInteger,
   sanitizeBrowseAdoption,
-  toErrorResponse,
 } from '../utils/helpers';
 
 const AGE_RANGES: Record<string, object> = {
@@ -70,70 +69,64 @@ function buildAdoptionListQuery(query: {
  * Public adoption browse list with filters and pagination.
  */
 export async function handleGetAdoptionList(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  try {
-    const params = ctx.event.queryStringParameters ?? {};
-    const locale = typeof params.lang === 'string' ? params.lang : 'zh';
-    void locale; // locale is read from queryStringParameters upstream by i18n helpers
+  const params = ctx.event.queryStringParameters ?? {};
+  const locale = typeof params.lang === 'string' ? params.lang : 'zh';
+  void locale; // locale is read from queryStringParameters upstream by i18n helpers
 
-    const pageRaw = parsePositiveInteger(params.page);
-    if (params.page !== undefined && pageRaw === null) {
-      return response.errorResponse(400, 'petAdoption.errors.browse.invalidPage', ctx.event);
-    }
+  const pageRaw = parsePositiveInteger(params.page);
+  if (params.page !== undefined && pageRaw === null) {
+    return response.errorResponse(400, 'petAdoption.errors.browse.invalidPage', ctx.event);
+  }
 
-    const search =
-      typeof params.search === 'string' ? params.search.trim().slice(0, 100) : '';
+  const search =
+    typeof params.search === 'string' ? params.search.trim().slice(0, 100) : '';
 
-    if (typeof params.search === 'string' && params.search.trim().length > 100) {
-      return response.errorResponse(400, 'petAdoption.errors.browse.invalidSearch', ctx.event);
-    }
+  if (typeof params.search === 'string' && params.search.trim().length > 100) {
+    return response.errorResponse(400, 'petAdoption.errors.browse.invalidSearch', ctx.event);
+  }
 
-    const browseQuery = {
-      page: pageRaw ?? 1,
-      search,
-      animalTypes: normalizeCsvValues(params.animal_type),
-      locations: normalizeCsvValues(params.location),
-      sexes: normalizeCsvValues(params.sex),
-      ages: normalizeCsvValues(params.age),
-    };
+  const browseQuery = {
+    page: pageRaw ?? 1,
+    search,
+    animalTypes: normalizeCsvValues(params.animal_type),
+    locations: normalizeCsvValues(params.location),
+    sexes: normalizeCsvValues(params.sex),
+    ages: normalizeCsvValues(params.age),
+  };
 
-    const browseConn = await connectBrowseDB();
-    const Adoption = browseConn.model('Adoption');
-    const mongoQuery = buildAdoptionListQuery(browseQuery);
-    const totalResult = await Adoption.countDocuments(mongoQuery);
-    const maxPage = Math.ceil(totalResult / PAGE_SIZE);
-    const page = browseQuery.page;
+  const browseConn = await connectBrowseDB();
+  const Adoption = browseConn.model('Adoption');
+  const mongoQuery = buildAdoptionListQuery(browseQuery);
+  const totalResult = await Adoption.countDocuments(mongoQuery);
+  const maxPage = Math.ceil(totalResult / PAGE_SIZE);
+  const page = browseQuery.page;
 
-    const adoptionList = await Adoption.aggregate([
-      { $match: mongoQuery },
-      {
-        $addFields: {
-          parsedDate: {
-            $convert: {
-              input: '$Creation_Date',
-              to: 'date',
-              onError: null,
-              onNull: null,
-            },
+  const adoptionList = await Adoption.aggregate([
+    { $match: mongoQuery },
+    {
+      $addFields: {
+        parsedDate: {
+          $convert: {
+            input: '$Creation_Date',
+            to: 'date',
+            onError: null,
+            onNull: null,
           },
         },
       },
-      { $sort: { parsedDate: -1, _id: -1 } },
-      { $skip: (page - 1) * PAGE_SIZE },
-      { $limit: PAGE_SIZE },
-      { $project: BROWSE_LIST_PROJECTION },
-    ]);
+    },
+    { $sort: { parsedDate: -1, _id: -1 } },
+    { $skip: (page - 1) * PAGE_SIZE },
+    { $limit: PAGE_SIZE },
+    { $project: BROWSE_LIST_PROJECTION },
+  ]);
 
-    return response.successResponse(200, ctx.event, {
-      message: 'petAdoption.success.browse.listRetrieved',
-      adoptionList: adoptionList.map(sanitizeBrowseAdoption),
-      maxPage,
-      totalResult,
-    });
-  } catch (error) {
-    const knownError = toErrorResponse(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
-  }
+  return response.successResponse(200, ctx.event, {
+    message: 'petAdoption.success.browse.listRetrieved',
+    adoptionList: adoptionList.map(sanitizeBrowseAdoption),
+    maxPage,
+    totalResult,
+  });
 }
 
 /**
@@ -148,24 +141,18 @@ export async function handleGetBrowseDetail(
     return response.errorResponse(400, 'petAdoption.errors.browse.invalidIdFormat', ctx.event);
   }
 
-  try {
-    const browseConn = await connectBrowseDB();
-    const Adoption = browseConn.model('Adoption');
-    const pet = await Adoption.findOne({ _id: adoptionId })
-      .select(BROWSE_DETAIL_PROJECTION)
-      .lean();
+  const browseConn = await connectBrowseDB();
+  const Adoption = browseConn.model('Adoption');
+  const pet = await Adoption.findOne({ _id: adoptionId })
+    .select(BROWSE_DETAIL_PROJECTION)
+    .lean();
 
-    if (!pet) {
-      return response.errorResponse(404, 'petAdoption.errors.browse.petNotFound', ctx.event);
-    }
-
-    return response.successResponse(200, ctx.event, {
-      message: 'petAdoption.success.browse.detailRetrieved',
-      pet: sanitizeBrowseAdoption(pet),
-    });
-  } catch (error) {
-    const knownError = toErrorResponse(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
+  if (!pet) {
+    return response.errorResponse(404, 'petAdoption.errors.browse.petNotFound', ctx.event);
   }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'petAdoption.success.browse.detailRetrieved',
+    pet: sanitizeBrowseAdoption(pet),
+  });
 }

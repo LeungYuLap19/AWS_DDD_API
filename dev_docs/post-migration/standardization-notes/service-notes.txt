@@ -1,0 +1,50 @@
+1. Remove all service local try/catch
+    - 11000 that cannot be handled generically
+    - Catches for non-fatal side effects (WhatsApp dispatch, email notifications)
+    - Compensating delete/rollback when a multi-step operation partially succeeds
+
+try {
+  await Model.create(data);
+} catch (err) {
+  if ((err as { code?: number }).code === 11000) {
+    throw new AuthContextError('domain.errors.duplicate', 409);
+  }
+  throw err;
+}
+
+---
+
+2. Canonical flow for non-business logic steps
+    requireAuthContext / requireRole
+        ↓
+    path/query param validation (cheap, no I/O)
+        ↓
+    parseBody (Zod, cheap, no I/O)
+        ↓
+    connectToMongoDB
+        ↓
+    applyRateLimit (DB-backed, identifier = userId/userEmail from auth context)
+        ↓
+    identity/ownership check (DB query)
+        ↓
+    business logic / mutations
+
+    - still call requireAuthContext on every service
+        - Defense in depth
+        - Self-documenting contract
+
+3. Auth Guard Style
+    - requireAuthContext(event) for every protected service
+    - requireRole(event, roles) for service requires a specific role regardless of ownership
+    - getAuthContext for non-jwt-protected service that response (include specific fields or not) differently 
+    - Bespoke JWT parsing (getBearerToken + jwt.verify directly) for auth verify challenge 
+    - local auth wrapper for compound check that repeats across multiple handlers in the same domain
+
+4. SF metadata endpoints
+    - all change to x-api-key but no jwt (included get token)
+    - all enforce ratelimiter with ip only
+
+5. parseBody    
+    - shared parseBody apply to all JSON routes
+    - add parseMultipartBody in shared to apply to all multipart routes
+    

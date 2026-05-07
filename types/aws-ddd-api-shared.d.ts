@@ -188,6 +188,7 @@ declare module '@aws-ddd-api/shared/logging/logger' {
 
 declare module '@aws-ddd-api/shared/validation/zod' {
   import type { ZodType } from 'zod';
+  import type { APIGatewayProxyEvent } from 'aws-lambda';
 
   export function getZodIssues(error: unknown): unknown[];
   export function getFirstZodIssueMessage(error: unknown, fallback?: string): string;
@@ -215,6 +216,30 @@ declare module '@aws-ddd-api/shared/validation/zod' {
     schema: ZodType<T>,
     options?: ParseBodyOptions
   ): ParseBodyResult<T>;
+
+  export interface ParsedMultipartFile {
+    content?: Buffer;
+    filename?: string;
+    contentType?: string;
+    fieldname?: string;
+  }
+  export interface ParseMultipartBodySuccess<T> {
+    ok: true;
+    data: T;
+    files: ParsedMultipartFile[];
+  }
+  export type ParseMultipartBodyResult<T> = ParseMultipartBodySuccess<T> | ParseBodyFailure;
+  export interface ParseMultipartBodyOptions {
+    validate?: (rawFields: Record<string, unknown>) => string | null;
+    normalize?: (rawFields: Record<string, unknown>) => Record<string, unknown>;
+    parseErrorKey?: string;
+    fallbackErrorKey?: string;
+  }
+  export function parseMultipartBody<T>(
+    event: APIGatewayProxyEvent,
+    schema: ZodType<T>,
+    options?: ParseMultipartBodyOptions
+  ): Promise<ParseMultipartBodyResult<T>>;
 }
 
 declare module '@aws-ddd-api/shared/config/boolean' {

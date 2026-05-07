@@ -1,5 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { getAuthContext } from '@aws-ddd-api/shared';
+import { getAuthContext, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { handleGetAdoptionList, handleGetBrowseDetail } from './browse';
 import {
@@ -36,6 +36,7 @@ export async function handleGetById(ctx: RouteContext): Promise<APIGatewayProxyR
  * Protected: requires valid auth context.
  */
 export async function handleCreate(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  requireAuthContext(ctx.event);
   const petId = ctx.event.pathParameters?.id ?? '';
   return handleCreateManagedRecord(ctx, petId);
 }
@@ -46,6 +47,7 @@ export async function handleCreate(ctx: RouteContext): Promise<APIGatewayProxyRe
  * Protected: requires valid auth context.
  */
 export async function handleUpdate(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  requireAuthContext(ctx.event);
   const petId = ctx.event.pathParameters?.id ?? '';
   return handleUpdateManagedRecord(ctx, petId);
 }
@@ -56,6 +58,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<APIGatewayProxyRe
  * Protected: requires valid auth context.
  */
 export async function handleDelete(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  requireAuthContext(ctx.event);
   const petId = ctx.event.pathParameters?.id ?? '';
   return handleDeleteManagedRecord(ctx, petId);
 }

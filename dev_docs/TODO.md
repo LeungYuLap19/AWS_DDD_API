@@ -1,17 +1,25 @@
 # TODO
 
-## Standardization with Opus
+## Standardization
 
 - [ ] service function flow
+  - audit: [SERVICE_FUNCTION_FLOW_AUDIT.md](SERVICE_FUNCTION_FLOW_AUDIT.md)
+- [ ] SoC
 - [ ] locale keys
 - [ ] response format
 - [ ] error handling
 - [ ] S3 and multipart
+  - formadata only in mutipart route (do not mix json + multipart)
+- [ ] retest, api docs update
 - [ ] Tsdoc
 - [ ] Api docs
 
 ## Optimization, Security Scan and Hardening
 
+- [ ] what can be extract to shared
+  - db connection, service standard flow, s3 client
+- [ ] template
+  - iam roles, multipart
 - [ ] mongodb indexing
 - [ ] business logics optimisation
 - [ ] Cold start optimisation

@@ -152,65 +152,57 @@ async function dispatchWhatsAppTrackingMessage(
  * Legacy: GET /v2/orderVerification/{tagId} (OrderVerification)
  */
 export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  try {
-    requireAuthContext(ctx.event);
+  requireAuthContext(ctx.event);
 
-    const tagId = ctx.event.pathParameters?.tagId ?? '';
+  const tagId = ctx.event.pathParameters?.tagId ?? '';
 
-    if (!tagId) {
-      return response.errorResponse(400, 'fulfillment.errors.missingTagId', ctx.event);
-    }
-
-    await connectToMongoDB();
-    const OrderVerification = mongoose.model('OrderVerification');
-    const Order = mongoose.model('Order');
-
-    const orderVerify = await OrderVerification.findOne({ tagId })
-      .select(ORDER_VERIFICATION_READ_PROJECTION)
-      .lean() as RawDocument | null;
-
-    if (!orderVerify) {
-      return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
-    }
-
-    const safeEntity = sanitizeOrderVerification(orderVerify) as RawDocument;
-    const linkedOrder = await Order.findOne({ tempId: safeEntity.orderId })
-      .select('sfWayBillNumber')
-      .lean() as { sfWayBillNumber?: string } | null;
-
-    const form = {
-      tagId: safeEntity.tagId,
-      staffVerification: safeEntity.staffVerification,
-      contact: safeEntity.contact,
-      verifyDate: safeEntity.verifyDate,
-      tagCreationDate: safeEntity.tagCreationDate,
-      petName: safeEntity.petName,
-      shortUrl: safeEntity.shortUrl,
-      masterEmail: safeEntity.masterEmail,
-      qrUrl: safeEntity.qrUrl,
-      petUrl: safeEntity.petUrl,
-      orderId: safeEntity.orderId,
-      location: safeEntity.location,
-      petHuman: safeEntity.petHuman,
-      createdAt: safeEntity.createdAt,
-      updatedAt: safeEntity.updatedAt,
-      pendingStatus: safeEntity.pendingStatus,
-      option: safeEntity.option,
-    };
-
-    return response.successResponse(200, ctx.event, {
-      message: 'Order Verification info retrieved successfully',
-      form,
-      id: safeEntity._id,
-      sf: linkedOrder?.sfWayBillNumber,
-    });
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
-      return response.errorResponse(statusCode, (error as { errorKey?: string })?.errorKey ?? 'common.forbidden', ctx.event);
-    }
-    return response.errorResponse(500, 'common.internalError', ctx.event);
+  if (!tagId) {
+    return response.errorResponse(400, 'fulfillment.errors.missingTagId', ctx.event);
   }
+
+  await connectToMongoDB();
+  const OrderVerification = mongoose.model('OrderVerification');
+  const Order = mongoose.model('Order');
+
+  const orderVerify = await OrderVerification.findOne({ tagId })
+    .select(ORDER_VERIFICATION_READ_PROJECTION)
+    .lean() as RawDocument | null;
+
+  if (!orderVerify) {
+    return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
+  }
+
+  const safeEntity = sanitizeOrderVerification(orderVerify) as RawDocument;
+  const linkedOrder = await Order.findOne({ tempId: safeEntity.orderId })
+    .select('sfWayBillNumber')
+    .lean() as { sfWayBillNumber?: string } | null;
+
+  const form = {
+    tagId: safeEntity.tagId,
+    staffVerification: safeEntity.staffVerification,
+    contact: safeEntity.contact,
+    verifyDate: safeEntity.verifyDate,
+    tagCreationDate: safeEntity.tagCreationDate,
+    petName: safeEntity.petName,
+    shortUrl: safeEntity.shortUrl,
+    masterEmail: safeEntity.masterEmail,
+    qrUrl: safeEntity.qrUrl,
+    petUrl: safeEntity.petUrl,
+    orderId: safeEntity.orderId,
+    location: safeEntity.location,
+    petHuman: safeEntity.petHuman,
+    createdAt: safeEntity.createdAt,
+    updatedAt: safeEntity.updatedAt,
+    pendingStatus: safeEntity.pendingStatus,
+    option: safeEntity.option,
+  };
+
+  return response.successResponse(200, ctx.event, {
+    message: 'Order Verification info retrieved successfully',
+    form,
+    id: safeEntity._id,
+    sf: linkedOrder?.sfWayBillNumber,
+  });
 }
 
 /**
@@ -221,94 +213,84 @@ export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGa
  * Legacy: PUT /v2/orderVerification/{tagId} (OrderVerification)
  */
 export async function handlePatchTagVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  try {
-    requireAuthContext(ctx.event);
+  requireAuthContext(ctx.event);
 
-    const tagId = ctx.event.pathParameters?.tagId ?? '';
+  const tagId = ctx.event.pathParameters?.tagId ?? '';
 
-    if (!tagId) {
-      return response.errorResponse(400, 'fulfillment.errors.missingTagId', ctx.event);
-    }
-
-    const parsed = parseBody(ctx.body, tagUpdateSchema);
-    if (!parsed.ok) {
-      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-    }
-
-    const payload = parsed.data;
-
-    await connectToMongoDB();
-    const OrderVerification = mongoose.model('OrderVerification');
-    const Order = mongoose.model('Order');
-
-    const existing = await OrderVerification.findOne({ tagId })
-      .select('_id orderId')
-      .lean() as { _id: unknown; orderId?: string } | null;
-
-    if (!existing) {
-      return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
-    }
-
-    if (payload.orderId !== undefined && payload.orderId !== existing.orderId) {
-      const duplicated = await OrderVerification.findOne({ orderId: payload.orderId })
-        .select('_id')
-        .lean();
-      if (duplicated) {
-        return response.errorResponse(409, 'fulfillment.errors.duplicateOrderId', ctx.event);
-      }
-    }
-
-    const setFields: Record<string, unknown> = {};
-    if (payload.contact) setFields['contact'] = normalizePhone(payload.contact);
-    if (payload.verifyDate !== undefined) {
-      const parsedVerifyDate = parseDDMMYYYY(payload.verifyDate as string);
-      if (!parsedVerifyDate) {
-        return response.errorResponse(400, 'fulfillment.errors.invalidDate', ctx.event);
-      }
-      setFields['verifyDate'] = parsedVerifyDate;
-    }
-    if (payload.petName) setFields['petName'] = payload.petName;
-    if (payload.shortUrl) setFields['shortUrl'] = payload.shortUrl;
-    if (payload.masterEmail) setFields['masterEmail'] = normalizeEmail(payload.masterEmail);
-    if (payload.orderId !== undefined) setFields['orderId'] = payload.orderId;
-    if (payload.location) setFields['location'] = payload.location;
-    if (payload.petHuman) setFields['petHuman'] = payload.petHuman;
-
-    if (Object.keys(setFields).length === 0) {
-      return response.errorResponse(400, 'common.missingParams', ctx.event);
-    }
-
-    await OrderVerification.updateOne({ tagId }, { $set: setFields });
-
-    const updatedVerification = await OrderVerification.findOne({ tagId })
-      .select(ORDER_VERIFICATION_READ_PROJECTION)
-      .lean() as RawDocument | null;
-    const linkedOrder = await Order.findOne({ tempId: updatedVerification?.orderId })
-      .select(ORDER_READ_PROJECTION)
-      .lean() as RawDocument | null;
-
-    let notificationDispatched = false;
-    try {
-      const notificationResult = await dispatchWhatsAppTrackingMessage(
-        linkedOrder,
-        updatedVerification,
-        ctx.event
-      );
-      notificationDispatched = notificationResult?.dispatched === true;
-    } catch {
-      // non-fatal — response already succeeded
-    }
-
-    return response.successResponse(200, ctx.event, {
-      message: 'Tag info updated successfully',
-      id: existing._id,
-      notificationDispatched,
-    });
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
-      return response.errorResponse(statusCode, (error as { errorKey?: string })?.errorKey ?? 'common.forbidden', ctx.event);
-    }
-    return response.errorResponse(500, 'common.internalError', ctx.event);
+  if (!tagId) {
+    return response.errorResponse(400, 'fulfillment.errors.missingTagId', ctx.event);
   }
+
+  const parsed = parseBody(ctx.body, tagUpdateSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
+  const payload = parsed.data;
+
+  await connectToMongoDB();
+  const OrderVerification = mongoose.model('OrderVerification');
+  const Order = mongoose.model('Order');
+
+  const existing = await OrderVerification.findOne({ tagId })
+    .select('_id orderId')
+    .lean() as { _id: unknown; orderId?: string } | null;
+
+  if (!existing) {
+    return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
+  }
+
+  if (payload.orderId !== undefined && payload.orderId !== existing.orderId) {
+    const duplicated = await OrderVerification.findOne({ orderId: payload.orderId })
+      .select('_id')
+      .lean();
+    if (duplicated) {
+      return response.errorResponse(409, 'fulfillment.errors.duplicateOrderId', ctx.event);
+    }
+  }
+
+  const setFields: Record<string, unknown> = {};
+  if (payload.contact) setFields['contact'] = normalizePhone(payload.contact);
+  if (payload.verifyDate !== undefined) {
+    const parsedVerifyDate = parseDDMMYYYY(payload.verifyDate as string);
+    if (!parsedVerifyDate) {
+      return response.errorResponse(400, 'fulfillment.errors.invalidDate', ctx.event);
+    }
+    setFields['verifyDate'] = parsedVerifyDate;
+  }
+  if (payload.petName) setFields['petName'] = payload.petName;
+  if (payload.shortUrl) setFields['shortUrl'] = payload.shortUrl;
+  if (payload.masterEmail) setFields['masterEmail'] = normalizeEmail(payload.masterEmail);
+  if (payload.orderId !== undefined) setFields['orderId'] = payload.orderId;
+  if (payload.location) setFields['location'] = payload.location;
+  if (payload.petHuman) setFields['petHuman'] = payload.petHuman;
+
+  if (Object.keys(setFields).length === 0) {
+    return response.errorResponse(400, 'common.missingParams', ctx.event);
+  }
+
+  await OrderVerification.updateOne({ tagId }, { $set: setFields });
+
+  const updatedVerification = await OrderVerification.findOne({ tagId })
+    .select(ORDER_VERIFICATION_READ_PROJECTION)
+    .lean() as RawDocument | null;
+  const linkedOrder = await Order.findOne({ tempId: updatedVerification?.orderId })
+    .select(ORDER_READ_PROJECTION)
+    .lean() as RawDocument | null;
+
+  let notificationDispatched = false;
+  try {
+    const notificationResult = await dispatchWhatsAppTrackingMessage(
+      linkedOrder,
+      updatedVerification,
+      ctx.event
+    );
+    notificationDispatched = notificationResult?.dispatched === true;
+  } catch { }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'Tag info updated successfully',
+    id: existing._id,
+    notificationDispatched,
+  });
 }

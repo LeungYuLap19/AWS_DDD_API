@@ -209,3 +209,4 @@ walkSharedFiles();
 
 copyNodeModuleDependencyClosure('zod');
 copyNodeModuleDependencyClosure('jsonwebtoken');
+copyNodeModuleDependencyClosure('lambda-multipart-parser');

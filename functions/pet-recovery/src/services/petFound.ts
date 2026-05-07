@@ -1,14 +1,13 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseMultipartBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 import { sanitizePetFound } from '../utils/sanitize';
 import { parseFlexibleDate } from '../utils/date';
 import { uploadImageFile, getNextSerialNumber } from '../utils/upload';
-import { normalizeFoundMultipartBody, type ParsedMultipartForm } from '../utils/multipart';
+import { normalizeFoundMultipartBody } from '../utils/multipart';
 import { createPetFoundSchema } from '../zodSchema/petFoundSchema';
 import { connectToMongoDB } from '../config/db';
 
@@ -28,6 +27,15 @@ export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayP
 
 export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
+
+  const multiResult = await parseMultipartBody(ctx.event, createPetFoundSchema, {
+    normalize: normalizeFoundMultipartBody,
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
+  }
+  const { data, files } = multiResult;
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
@@ -39,21 +47,6 @@ export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewa
   });
   if (rateLimitResponse) return rateLimitResponse;
 
-  let form: ParsedMultipartForm;
-  try {
-    form = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
-  } catch {
-    return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
-  }
-
-  const { files, ...rawFields } = form;
-  const normalized = normalizeFoundMultipartBody(rawFields);
-  const parsed = parseBody(normalized, createPetFoundSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-  }
-
-  const data = parsed.data;
   const foundDate = parseFlexibleDate(data.foundDate);
   if (!foundDate || isNaN(foundDate.getTime())) {
     return response.errorResponse(400, 'petRecovery.errors.petFound.foundDateRequired', ctx.event);

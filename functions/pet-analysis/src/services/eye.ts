@@ -12,7 +12,6 @@ import { sanitizeEyeLog, sanitizePet } from '../utils/sanitize';
 import { uploadImageFile } from '../utils/upload';
 import { isValidDateFormat, isValidImageUrl, toTrimmedString } from '../utils/validators';
 import { updatePetEyeSchema } from '../zodSchema/updatePetEyeSchema';
-import { HttpError } from '../utils/httpError';
 
 const ALLOWED_IMAGE_TYPES = new Set([
   'image/jpeg',
@@ -30,14 +29,6 @@ async function postJson(url: string, data: Record<string, unknown>): Promise<Rec
     body: JSON.stringify(data),
   });
   return (await analysisResponse.json()) as Record<string, unknown>;
-}
-
-function normalizeError(error: unknown, event: RouteContext['event']): APIGatewayProxyResult | null {
-  if (error instanceof HttpError) {
-    return response.errorResponse(error.statusCode, error.errorKey, event);
-  }
-
-  return null;
 }
 
 function isAnalysisErrorPayload(payload: Record<string, unknown>): boolean {
@@ -82,23 +73,17 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
     });
   }
 
-  try {
-    const EyeAnalysis = mongoose.model('EyeAnalysisRecord');
-    const eyeAnalysisLogList = (await EyeAnalysis.find({ petId: identifier })
-      .select('_id petId image eyeSide result createdAt updatedAt')
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .lean()) as Record<string, unknown>[];
+  const EyeAnalysis = mongoose.model('EyeAnalysisRecord');
+  const eyeAnalysisLogList = (await EyeAnalysis.find({ petId: identifier })
+    .select('_id petId image eyeSide result createdAt updatedAt')
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .lean()) as Record<string, unknown>[];
 
-    return response.successResponse(200, ctx.event, {
-      message: 'petAnalysis.success.eyeLogRetrievedSuccessfully',
-      result: eyeAnalysisLogList.map(sanitizeEyeLog),
-    });
-  } catch (error) {
-    const known = normalizeError(error, ctx.event);
-    if (known) return known;
-    throw error;
-  }
+  return response.successResponse(200, ctx.event, {
+    message: 'petAnalysis.success.eyeLogRetrievedSuccessfully',
+    result: eyeAnalysisLogList.map(sanitizeEyeLog),
+  });
 }
 
 export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
@@ -229,15 +214,18 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
     } catch {
       // ignore activity log failure during error flow
     }
-
-    const known = normalizeError(error, ctx.event);
-    if (known) return known;
     throw error;
   }
 }
 
 export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
+
+  const parsed = parseBody(ctx.body, updatePetEyeSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
@@ -249,11 +237,6 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
-  }
-
-  const parsed = parseBody(ctx.body, updatePetEyeSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   const { petId, date, leftEyeImage1PublicAccessUrl, rightEyeImage1PublicAccessUrl } = parsed.data;
