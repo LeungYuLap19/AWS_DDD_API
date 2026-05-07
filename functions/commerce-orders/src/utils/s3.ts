@@ -5,7 +5,7 @@ import env from '../config/env';
 import s3Client from '../config/s3';
 
 export const ALLOWED_UPLOAD_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB — kept below ~4.5 MB so base64-encoded payload stays under Lambda's 6 MB synchronous invocation limit (API GW limit is 10 MB)
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB — with BinaryMediaTypes: multipart/form-data, API GW base64-encodes (4 MB → ~5.33 MB), safely under Lambda's 6 MB synchronous invocation limit
 
 /**
  * Detects MIME type from magic bytes. Returns null if unrecognised.

@@ -218,6 +218,8 @@ Resources:
       StageName: !Ref StageName
       EndpointConfiguration: REGIONAL
       ApiKeySourceType: HEADER
+      BinaryMediaTypes:
+        - 'multipart/form-data' # causes API GW to base64-encode multipart bodies (consistent 33% overhead) instead of UTF-8-encoding binary content (variable up to ~1.5x overhead), making the Lambda 6 MB invocation limit predictable
       Models: # request/response schemas, validates the request body before Lambda runs
         CreateWidgetRequest:
           type: object # body must be a JSON object
