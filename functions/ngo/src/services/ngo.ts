@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import {
-  AuthContextError,
+  HttpError,
   logWarn,
   parseBody,
   requireAuthContext,
@@ -37,7 +37,7 @@ type UserDocument = {
 function requireNgoContext(ctx: RouteContext): NgoAuthContext {
   const authContext = requireAuthContext(ctx.event);
   if (authContext.userRole !== 'ngo' || !authContext.ngoId) {
-    throw new AuthContextError('common.unauthorized', 403);
+    throw new HttpError('common.unauthorized', 403);
   }
 
   return authContext;

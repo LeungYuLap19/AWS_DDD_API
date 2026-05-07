@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, parseBody } from '@aws-ddd-api/shared';
+import { requireAuthContext, parseBody, HttpError, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -135,11 +135,7 @@ async function dispatchWhatsAppTrackingMessage(
   }
 
   if (!fetchResponse.ok || parsed?.error) {
-    const providerError =
-      (parsed?.error as { message?: string })?.message ||
-      (parsed?.raw as string) ||
-      `HTTP ${fetchResponse.status}`;
-    throw new Error(providerError);
+    throw new HttpError('fulfillment.errors.notificationFailed', 502);
   }
 
   return { dispatched: true };
@@ -276,15 +272,11 @@ export async function handlePatchTagVerification(ctx: RouteContext): Promise<API
     .select(ORDER_READ_PROJECTION)
     .lean() as RawDocument | null;
 
-  let notificationDispatched = false;
   try {
-    const notificationResult = await dispatchWhatsAppTrackingMessage(
-      linkedOrder,
-      updatedVerification,
-      ctx.event
-    );
-    notificationDispatched = notificationResult?.dispatched === true;
-  } catch { }
+    await dispatchWhatsAppTrackingMessage(linkedOrder, updatedVerification, ctx.event);
+  } catch (error) {
+    logWarn('WhatsApp notification dispatch failed', { event: ctx.event, error, scope: 'commerce-fulfillment.services.tags' });
+  }
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',

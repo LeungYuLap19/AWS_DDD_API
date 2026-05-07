@@ -1,5 +1,5 @@
 import { parseFlexibleDate } from '../utils/date';
-import { AuthContextError } from '@aws-ddd-api/shared';
+import { HttpError } from '@aws-ddd-api/shared';
 import { patchPetBodySchema } from '../zodSchema/patchPetProfileSchemas';
 
 export type PetDocument = {
@@ -25,14 +25,14 @@ export function parseRemovedIndices(rawValue: string | undefined): number[] {
   try {
     removedIndices = JSON.parse(rawValue);
   } catch {
-    throw new AuthContextError('petProfile.errors.invalidRemovedIndices', 400);
+    throw new HttpError('petProfile.errors.invalidRemovedIndices', 400);
   }
 
   if (
     !Array.isArray(removedIndices) ||
     !removedIndices.every((index) => typeof index === 'number' && Number.isInteger(index))
   ) {
-    throw new AuthContextError('petProfile.errors.invalidRemovedIndices', 400);
+    throw new HttpError('petProfile.errors.invalidRemovedIndices', 400);
   }
 
   return removedIndices;

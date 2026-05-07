@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { AuthContextError, requireAuthContext } from '@aws-ddd-api/shared';
+import { HttpError, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 
 type PetDocument = {
@@ -30,7 +30,7 @@ export async function loadAuthorizedPet(
   const forbiddenKey = options.forbiddenKey || 'common.forbidden';
 
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('common.invalidObjectId', 400);
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   const Pet = mongoose.model('Pet');
@@ -38,14 +38,14 @@ export async function loadAuthorizedPet(
   const pet = (options.lean === false ? await query.exec() : await query.lean()) as PetDocument | null;
 
   if (!pet) {
-    throw new AuthContextError(notFoundKey, 404);
+    throw new HttpError(notFoundKey, 404);
   }
 
   const isOwner = toStringId(pet.userId) === authContext.userId;
   const isNgoOwner = Boolean(authContext.ngoId && pet.ngoId && String(pet.ngoId) === authContext.ngoId);
 
   if (!isOwner && !isNgoOwner) {
-    throw new AuthContextError(forbiddenKey, 403);
+    throw new HttpError(forbiddenKey, 403);
   }
 
   return pet;

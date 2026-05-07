@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { requireAuthContext, AuthContextError } from '@aws-ddd-api/shared';
+import { requireAuthContext, HttpError } from '@aws-ddd-api/shared';
 
 export type UserDocument = {
   _id: { toString(): string } | string;
@@ -58,7 +58,7 @@ export async function ensureUniqueTag(tagId: string | undefined, excludePetId?: 
 
   const existingTag = await Pet.findOne(query).select('_id').lean();
   if (existingTag) {
-    throw new AuthContextError('petProfile.errors.duplicatePetTag', 409);
+    throw new HttpError('petProfile.errors.duplicatePetTag', 409);
   }
 }
 
@@ -76,7 +76,7 @@ export async function ensureUniqueNgoPetId(ngoPetId: string, excludePetId?: stri
 
   const existingPet = await Pet.findOne(query).lean();
   if (existingPet) {
-    throw new AuthContextError('petProfile.errors.duplicateNgoPetId', 409);
+    throw new HttpError('petProfile.errors.duplicateNgoPetId', 409);
   }
 }
 
@@ -89,15 +89,15 @@ export async function maybeGenerateNgoPetId(params: {
   }
 
   if (params.authContext.userRole !== 'ngo') {
-    throw new AuthContextError('petProfile.errors.ngoRoleRequired', 403);
+    throw new HttpError('petProfile.errors.ngoRoleRequired', 403);
   }
 
   if (!params.authContext.ngoId) {
-    throw new AuthContextError('petProfile.errors.ngoIdClaimRequired', 403);
+    throw new HttpError('petProfile.errors.ngoIdClaimRequired', 403);
   }
 
   if (String(params.authContext.ngoId) !== String(params.ngoId)) {
-    throw new AuthContextError('common.forbidden', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 
   const NgoCounters = mongoose.model('NgoCounters');

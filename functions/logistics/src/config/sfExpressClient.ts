@@ -1,6 +1,7 @@
 import https from 'https';
 import querystring from 'querystring';
 import crypto from 'crypto';
+import { HttpError } from '@aws-ddd-api/shared';
 
 const SF_OAUTH_URL = 'https://sfapi.sf-express.com/oauth2/accessToken';
 const SF_SERVICE_URL = 'https://sfapi.sf-express.com/std/service';
@@ -42,7 +43,7 @@ async function requestJson(options: RequestJsonOptions): Promise<RequestJsonResu
           try {
             resolve({ status: res.statusCode ?? 0, body: JSON.parse(raw) });
           } catch {
-            reject(new Error('Invalid JSON response'));
+            reject(new HttpError('logistics.invalidSfResponse', 502));
           }
         });
       }
@@ -73,7 +74,7 @@ export async function getAccessToken(): Promise<string> {
 
   const responseBody = result.body as { accessToken?: string };
   if (result.status < 200 || result.status >= 300 || !responseBody.accessToken) {
-    throw new Error('Unable to fetch SF access token');
+    throw new HttpError('logistics.sfApiError', 502);
   }
 
   return responseBody.accessToken;
@@ -113,17 +114,17 @@ export async function callSfService(
   const responseBody = result.body as { apiResultCode?: string; apiResultData?: string };
 
   if (result.status < 200 || result.status >= 300) {
-    throw new Error('logistics.sfApiError');
+    throw new HttpError('logistics.sfApiError', 502);
   }
 
   if (responseBody.apiResultCode !== 'A1000') {
-    throw new Error('logistics.sfApiError');
+    throw new HttpError('logistics.sfApiError', 502);
   }
 
   try {
     return JSON.parse(responseBody.apiResultData || '{}') as Record<string, unknown>;
   } catch {
-    throw new Error('logistics.invalidSfResponse');
+    throw new HttpError('logistics.invalidSfResponse', 502);
   }
 }
 
@@ -140,7 +141,7 @@ export async function downloadPdf(url: string, token: string): Promise<Buffer> {
       },
       (res) => {
         if (res.statusCode !== 200) {
-          reject(new Error('logistics.sfApiError'));
+          reject(new HttpError('logistics.sfApiError', 502));
           return;
         }
 

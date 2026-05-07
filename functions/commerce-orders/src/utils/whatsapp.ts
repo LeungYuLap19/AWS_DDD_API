@@ -1,3 +1,4 @@
+import { HttpError } from '@aws-ddd-api/shared';
 import env from '../config/env';
 
 interface OrderWhatsAppParams {
@@ -63,8 +64,7 @@ export async function sendWhatsAppOrderMessage(
   );
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`WhatsApp API error: ${response.status} ${errorBody}`);
+    throw new HttpError('common.serviceUnavailable', 502);
   }
 }
 

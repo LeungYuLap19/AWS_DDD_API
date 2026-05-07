@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { type AuthContext, AuthContextError } from '@aws-ddd-api/shared';
+import { type AuthContext, HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 
@@ -12,11 +12,11 @@ export function getValidatedPetId(event: RouteContext['event']): string {
   const petId = event.pathParameters?.petId;
 
   if (!petId) {
-    throw new AuthContextError('common.missingPathParams', 400);
+    throw new HttpError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('common.invalidObjectId', 400);
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   return petId;
@@ -26,11 +26,11 @@ export function getValidatedTransferId(event: RouteContext['event']): string {
   const transferId = event.pathParameters?.transferId;
 
   if (!transferId) {
-    throw new AuthContextError('common.missingPathParams', 400);
+    throw new HttpError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(transferId)) {
-    throw new AuthContextError('common.invalidObjectId', 400);
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   return transferId;
@@ -56,7 +56,7 @@ export async function authorizePetAccess(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new AuthContextError('petTransfer.errors.petNotFound', 404);
+    throw new HttpError('petTransfer.errors.petNotFound', 404);
   }
 
   const isOwner = pet.userId !== null && String(pet.userId) === authContext.userId;
@@ -64,7 +64,7 @@ export async function authorizePetAccess(
     Boolean(authContext.ngoId) && pet.ngoId !== null && String(pet.ngoId) === authContext.ngoId;
 
   if (!isOwner && !isNgoOwner) {
-    throw new AuthContextError('common.forbidden', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 
   return pet;
@@ -72,7 +72,7 @@ export async function authorizePetAccess(
 
 export function requireNGORole(authContext: AuthContext): void {
   if (!authContext.userRole || authContext.userRole.toLowerCase() !== 'ngo') {
-    throw new AuthContextError('common.forbidden', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 }
 
@@ -84,7 +84,7 @@ export function toErrorResponse(
   error: unknown,
   event: RouteContext['event']
 ): APIGatewayProxyResult | null {
-  if (error instanceof AuthContextError) {
+  if (error instanceof HttpError) {
     return response.errorResponse(error.statusCode, error.errorKey, event);
   }
 

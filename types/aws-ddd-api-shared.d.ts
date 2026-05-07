@@ -153,7 +153,7 @@ declare module '@aws-ddd-api/shared/auth/context' {
     principalId?: string;
   }
 
-  export class AuthContextError extends Error {
+  export class HttpError extends Error {
     statusCode: number;
     errorKey: string;
     constructor(errorKey: string, statusCode: number);

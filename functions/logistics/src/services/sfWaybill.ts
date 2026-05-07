@@ -35,19 +35,25 @@ export async function printCloudWaybill({
   });
   if (rateLimitResult) return rateLimitResult;
 
-  const accessToken = await getAccessToken();
-  const apiResultData = await callSfService({
-    serviceCode: 'COM_RECE_CLOUD_PRINT_WAYBILLS',
-    accessToken,
-    url: SF_CLOUD_PRINT_URL,
-    msgData: {
-      templateCode: 'fm_150_standard_YCSKUUQ3',
-      version: '2.0',
-      fileType: 'pdf',
-      sync: true,
-      documents: [{ masterWaybillNo: waybillNo }],
-    },
-  });
+  let accessToken: string;
+  let apiResultData: Record<string, unknown>;
+  try {
+    accessToken = await getAccessToken();
+    apiResultData = await callSfService({
+      serviceCode: 'COM_RECE_CLOUD_PRINT_WAYBILLS',
+      accessToken,
+      url: SF_CLOUD_PRINT_URL,
+      msgData: {
+        templateCode: 'fm_150_standard_YCSKUUQ3',
+        version: '2.0',
+        fileType: 'pdf',
+        sync: true,
+        documents: [{ masterWaybillNo: waybillNo }],
+      },
+    });
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
+  }
 
   const resultWithSuccess = apiResultData as { success?: boolean; obj?: { files?: Array<{ url: string; token: string }> } };
   if (resultWithSuccess.success === false) {
@@ -60,7 +66,12 @@ export async function printCloudWaybill({
   }
 
   const file = files[0];
-  const pdfBuffer = await downloadPdf(file.url, file.token);
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await downloadPdf(file.url, file.token);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
+  }
 
   await sendWaybillEmail({
     to: 'notification@ptag.com.hk',

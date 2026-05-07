@@ -2,7 +2,7 @@ import type { APIGatewayProxyResult } from 'aws-lambda';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import { getBearerToken, parseBody } from '@aws-ddd-api/shared';
+import { getBearerToken, parseBody, HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
@@ -43,14 +43,14 @@ function getOptionalVerifyAuthContext(event: RouteContext['event']): OptionalAut
 
   const token = getBearerToken(authorizationHeader);
   if (!token) {
-    throw new Error('common.unauthorized');
+    throw new HttpError('common.unauthorized', 401);
   }
 
   const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as Record<string, unknown>;
   const userId = decoded.userId || decoded.sub;
 
   if (!userId) {
-    throw new Error('common.unauthorized');
+    throw new HttpError('common.unauthorized', 401);
   }
 
   return {
