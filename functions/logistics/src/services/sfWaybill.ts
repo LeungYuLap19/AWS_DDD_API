@@ -30,8 +30,11 @@ export async function printCloudWaybill({
     action: 'logistics.printCloudWaybill',
     event,
     identifier: auth?.userEmail ?? auth?.userId ?? null,
-    limit: 20,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+      { scope: 'identifier', limit: 30, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResult) return rateLimitResult;
 

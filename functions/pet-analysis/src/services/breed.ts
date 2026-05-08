@@ -21,8 +21,11 @@ export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGateway
     action: 'breedAnalysis',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 20,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+      { scope: 'identifier', limit: 30, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;

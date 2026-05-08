@@ -35,8 +35,11 @@ export async function handleCreatePetProfile(ctx: RouteContext): Promise<APIGate
     action: 'petProfile.create',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 20,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+      { scope: 'identifier', limit: 30, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;

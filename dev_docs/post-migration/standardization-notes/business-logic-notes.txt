@@ -1,0 +1,346 @@
+BUSINESS LOGIC AUDIT & OPTIMISATION PLAN
+=========================================
+AWS_DDD_API — May 2026
+Scope: all functions/*/src/services/**
+
+────────────────────────────────────────────────────────────────────────────────
+1. SEVERITY MAP
+────────────────────────────────────────────────────────────────────────────────
+
+  P0  Correctness / security risk — fix before next deploy
+  P1  High duplication or complexity — reduces maintainability significantly
+  P2  Moderate — worth cleaning up in the same sprint as touching the file
+  P3  Low / nice-to-have — do when time allows
+
+────────────────────────────────────────────────────────────────────────────────
+2. HOTSPOTS (ranked)
+────────────────────────────────────────────────────────────────────────────────
+
+H1 [P1] pet-medical — 4 service files share ~90 % identical code
+   Files: bloodTest.ts, deworming.ts, medical.ts, medication.ts
+   Pattern repeated in every file:
+     handleList*   — requireAuth → connectDB → loadAuthorizedPet → paginate → query → sanitize
+     handleCreate* — requireAuth → parseBody → dateCheck → connectDB → rateLimit → loadPet → create
+     handleUpdate* — requireAuth → validateObjectId → parseBody → dateCheck → connectDB → rateLimit → loadPet → buildUpdateFields → findOneAndUpdate
+     handleDelete* — requireAuth → validateObjectId → connectDB → rateLimit → loadPet → deleteOne
+
+   Differences are *only*:
+     - mongoose model name  (blood_tests / Deworm_Records / Medical_Records / Medication_Records)
+     - PROJECTION string
+     - field names in create/update objects
+     - date field names and error key suffix (bloodTest / dewormRecord / medicalRecord / medicationRecord)
+     - schema imports
+
+   Current total LOC across 4 files: ~800
+   After factory: ~200 (factory definition) + ~50 per handler file = ~400 total
+
+   Proposed fix: createMedicalRecordHandlers(config) factory
+   -----------------------------------------------------------
+   Each record type provides a config object:
+   {
+     modelName: string,
+     projection: string,
+     rateLimitAction: string,
+     errorKeyPrefix: string,   // e.g. 'petMedical.errors.bloodTest'
+     dateFields: string[],     // field names that carry DD/MM/YYYY strings
+     buildCreateDoc: (data, petId) => Record<string, unknown>,
+     buildUpdatePatch: (data) => Record<string, unknown>,
+   }
+
+   The factory returns { handleList, handleCreate, handleUpdate, handleDelete }.
+   Each handler file becomes ~15 lines: import factory, define config, export handlers.
+
+   NOTE: deworming has two date fields (date + nextDewormDate); the factory's
+   dateFields array handles this naturally by iterating over the list.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H2 [P1] commerce-orders/handleCreateOrder — mixed concerns, ~250 LOC
+   File: commerce-orders/src/services/orders.ts
+
+   The single function does:
+     1. Auth
+     2. connectDB (must come before rate limit — OK, but undocumented)
+     3. Rate limiting
+     4. Multipart parse + Zod
+     5. Upload pet_img (try/catch pattern #1)
+     6. Upload discount_proof (try/catch pattern #2 — identical to #1)
+     7. Resolve canonical price
+     8. Create Order document (with duplicate 11000 detection)
+     9. Retry loop: generate tagId → generate QR → create OrderVerification
+        (with tagId collision retry, max 3)
+    10. Compensation: delete Order if step 9 fails
+    11. Parallel email + WhatsApp notification (both non-fatal .catch)
+    12. Return response
+
+   Issues:
+   a. Upload error handling is copy-pasted twice (lines ~120–140 and ~145–165).
+   b. The tag-generation retry loop and compensation are embedded inline,
+      making the function hard to reason about in isolation.
+   c. Step 9 creates an OrderVerification that references Order data assembled
+      above it — the two are tightly coupled but live in the same transaction-less
+      block, relying on ad-hoc compensation rather than a proper unit.
+
+   Proposed fix:
+   a. Extract a shared uploadOrError(file, prefix, errorKeys, ctx) helper
+      (see H4 below) to remove upload duplication.
+   b. Extract createOrderVerificationWithRetry(orderData, retries) → saves
+      the retry loop and keeps the compensation logic co-located.
+   c. The function can then read as a clear sequence of steps, each one call.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H3 [DEFERRED — security scan phase] ngo/handlePatchMe — uniqueness checks outside the transaction
+   File: ngo/src/services/ngo.ts
+
+   Race condition: duplicate checks (email, phone, registrationNumber) run outside
+   the Mongoose transaction. This is a TOCTOU issue — to be caught and remediated
+   centrally via Checkov / semgrep / snyk / CodeGuru Security.
+
+   Structural cleanup (non-security): the function is ~200 LOC with 4 conditional
+   update paths. Extract each update section (updateUserFields / updateNgoFields /
+   updateCounterFields / updateAccessFields) into named helpers to improve
+   readability. This part can be done in Phase 3.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H4 [P2] File upload error handling — copy-pasted across 5+ services
+   Locations:
+     commerce-orders/services/orders.ts           (×2, pet_img + discount_proof)
+     pet-profile/services/patchProfile.ts         (×1, inside a for loop)
+     pet-recovery/services/petLost.ts             (×1, inside a for loop)
+     pet-analysis/services/upload.ts              (×1)
+     pet-analysis/services/eye.ts                 (×1)
+
+   Repeated block:
+     try {
+       const url = await uploadImageFile({ buffer, originalname }, prefix);
+       ...
+     } catch (err: unknown) {
+       const code = (err as { code?: string }).code;
+       if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, '*.errors.invalidFileType', ctx.event);
+       if (code === 'FILE_TOO_LARGE')    return response.errorResponse(413, '*.errors.fileTooLarge',    ctx.event);
+       throw err;
+     }
+
+   The only variation is the error key prefix (e.g. 'orders.errors', 'petProfile.errors').
+
+   Proposed helper (within each function's local utils, or shared if extracted):
+     async function uploadOrError(
+       file: { buffer: Buffer; originalname: string },
+       prefix: string,
+       errorKeys: { invalidFileType: string; fileTooLarge: string },
+       ctx: RouteContext
+     ): Promise<string | APIGatewayProxyResult>
+
+   Caller pattern:
+     const result = await uploadOrError(file, prefix, errorKeys, ctx);
+     if (typeof result !== 'string') return result;  // was an error response
+     const url = result;
+
+   Reduces each upload site from ~8 lines to 3 lines.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H5 [P2] petId path param extraction — unvalidated string coercion in pet-medical
+   Files: bloodTest.ts, deworming.ts, medical.ts, medication.ts (all 4)
+
+   Current:
+     const petId = String(ctx.event.pathParameters?.petId || '');
+
+   This silently passes an empty string or any garbage to MongoDB queries.
+   loadAuthorizedPet does validate ownership but with a malformed ObjectId it
+   will throw rather than returning a proper 400. The rate limiter also runs
+   before the ID is validated, so invalid IDs waste rate limit budget.
+
+   Standard to enforce (already used in other domains):
+     const petIdParam = parseObjectIdParam(ctx.event.pathParameters?.petId);
+     if (!petIdParam.ok) return response.errorResponse(petIdParam.statusCode, petIdParam.errorKey, ctx.event);
+     const petId = petIdParam.data;
+
+   This returns a clean 400 before hitting DB or rate limit.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H6 [P2] Date parsing — 3 different utility names for the same concept
+   Locations & names:
+     pet-medical/*:       isValidDateFormat + parseDDMMYYYY       (utils/date.ts)
+     pet-profile/*:       parseFlexibleDate                       (utils/date.ts)
+     pet-recovery/*:      parseFlexibleDate                       (utils/date.ts)
+     pet-biometric/*:     parseFlexibleDate                       (utils/date.ts)
+     pet-transfer/*:      isValidDateFormat + parseDateFlexible   (utils/helpers.ts)
+     commerce-orders/*:   (uses luxon or moment internally via helper)
+
+   Two separate patterns exist:
+     Pattern A (pet-medical, pet-transfer): validate first (isValidDateFormat) then parse.
+       Returns error response if format is wrong before connecting to DB.
+     Pattern B (pet-profile, pet-recovery): parseFlexibleDate does both — returns null on
+       failure, caller checks for null.
+
+   Neither is wrong, but the naming divergence causes confusion.
+
+   Standard to adopt: Pattern A is safer (explicit validation + parse separation).
+   Rename parseDateFlexible → parseDDMMYYYY in pet-transfer to align with pet-medical.
+   If/when shared layer is created, consolidate into one utility.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H7 [P2] Operation ordering — inconsistent across domains
+   The expected ordering within a handler:
+     1. requireAuthContext / requireRole   (sync, no I/O — fail fast)
+     2. Path param validation              (sync)
+     3. parseBody / parseMultipartBody     (sync or light I/O)
+     4. Synchronous business rule checks   (e.g. date format)
+     5. connectToMongoDB                   (I/O — needed before rate limit)
+     6. applyRateLimit                     (I/O, needs DB connection)
+     7. loadAuthorizedPet / ownership check (I/O)
+     8. Core business logic + DB writes    (I/O)
+
+   Violations found:
+   - pet-recovery/petLost.ts:handleCreatePetLost — connects to DB after multipart
+     parse but before rate limit (correct), however petId ownership check
+     (Pet.findOne) comes before rate limiting, wasting a DB round-trip on
+     unauthenticated abuse.
+   - pet-transfer/transfer.ts:handleCreateTransfer — authorizePetAccess called
+     before rate limiting (no rate limit applied at all).
+   - commerce-orders/orders.ts:handleCreateOrder — rate limit comment says "1"
+     but the code comment labels it "2", and DB connects before rate limit which
+     is correct but the in-code numbering is misleading.
+   - ngo/ngo.ts:handleGetMembers — no rate limiting at all on a paginated list
+     endpoint that hits DB twice.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H8 [P2] No-op PATCH guard — inconsistently applied
+   Applied in:  pet-transfer/transfer.ts (returns 400 'common.noFieldsToUpdate')
+   Missing in:  pet-medical update handlers (silently runs $set {} against DB)
+
+   Standard: every PATCH/PUT handler that builds an updateFields object should
+   guard against an empty object before issuing the DB write:
+     if (Object.keys(updateFields).length === 0) {
+       return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
+     }
+
+──────────────────────────────────────────────────────────────────────────────
+
+H9 [P3] Normalisation helpers duplicated in pet-transfer
+   File: pet-transfer/src/utils/helpers.ts exports normalizeEmail, normalizePhone,
+   isValidEmail, isValidPhoneNumber — all reimplementations of utilities that
+   already exist in auth/src/utils/normalize.ts and user/src/utils/*.
+
+   Since these functions live in separate Lambda packages they cannot directly
+   import from each other without a shared layer. If a shared layer is created
+   (tracked in TODO as SoC work), these should be the first candidates to move.
+   Until then, keep a comment on each copy pointing to the canonical source to
+   avoid drift.
+
+──────────────────────────────────────────────────────────────────────────────
+
+H10 [P3] commerce-fulfillment/commands.ts — SMTP transporter created per request
+    File: commerce-fulfillment/src/services/commands.ts
+
+    createSmtpTransporter() is called inside handleSendPtagDetectionEmail on
+    every invocation, creating a new connection pool each time. The template
+    cache (templateCache variable) is correctly module-scoped, but the transporter
+    is not. For a Lambda that may handle bursts, this is wasteful.
+
+    Fix: Hoist the transporter to module scope so it is reused across warm
+    invocations (same pattern as the DB connection singleton).
+
+────────────────────────────────────────────────────────────────────────────────
+3. STANDARDS TO ENFORCE GOING FORWARD
+────────────────────────────────────────────────────────────────────────────────
+
+S1  Handler operation order (see H7):
+    auth → path params → body parse → sync checks → connectDB → rateLimit →
+    ownership checks → business logic
+
+S2  Path param validation:
+    Always use parseObjectIdParam() from shared. Never use
+    String(ctx.event.pathParameters?.x || '').
+
+S3  PATCH no-op guard:
+    Every PATCH handler must return 400 'common.noFieldsToUpdate' when the
+    constructed updateFields object is empty.
+
+S4  Upload error handling:
+    Extract uploadOrError helper per-function (or shared when layer exists).
+    Never inline the try/catch upload block more than once per file.
+
+S5  Date validation:
+    Use Pattern A (explicit validate-then-parse) across all domains.
+    Consistent naming: isValidDateFormat + parseDDMMYYYY (or parseDate).
+    Do date validation before connectToMongoDB (step 4, not step 7).
+
+S6  Uniqueness enforcement:
+    [DEFERRED — security scan phase] TOCTOU race condition in pre-transaction
+    uniqueness checks to be handled centrally via security tooling.
+
+S7  Rate limiting:
+    Every mutation endpoint (POST / PATCH / PUT / DELETE) must have
+    applyRateLimit. List endpoints that hit DB should have a separate,
+    higher-limit rate limit if they are user-facing.
+
+S8  SMTP / external client singletons:
+    Module-scope singleton pattern (lazy-init, re-used on warm invocations).
+    Same pattern as connectToMongoDB.
+
+S9  Duplication threshold:
+    If 3+ handlers share the same structural pattern (same steps, only config
+    differs), extract a factory/builder. Pet-medical is the canonical example.
+
+────────────────────────────────────────────────────────────────────────────────
+4. REFACTORING PLAN (PRIORITISED)
+────────────────────────────────────────────────────────────────────────────────
+
+Phase 1 — High-impact duplication (next sprint)
+  [ ] H1: Implement createMedicalRecordHandlers factory.
+          Refactor all 4 pet-medical service files to use it.
+          Target: ~400 total LOC down from ~800.
+  [ ] H4: Extract uploadOrError into each affected domain's utils/upload.ts.
+          Update all call sites in orders.ts, patchProfile.ts, petLost.ts,
+          upload.ts, eye.ts.
+  [ ] H5: Replace String(ctx.event.pathParameters?.petId || '') with
+          parseObjectIdParam in all 4 pet-medical service files.
+
+Phase 3 — Consistency (same sprint or next)
+  [ ] H2: Refactor handleCreateOrder — extract createOrderVerificationWithRetry
+          helper; use uploadOrError from Phase 2.
+  [ ] H3 (partial, non-security): Extract update sections in ngo/handlePatchMe
+          into named helpers (updateUserFields / updateNgoFields / etc).
+  [ ] H6: Rename parseDateFlexible → parseDDMMYYYY in pet-transfer to align
+          naming. Add note about date validation placement (before connectDB).
+  [ ] H7: Audit and fix operation ordering in petLost.ts and transfer.ts.
+          Add rate limiting to handleCreateTransfer and handleGetMembers (ngo).
+  [ ] H8: Add no-op guard to all pet-medical update handlers.
+
+Phase 4 — Minor cleanup
+  [ ] H10: Hoist SMTP transporter to module scope in commands.ts.
+  [ ] H9: Add canonical-source comment to each normalizeEmail / normalizePhone
+          duplicate in pet-transfer until a shared layer is created.
+
+────────────────────────────────────────────────────────────────────────────────
+5. WHAT NOT TO DO (scope boundaries)
+────────────────────────────────────────────────────────────────────────────────
+
+- Do NOT address security vulnerabilities in this phase. All security issues
+  (TOCTOU races, injection risks, auth bypass, etc.) are deferred to the
+  centralized security scan phase: Checkov, semgrep, snyk, CodeGuru Security.
+  Items marked [DEFERRED — security scan phase] in this file are out of scope here.
+
+
+- Do NOT move helpers across Lambda packages until the shared layer work
+  (tracked as SoC in TODO) is explicitly started. Cross-package imports would
+  break the individual bundle model.
+
+- Do NOT fix the TOCTOU race condition in ngo.handlePatchMe here — that is a
+  security concern and will be handled centrally via Checkov/semgrep/snyk/CodeGuru.
+  Only do the structural cleanup (extract helper functions) in Phase 3.
+
+- Do NOT add a factory pattern to pet-adoption (managed.ts / browse.ts) — those
+  three handlers are already cleanly separated and have meaningfully different
+  logic (auth-context dispatch in adoption.ts is intentional design).
+
+- Do NOT add rate limiting to public/read-only endpoints that already have
+  WAF-level protection (e.g. GET /pet/adoption, GET /pet/source). Only add it
+  where WAF coverage is not confirmed.

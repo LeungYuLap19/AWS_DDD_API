@@ -6,6 +6,7 @@ import {
 } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import {
   authorizePetAccess,
@@ -55,6 +56,18 @@ export async function handleCreatePetSource(ctx: RouteContext): Promise<APIGatew
 
   const petId = getValidatedPetId(ctx.event);
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petSource.create',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   await authorizePetAccess(authContext, petId);
 
   const SourceModel = mongoose.model('pet_sources');
@@ -105,6 +118,18 @@ export async function handlePatchPetSource(ctx: RouteContext): Promise<APIGatewa
 
   const petId = getValidatedPetId(ctx.event);
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petSource.update',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   await authorizePetAccess(authContext, petId);
 
   const SourceModel = mongoose.model('pet_sources');

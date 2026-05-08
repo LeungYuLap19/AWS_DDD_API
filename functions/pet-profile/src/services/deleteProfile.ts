@@ -15,8 +15,11 @@ export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGate
     action: 'petProfile.delete',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 60 },
+      { scope: 'identifier', limit: 15, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;

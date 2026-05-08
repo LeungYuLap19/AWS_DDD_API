@@ -18,8 +18,11 @@ export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayPr
     action: 'uploadImage',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 90, windowSeconds: 300 },
+      { scope: 'identifier', limit: 45, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
@@ -73,8 +76,11 @@ export async function handleUploadPetBreedImage(
     action: 'uploadPetBreedImage',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 90, windowSeconds: 300 },
+      { scope: 'identifier', limit: 45, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;

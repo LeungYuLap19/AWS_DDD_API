@@ -11,7 +11,7 @@ import { checkSmsVerification, createSmsVerification } from '../config/twilio';
 import { challengeBodySchema } from '../zodSchema/challengeBodySchema';
 import { verifyChallengeBodySchema } from '../zodSchema/verifyChallengeBodySchema';
 import { normalizeEmail, normalizePhone } from '../utils/normalize';
-import { applyRateLimit } from '../utils/rateLimit';
+import { applyRateLimit, recordFailure, requireFailureCooldown } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import {
   buildRefreshCookie,
@@ -80,8 +80,14 @@ async function createEmailChallenge(
     action: 'auth.challenge.email',
     event,
     identifier: body.email,
-    limit: 5,
-    windowSeconds: 300,
+    // ip+identifier omitted: identifier (3/5m) is stricter than any plausible
+    // ip+identifier limit, so the composite lane never trips first.
+    policies: [
+      { scope: 'ip', limit: 20, windowSeconds: 300 },
+      // Per-target identifier cap: prevent email-bombing a single victim
+      // by rotating IPs.
+      { scope: 'identifier', limit: 3, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
@@ -149,8 +155,14 @@ async function createSmsChallenge(
     action: 'auth.challenge.sms',
     event,
     identifier: phoneNumber,
-    limit: 5,
-    windowSeconds: 600,
+    // ip+identifier omitted: identifier (3/10m) is stricter than any plausible
+    // ip+identifier limit, so the composite lane never trips first.
+    policies: [
+      { scope: 'ip', limit: 20, windowSeconds: 600 },
+      // Per-target identifier cap: prevent SMS flooding of a single victim
+      // by rotating IPs.
+      { scope: 'identifier', limit: 3, windowSeconds: 600 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
@@ -177,11 +189,28 @@ async function verifyEmailChallenge(
     action: 'auth.challenge.verify.email',
     event,
     identifier: body.email,
-    limit: 10,
-    windowSeconds: 300,
+    // ip+identifier omitted: identifier (5/5m) already bounds OTP brute force
+    // per-email regardless of IP; the composite lane never trips first.
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+      // Per-target cap closes the OTP brute-force window when an attacker
+      // rotates IPs against a single email.
+      { scope: 'identifier', limit: 5, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
+  }
+
+  const cooldownResponse = await requireFailureCooldown({
+    action: 'auth.challenge.verify.email.fail',
+    cooldownSeconds: 15 * 60,
+    event,
+    identifier: body.email,
+    threshold: 5,
+  });
+  if (cooldownResponse) {
+    return cooldownResponse;
   }
 
   const email = normalizeEmail(body.email);
@@ -211,6 +240,13 @@ async function verifyEmailChallenge(
   );
 
   if (!consumed) {
+    await recordFailure({
+      action: 'auth.challenge.verify.email.fail',
+      cooldownSeconds: 15 * 60,
+      event,
+      identifier: email,
+      threshold: 5,
+    });
     return response.errorResponse(400, 'auth.challenge.verificationFailed', event);
   }
   const User = mongoose.model('User');
@@ -290,11 +326,28 @@ async function verifySmsChallenge(
     action: 'auth.challenge.verify.sms',
     event,
     identifier: phoneNumber,
-    limit: 10,
-    windowSeconds: 600,
+    // ip+identifier omitted: identifier (5/10m) already bounds OTP brute force
+    // per-phone regardless of IP; the composite lane never trips first.
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 600 },
+      // Per-target cap closes the OTP brute-force window when an attacker
+      // rotates IPs against a single phone number.
+      { scope: 'identifier', limit: 5, windowSeconds: 600 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
+  }
+
+  const cooldownResponse = await requireFailureCooldown({
+    action: 'auth.challenge.verify.sms.fail',
+    cooldownSeconds: 15 * 60,
+    event,
+    identifier: phoneNumber,
+    threshold: 5,
+  });
+  if (cooldownResponse) {
+    return cooldownResponse;
   }
 
   let authContext: OptionalAuthContext | null = null;
@@ -321,6 +374,13 @@ async function verifySmsChallenge(
       expired: 'auth.challenge.codeExpired',
     };
 
+    await recordFailure({
+      action: 'auth.challenge.verify.sms.fail',
+      cooldownSeconds: 15 * 60,
+      event,
+      identifier: phoneNumber,
+      threshold: 5,
+    });
     return response.errorResponse(400, errorMap[result.status] || 'auth.challenge.verificationFailed', event);
   }
 

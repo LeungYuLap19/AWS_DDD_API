@@ -6,7 +6,7 @@ import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { ngoLoginBodySchema } from '../zodSchema/ngoLoginBodySchema';
 import { normalizeEmail } from '../utils/normalize';
-import { applyRateLimit } from '../utils/rateLimit';
+import { applyRateLimit, recordFailure, requireFailureCooldown } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import {
   buildRefreshCookie,
@@ -39,10 +39,25 @@ export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxy
     action: 'auth.login.ngo',
     event: ctx.event,
     identifier: email,
-    limit: 10,
-    windowSeconds: 15 * 60,
+    // ip+identifier omitted: with identifier limit ≤ ip+identifier limit, the
+    // composite lane is dead weight (it can never trip first).
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 15 * 60 },
+      { scope: 'identifier', limit: 10, windowSeconds: 15 * 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
+
+  // Reject early if too many bad-credential failures have already accumulated
+  // for this email regardless of IP. Genuine logins do not consume this quota.
+  const cooldownResponse = await requireFailureCooldown({
+    action: 'auth.login.ngo.fail',
+    cooldownSeconds: 15 * 60,
+    event: ctx.event,
+    identifier: email,
+    threshold: 5,
+  });
+  if (cooldownResponse) return cooldownResponse;
 
   const User = mongoose.model('User');
   const user = await User.findOne({
@@ -52,6 +67,13 @@ export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxy
   }).lean() as NgoLoginUser | null;
 
   if (!user || !user.password || !(await bcrypt.compare(parsed.data.password, user.password))) {
+    await recordFailure({
+      action: 'auth.login.ngo.fail',
+      cooldownSeconds: 15 * 60,
+      event: ctx.event,
+      identifier: email,
+      threshold: 5,
+    });
     return response.errorResponse(401, 'auth.login.ngo.invalidUserCredential', ctx.event);
   }
 

@@ -17,6 +17,7 @@ import {
 import { buildNgoMemberList } from '../utils/memberList';
 import { normalizeEmail, normalizePhone } from '../utils/normalize';
 import { escapeRegex, flattenToDot, hasKeys, pickAllowed } from '../utils/object';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import {
   sanitizeNgo,
@@ -131,6 +132,17 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   }
 
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'ngo.patchMe',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 30, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   const session = await mongoose.startSession();
   const User = mongoose.model('User');

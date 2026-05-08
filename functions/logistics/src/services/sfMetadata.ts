@@ -23,8 +23,10 @@ export async function getToken({ event }: RouteContext): Promise<APIGatewayProxy
     action: 'logistics.getToken',
     event,
     identifier: null,
-    limit: 10,
-    windowSeconds: 300,
+    policies: [
+      // Public unauthenticated route: only the per-IP lane is meaningful.
+      { scope: 'ip', limit: 10, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResult) return rateLimitResult;
 
@@ -47,8 +49,9 @@ export async function getArea({ event, body }: RouteContext): Promise<APIGateway
     action: 'logistics.getArea',
     event,
     identifier: null,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResult) return rateLimitResult;
 
@@ -71,8 +74,9 @@ export async function getNetCode({ event, body }: RouteContext): Promise<APIGate
     action: 'logistics.getNetCode',
     event,
     identifier: null,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResult) return rateLimitResult;
 
@@ -98,8 +102,9 @@ export async function getPickupLocations({
     action: 'logistics.getPickupLocations',
     event,
     identifier: null,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResult) return rateLimitResult;
 

@@ -66,11 +66,18 @@ export async function handleUserRegistration(ctx: RouteContext): Promise<APIGate
 
   await connectToMongoDB();
 
+  const probeEmail = normalizeEmail(parsed.data.email);
   const rateLimitResponse = await applyRateLimit({
     action: 'auth.registration.user',
     event: ctx.event,
-    limit: 12,
-    windowSeconds: 10 * 60,
+    identifier: probeEmail,
+    policies: [
+      { scope: 'ip', limit: 12, windowSeconds: 10 * 60 },
+      // Per-email cap: bound how many times the same email can be claimed
+      // across rotated IPs.
+      { scope: 'identifier', limit: 3, windowSeconds: 60 * 60 },
+      { scope: 'ip+identifier', limit: 5, windowSeconds: 10 * 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -186,11 +193,18 @@ export async function handleNgoRegistration(ctx: RouteContext): Promise<APIGatew
 
   await connectToMongoDB();
 
+  const probeEmail = normalizeEmail(parsed.data.email);
   const rateLimitResponse = await applyRateLimit({
     action: 'auth.registration.ngo',
     event: ctx.event,
-    limit: 8,
-    windowSeconds: 10 * 60,
+    identifier: probeEmail,
+    policies: [
+      { scope: 'ip', limit: 8, windowSeconds: 10 * 60 },
+      // Per-email cap: bound how many times the same email can be claimed
+      // across rotated IPs.
+      { scope: 'identifier', limit: 3, windowSeconds: 60 * 60 },
+      { scope: 'ip+identifier', limit: 5, windowSeconds: 10 * 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
 

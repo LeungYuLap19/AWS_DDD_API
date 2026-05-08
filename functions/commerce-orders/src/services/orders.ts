@@ -80,17 +80,23 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
  * it protected. This is an auth-strengthening delta.
  */
 export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  const auth = requireAuthContext(ctx.event);
 
   // 2. Connect to DB first — rate limiter uses mongoose and needs an open connection
   await connectToMongoDB();
 
-  // 1. Rate limit (per IP, 10 requests/hour)
+  // 1. Layered rate limit. The narrow ip+account lane preserves the legacy
+  //    10/hr behaviour. Wider ip lane bounds anonymous probing and per-account
+  //    lane bounds an attacker rotating IPs against one account.
   const rateLimitResult = await applyRateLimit({
     action: 'submit-order',
     event: ctx.event,
-    limit: 10,
-    windowSeconds: 3600,
+    identifier: auth.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 3600 },
+      { scope: 'identifier', limit: 20, windowSeconds: 3600 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 3600 },
+    ],
   });
   if (rateLimitResult) return rateLimitResult;
 

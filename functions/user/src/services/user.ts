@@ -5,6 +5,7 @@ import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { userPatchBodySchema } from '../zodSchema/userPatchBodySchema';
 import { normalizeEmail, normalizePhone } from '../utils/normalize';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import { sanitizeUser } from '../utils/sanitize';
 
@@ -50,6 +51,17 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   }
 
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'user.patchMe',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 30, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   const User = mongoose.model('User');
   const {
@@ -136,6 +148,19 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 export async function handleDeleteMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
+
+  // Destructive endpoint: tighter cap to bound abuse from a compromised
+  // session token before manual remediation.
+  const rateLimitResponse = await applyRateLimit({
+    action: 'user.deleteMe',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 20, windowSeconds: 60 * 60 },
+      { scope: 'identifier', limit: 5, windowSeconds: 60 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   const User = mongoose.model('User');
   const RefreshToken = mongoose.model('RefreshToken');

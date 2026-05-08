@@ -54,8 +54,11 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
     action: 'petRecovery.petLost.create',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 5,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 15, windowSeconds: 60 },
+      { scope: 'identifier', limit: 8, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 5, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
 

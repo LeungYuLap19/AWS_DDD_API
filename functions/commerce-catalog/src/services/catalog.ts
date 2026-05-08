@@ -4,6 +4,7 @@ import { parseBody, paginationQuerySchema } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { catalogEventBodySchema } from '../zodSchema/catalogEventBodySchema';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 
 export async function handleGetCatalog(ctx: RouteContext): Promise<APIGatewayProxyResult> {
@@ -36,6 +37,21 @@ export async function handleCreateCatalogEvent(ctx: RouteContext): Promise<APIGa
   }
 
   await connectToMongoDB();
+
+  // Endpoint is x-api-key gated (Authorizer: NONE) but the key is embedded in
+  // the frontend bundle. Cap by IP and provide a global ceiling so that a
+  // leaked key cannot be used to flood the ProductLog collection.
+  const rateLimitResponse = await applyRateLimit({
+    action: 'commerce.catalog.events',
+    event: ctx.event,
+    identifier: parsed.data.userId ?? null,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 60 },
+      { scope: 'global', limit: 5000, windowSeconds: 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   const ProductLog = mongoose.model('ProductLog');
   const { petId, userId, userEmail, productUrl, accessAt } = parsed.data;
 

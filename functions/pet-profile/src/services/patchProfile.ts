@@ -39,8 +39,11 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
     action: 'petProfile.patch',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 90, windowSeconds: 300 },
+      { scope: 'identifier', limit: 45, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;

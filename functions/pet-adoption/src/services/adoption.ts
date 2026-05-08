@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import { getAuthContext, parseObjectIdParam, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import { handleGetAdoptionList, handleGetBrowseDetail } from './browse';
 import {
@@ -41,11 +42,21 @@ export async function handleGetById(ctx: RouteContext): Promise<APIGatewayProxyR
  * Protected: requires valid auth context.
  */
 export async function handleCreate(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  const authContext = requireAuthContext(ctx.event);
   const idParam = parseObjectIdParam(ctx.event.pathParameters?.id);
   if (!idParam.ok) {
     return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
   }
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petAdoption.create',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
   return handleCreateManagedRecord(ctx, idParam.data);
 }
 
@@ -55,11 +66,21 @@ export async function handleCreate(ctx: RouteContext): Promise<APIGatewayProxyRe
  * Protected: requires valid auth context.
  */
 export async function handleUpdate(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  const authContext = requireAuthContext(ctx.event);
   const idParam = parseObjectIdParam(ctx.event.pathParameters?.id);
   if (!idParam.ok) {
     return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
   }
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petAdoption.update',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
   return handleUpdateManagedRecord(ctx, idParam.data);
 }
 
@@ -69,10 +90,20 @@ export async function handleUpdate(ctx: RouteContext): Promise<APIGatewayProxyRe
  * Protected: requires valid auth context.
  */
 export async function handleDelete(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  const authContext = requireAuthContext(ctx.event);
   const idParam = parseObjectIdParam(ctx.event.pathParameters?.id);
   if (!idParam.ok) {
     return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
   }
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petAdoption.delete',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 30, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
   return handleDeleteManagedRecord(ctx, idParam.data);
 }

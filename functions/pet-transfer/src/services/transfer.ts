@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import {
   authorizePetAccess,
@@ -35,6 +36,18 @@ export async function handleCreateTransfer(ctx: RouteContext): Promise<APIGatewa
   }
 
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petTransfer.create',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   await authorizePetAccess(authContext, petId);
 
   const data = parsed.data as TransferCreateBody;
@@ -85,6 +98,18 @@ export async function handleUpdateTransfer(ctx: RouteContext): Promise<APIGatewa
   }
 
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petTransfer.update',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   await authorizePetAccess(authContext, petId);
 
   const data = parsed.data as TransferUpdateBody;
@@ -147,6 +172,18 @@ export async function handleDeleteTransfer(ctx: RouteContext): Promise<APIGatewa
   const petId = getValidatedPetId(ctx.event);
   const transferId = getValidatedTransferId(ctx.event);
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petTransfer.delete',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   await authorizePetAccess(authContext, petId);
 
   const Pet = mongoose.model('Pet');
@@ -178,6 +215,19 @@ export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayPr
   }
 
   await connectToMongoDB();
+
+  // Ownership change is high impact; cap tighter than ordinary transfer edits.
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petTransfer.ngoReassignment',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 60 * 60 },
+      { scope: 'identifier', limit: 15, windowSeconds: 60 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
+
   await authorizePetAccess(authContext, petId);
 
   const data = parsed.data as NgoTransferBody;

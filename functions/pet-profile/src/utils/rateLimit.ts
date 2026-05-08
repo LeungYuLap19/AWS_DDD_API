@@ -1,23 +1,39 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
 import { requireMongoRateLimit } from '@aws-ddd-api/shared';
+import type { RateLimitPolicy } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 
-export async function applyRateLimit(params: {
+/**
+ * Parameters accepted by `applyRateLimit`.
+ *
+ * Provide either:
+ * - `policies` for a layered limit (per-IP, per-identifier, per-account, etc.), or
+ * - `limit` + `windowSeconds` for the legacy single-bucket limit (IP + identifier).
+ *
+ * `accountId` is optional and only consumed by `account`-scoped policies.
+ */
+type ApplyRateLimitParams = {
+  accountId?: string | number | null;
   action: string;
   event: RouteContext['event'];
   identifier?: string | number | null;
-  limit: number;
-  windowSeconds: number;
-}): Promise<APIGatewayProxyResult | null> {
+  limit?: number;
+  policies?: RateLimitPolicy[];
+  windowSeconds?: number;
+};
+
+export async function applyRateLimit(params: ApplyRateLimitParams): Promise<APIGatewayProxyResult | null> {
   try {
     await requireMongoRateLimit({
+      accountId: params.accountId,
       action: params.action,
       event: params.event,
       identifier: params.identifier,
       limit: params.limit,
       mongoose,
+      policies: params.policies,
       windowSeconds: params.windowSeconds,
     });
 

@@ -97,8 +97,12 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
     action: 'eyeUploadAnalysis',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 300,
+    policies: [
+      // Expensive ML endpoint — keep all lanes tight.
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+      { scope: 'identifier', limit: 15, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
@@ -226,8 +230,11 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
     action: 'petEyeUpdate',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 60 },
+      { scope: 'identifier', limit: 15, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;

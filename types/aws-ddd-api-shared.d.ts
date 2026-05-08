@@ -294,7 +294,16 @@ declare module '@aws-ddd-api/shared/rate-limit/mongo' {
   import type { APIGatewayProxyEvent } from 'aws-lambda';
   import type { Mongoose } from 'mongoose';
 
+  export type RateLimitScope = 'ip' | 'identifier' | 'ip+identifier' | 'account' | 'global';
+
+  export interface RateLimitPolicy {
+    limit: number;
+    scope: RateLimitScope;
+    windowSeconds: number;
+  }
+
   export function requireMongoRateLimit(options: {
+    accountId?: string | number | null;
     action: string;
     collectionName?: string;
     event: APIGatewayProxyEvent;
@@ -303,13 +312,50 @@ declare module '@aws-ddd-api/shared/rate-limit/mongo' {
     identifier?: string | number | null;
     includeIp?: boolean;
     keySalt?: string;
-    limit: number;
+    limit?: number;
     modelName?: string;
     mongoose: Mongoose;
     nowMs?: number;
+    policies?: RateLimitPolicy[];
     ttlWindowMultiplier?: number;
-    windowSeconds: number;
+    windowSeconds?: number;
   }): Promise<void>;
+
+  export function requireMongoRateLimitNotInCooldown(options: {
+    accountId?: string | number | null;
+    action: string;
+    collectionName?: string;
+    cooldownSeconds: number;
+    event: APIGatewayProxyEvent;
+    failOpen?: boolean;
+    hashKey?: boolean;
+    identifier?: string | number | null;
+    keySalt?: string;
+    modelName?: string;
+    mongoose: Mongoose;
+    nowMs?: number;
+    scope?: RateLimitScope;
+    threshold: number;
+    ttlWindowMultiplier?: number;
+  }): Promise<void>;
+
+  export function recordMongoRateLimitFailure(options: {
+    accountId?: string | number | null;
+    action: string;
+    collectionName?: string;
+    cooldownSeconds: number;
+    event: APIGatewayProxyEvent;
+    failOpen?: boolean;
+    hashKey?: boolean;
+    identifier?: string | number | null;
+    keySalt?: string;
+    modelName?: string;
+    mongoose: Mongoose;
+    nowMs?: number;
+    scope?: RateLimitScope;
+    threshold: number;
+    ttlWindowMultiplier?: number;
+  }): Promise<{ cooldownTriggered: boolean; count: number; retryAfterSeconds: number }>;
 }
 
 declare module '@aws-ddd-api/shared' {

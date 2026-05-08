@@ -80,8 +80,11 @@ export async function handleCreateDewormRecord(
     action: 'petMedical.create',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 20,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+      { scope: 'identifier', limit: 30, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
@@ -157,8 +160,11 @@ export async function handleUpdateDewormRecord(
     action: 'petMedical.update',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 90, windowSeconds: 300 },
+      { scope: 'identifier', limit: 45, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
@@ -224,8 +230,11 @@ export async function handleDeleteDewormRecord(
     action: 'petMedical.delete',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 60 },
+      { scope: 'identifier', limit: 15, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
