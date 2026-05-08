@@ -23,13 +23,22 @@
 - [ ] mongodb indexing - delay
 - [ ] business logics optimisation - delay
 - [x] Cold start optimisation
-- [ ] Checkov, semgrep, snyk, CodeGuru Security
+- [ ] Checkov, semgrep, snyk
+  - [x] Checkov: 57 → 0 failures (see `.checkov.yaml` for skip justifications)
+  - [ ] **Requires manager / deploy-role approval before applying to template:**
+    - [ ] `CKV_AWS_76` — API Gateway access logging: add `AWS::Logs::LogGroup` + `AccessLogSetting` on `RestApi`; deploy role needs `logs:CreateLogGroup`, `logs:PutRetentionPolicy`; also requires one-time per-account API GW CloudWatch role (`aws apigateway update-account`)
+    - [ ] `CKV_AWS_116` — Lambda DLQ: add `AWS::SQS::Queue` + `AWS::IAM::ManagedPolicy` (sqs:SendMessage) + attach to all 6 Lambda roles + `DeadLetterQueue` in Globals; deploy role needs `sqs:CreateQueue`, `sqs:SetQueueAttributes`, `iam:CreatePolicy`
+  - [ ] semgrep
+  - [ ] snyk checkings
 - [x] schema and sanitizing tightening — see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)
   - P0: shared path-param validators (objectId/tempId) + apply to ~60 endpoints; add `sanitize-html` for free-text
   - P1: `.max()` on strings/arrays; replace `.passthrough()` with `.strict()` (pet-profile, pet-analysis, ngo); shared `paginationQuerySchema`; enums for gender/status/lang
   - P2: consolidate `bootstrap/validators/` + `bootstrap/sanitizers/`
   - [ ] P3: integration tests for injection/XSS/oversize
 - [ ] path optimization (consider move PATCH pet profile by {petId} to /pet-profile/me) - delay
+- [ ] Remove dead S3 env vars from `PetBiometricFunction` and `CommerceFulfillmentFunction`
+  - `AWS_BUCKET_NAME`, `AWS_BUCKET_BASE_URL`, `AWS_BUCKET_REGION` declared in `envSchema.ts` and wired in `template.yaml` but never consumed by any service, router, or utility
+  - Remove from both `envSchema.ts` files and from the `Environment.Variables` blocks in `template.yaml`
 - [x] Layered rate limiting + per-flow failure cooldowns
   - Shared `requireMongoRateLimit` now accepts `policies: RateLimitPolicy[]` (scopes: `ip`, `identifier`, `ip+identifier`, `account`, `global`); request is rejected on the first lane that trips. Legacy `{ limit, windowSeconds }` shorthand preserved.
   - Added `requireMongoRateLimitNotInCooldown` + `recordMongoRateLimitFailure` (auth wrapper exports `requireFailureCooldown` / `recordFailure`) for failure-only counters that do not consume legitimate-traffic quota.

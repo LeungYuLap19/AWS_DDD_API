@@ -189,6 +189,10 @@ Parameters:
     Type: String
     Default: ''
     NoEcho: true
+  LambdaReservedConcurrency:
+    Type: Number
+    Default: 50
+    Description: Reserved concurrent execution limit per Lambda function. Set to a value appropriate for your account concurrency quota.
 
 Globals: # shared default settings applied to all resources of a given type, unless a resource overrides them.
   Function:
@@ -211,15 +215,24 @@ Globals: # shared default settings applied to all resources of a given type, unl
         MONGODB_URI: !Ref MongoDbUri
         AUTH_BYPASS: !Ref AuthBypass
         JWT_SECRET: !Ref JwtSecret
+    ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
 
 Resources:
   RestApi:
     Type: AWS::Serverless::Api
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_120
+            comment: "API Gateway stage caching adds per-request cost; not required for this project"
+          - id: CKV_AWS_173
+            comment: "Lambda env vars encrypted with AWS-managed key; custom KMS adds cost"
     Properties:
       Name: !Sub '${ProjectName}-${StageName}'
       StageName: !Ref StageName
       EndpointConfiguration: REGIONAL
       ApiKeySourceType: HEADER
+      TracingEnabled: true
       BinaryMediaTypes:
         - 'multipart/form-data' # causes API GW to base64-encode multipart bodies (consistent 33% overhead) instead of UTF-8-encoding binary content (variable up to ~1.5x overhead), making the Lambda 6 MB invocation limit predictable
       Models: # request/response schemas, validates the request body before Lambda runs
@@ -1809,9 +1822,6 @@ Resources:
       AutoPublishAliasAllProperties: true
       Environment:
         Variables:
-          AWS_BUCKET_NAME: !Ref S3BucketName
-          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
-          AWS_BUCKET_REGION: !Ref S3BucketRegion
           SMTP_HOST: !Ref CommerceSmtpHost
           SMTP_PORT: !Ref CommerceSmtpPort
           SMTP_USER: !Ref CommerceSmtpUser
