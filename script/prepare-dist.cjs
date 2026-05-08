@@ -12,102 +12,20 @@ function copyFile(relativeFrom, relativeTo) {
   fs.copyFileSync(source, target);
 }
 
-copyFile(
-  'functions/request-authorizer/package.json',
-  'dist/functions/request-authorizer/package.json'
-);
+// Function package.json files are no longer copied here.
+// esbuild-functions.cjs bundles each function into a single index.js with all
+// non-layer dependencies inlined, so SAM does not run npm install per function.
 
-copyFile(
-  'functions/auth/package.json',
-  'dist/functions/auth/package.json'
-);
-
-copyFile(
-  'functions/user/package.json',
-  'dist/functions/user/package.json'
-);
-
-copyFile(
-  'functions/ngo/package.json',
-  'dist/functions/ngo/package.json'
-);
-
-copyFile(
-  'functions/pet-profile/package.json',
-  'dist/functions/pet-profile/package.json'
-);
-
-copyFile(
-  'functions/pet-source/package.json',
-  'dist/functions/pet-source/package.json'
-);
-
-copyFile(
-  'functions/pet-adoption/package.json',
-  'dist/functions/pet-adoption/package.json'
-);
-
-copyFile(
-  'functions/pet-transfer/package.json',
-  'dist/functions/pet-transfer/package.json'
-);
-
-copyFile(
-  'functions/pet-medical/package.json',
-  'dist/functions/pet-medical/package.json'
-);
-
-copyFile(
-  'functions/pet-recovery/package.json',
-  'dist/functions/pet-recovery/package.json'
-);
-
-copyFile(
-  'functions/pet-analysis/package.json',
-  'dist/functions/pet-analysis/package.json'
-);
-
-copyFile(
-  'functions/notifications/package.json',
-  'dist/functions/notifications/package.json'
-);
-
-copyFile(
-  'functions/logistics/package.json',
-  'dist/functions/logistics/package.json'
-);
-
-copyFile(
-  'functions/commerce-catalog/package.json',
-  'dist/functions/commerce-catalog/package.json'
-);
-
-copyFile(
-  'functions/commerce-orders/package.json',
-  'dist/functions/commerce-orders/package.json'
-);
-
+// Static asset directories still need to be copied alongside the bundle.
 copyDirectory(
   'functions/commerce-orders/static',
   'dist/functions/commerce-orders/static'
-);
-
-copyFile(
-  'functions/commerce-fulfillment/package.json',
-  'dist/functions/commerce-fulfillment/package.json'
 );
 
 copyDirectory(
   'functions/commerce-fulfillment/static',
   'dist/functions/commerce-fulfillment/static'
 );
-
-if (fs.existsSync(path.join(repoRoot, 'functions/request-authorizer/package-lock.json'))) {
-  copyFile(
-    'functions/request-authorizer/package-lock.json',
-    'dist/functions/request-authorizer/package-lock.json'
-  );
-}
 
 copyFile(
   'layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/package.json',

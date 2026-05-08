@@ -22,7 +22,7 @@
   - multipart
 - [ ] mongodb indexing - delay
 - [ ] business logics optimisation
-- [ ] Cold start optimisation
+- [x] Cold start optimisation
 - [ ] Checkov, semgrep, snyk, CodeGuru Security
 - [x] schema and sanitizing tightening — see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)
   - P0: shared path-param validators (objectId/tempId) + apply to ~60 endpoints; add `sanitize-html` for free-text

@@ -1,16 +1,10 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import {
-  handleListNotifications,
-  handleArchiveNotification,
-  handleDispatchNotification,
-} from './services/notifications';
 
-const routes: Record<string, RouteHandler> = {
-  'GET /notifications/me': handleListNotifications,
-  'PATCH /notifications/me/{notificationId}': handleArchiveNotification,
-  'POST /notifications/dispatch': handleDispatchNotification,
+const routes = {
+  'GET /notifications/me': () => import('./services/notifications').then(m => m.handleListNotifications),
+  'PATCH /notifications/me/{notificationId}': () => import('./services/notifications').then(m => m.handleArchiveNotification),
+  'POST /notifications/dispatch': () => import('./services/notifications').then(m => m.handleDispatchNotification),
 };
 
 export const routeRequest = createRouter(routes, { response });

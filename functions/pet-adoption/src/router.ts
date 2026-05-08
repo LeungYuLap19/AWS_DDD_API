@@ -1,20 +1,12 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import {
-  handleGetAdoptionList,
-  handleGetById,
-  handleCreate,
-  handleUpdate,
-  handleDelete,
-} from './services/adoption';
 
-const routes: Record<string, RouteHandler> = {
-  'GET /pet/adoption': handleGetAdoptionList,
-  'GET /pet/adoption/{id}': handleGetById,
-  'POST /pet/adoption/{id}': handleCreate,
-  'PATCH /pet/adoption/{id}': handleUpdate,
-  'DELETE /pet/adoption/{id}': handleDelete,
+const routes = {
+  'GET /pet/adoption': () => import('./services/adoption').then(m => m.handleGetAdoptionList),
+  'GET /pet/adoption/{id}': () => import('./services/adoption').then(m => m.handleGetById),
+  'POST /pet/adoption/{id}': () => import('./services/adoption').then(m => m.handleCreate),
+  'PATCH /pet/adoption/{id}': () => import('./services/adoption').then(m => m.handleUpdate),
+  'DELETE /pet/adoption/{id}': () => import('./services/adoption').then(m => m.handleDelete),
 };
 
 export const routeRequest = createRouter(routes, { response });

@@ -1,12 +1,10 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
-import { handleDeleteMe, handleGetMe, handlePatchMe } from './services/user';
 import { response } from './utils/response';
 
-const routes: Record<string, RouteHandler> = {
-  'GET /user/me': handleGetMe,
-  'PATCH /user/me': handlePatchMe,
-  'DELETE /user/me': handleDeleteMe,
+const routes = {
+  'GET /user/me': () => import('./services/user').then(m => m.handleGetMe),
+  'PATCH /user/me': () => import('./services/user').then(m => m.handlePatchMe),
+  'DELETE /user/me': () => import('./services/user').then(m => m.handleDeleteMe),
 };
 
 export const routeRequest = createRouter(routes, { response });

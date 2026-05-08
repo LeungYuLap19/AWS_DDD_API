@@ -1,18 +1,11 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import {
-  handleCreateTransfer,
-  handleDeleteTransfer,
-  handleNGOTransfer,
-  handleUpdateTransfer,
-} from './services/transfer';
 
-const routes: Record<string, RouteHandler> = {
-  'POST /pet/transfer/{petId}': handleCreateTransfer,
-  'PATCH /pet/transfer/{petId}/{transferId}': handleUpdateTransfer,
-  'DELETE /pet/transfer/{petId}/{transferId}': handleDeleteTransfer,
-  'POST /pet/transfer/{petId}/ngo-reassignment': handleNGOTransfer,
+const routes = {
+  'POST /pet/transfer/{petId}': () => import('./services/transfer').then(m => m.handleCreateTransfer),
+  'PATCH /pet/transfer/{petId}/{transferId}': () => import('./services/transfer').then(m => m.handleUpdateTransfer),
+  'DELETE /pet/transfer/{petId}/{transferId}': () => import('./services/transfer').then(m => m.handleDeleteTransfer),
+  'POST /pet/transfer/{petId}/ngo-reassignment': () => import('./services/transfer').then(m => m.handleNGOTransfer),
 };
 
 export const routeRequest = createRouter(routes, { response });

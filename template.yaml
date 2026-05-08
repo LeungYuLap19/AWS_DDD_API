@@ -193,6 +193,8 @@ Parameters:
 Globals: # shared default settings applied to all resources of a given type, unless a resource overrides them.
   Function:
     Runtime: nodejs22.x
+    Architectures:
+      - arm64 # Graviton2: ~20% cheaper compute, faster cold start vs x86_64
     Timeout: 10
     MemorySize: 256
     VpcConfig:
@@ -493,6 +495,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-auth'
       CodeUri: dist/functions/auth/
       Handler: index.handler
+      MemorySize: 512 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -738,6 +741,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
       CodeUri: dist/functions/pet-profile/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetProfileFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -1243,6 +1247,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-analysis'
       CodeUri: dist/functions/pet-analysis/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetAnalysisFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -1348,6 +1353,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-recovery'
       CodeUri: dist/functions/pet-recovery/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetRecoveryFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -1718,6 +1724,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-commerce-orders'
       CodeUri: dist/functions/commerce-orders/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt CommerceOrdersFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer

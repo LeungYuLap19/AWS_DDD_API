@@ -1,5 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { parseBody } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';

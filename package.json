@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml",
-    "build:ts": "tsc && node script/prepare-dist.cjs",
+    "build:ts": "node script/esbuild-functions.cjs && node script/prepare-dist.cjs",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "validate": "sam validate --template-file template.yaml",
     "pretest": "npm run build:ts",
@@ -15,7 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1036.0",
     "axios": "^1.15.2",
-    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
     "lambda-multipart-parser": "^1.0.1",
     "mongoose": "^9.5.0",
@@ -25,8 +26,10 @@
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.152",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^24.12.2",
     "@types/nodemailer": "^8.0.0",
+    "esbuild": "^0.28.0",
     "jest": "^29.7.0",
     "typescript": "^5.9.3"
   }

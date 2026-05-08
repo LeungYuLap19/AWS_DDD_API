@@ -99,7 +99,8 @@ declare module '@aws-ddd-api/shared/http/router' {
   import type { ResponseHelpers } from '@aws-ddd-api/shared/http/response';
 
   export type RouteHandler = (routeContext: ApiRouteContext) => Promise<APIGatewayProxyResult>;
-  export type RouteMap = Record<string, RouteHandler>;
+  export type LazyRouteLoader = () => Promise<RouteHandler>;
+  export type RouteMap = Record<string, LazyRouteLoader>;
 
   export interface CreateRouterOptions {
     response: ResponseHelpers;

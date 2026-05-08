@@ -1,17 +1,13 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { getToken, getArea, getNetCode, getPickupLocations } from './services/sfMetadata';
-import { createShipment } from './services/sfShipment';
-import { printCloudWaybill } from './services/sfWaybill';
 
-const routes: Record<string, RouteHandler> = {
-  'POST /logistics/token': getToken,
-  'POST /logistics/lookups/areas': getArea,
-  'POST /logistics/lookups/net-codes': getNetCode,
-  'POST /logistics/lookups/pickup-locations': getPickupLocations,
-  'POST /logistics/shipments': createShipment,
-  'POST /logistics/cloud-waybill': printCloudWaybill,
+const routes = {
+  'POST /logistics/token': () => import('./services/sfMetadata').then(m => m.getToken),
+  'POST /logistics/lookups/areas': () => import('./services/sfMetadata').then(m => m.getArea),
+  'POST /logistics/lookups/net-codes': () => import('./services/sfMetadata').then(m => m.getNetCode),
+  'POST /logistics/lookups/pickup-locations': () => import('./services/sfMetadata').then(m => m.getPickupLocations),
+  'POST /logistics/shipments': () => import('./services/sfShipment').then(m => m.createShipment),
+  'POST /logistics/cloud-waybill': () => import('./services/sfWaybill').then(m => m.printCloudWaybill),
 };
 
 export const routeRequest = createRouter(routes, { response });
