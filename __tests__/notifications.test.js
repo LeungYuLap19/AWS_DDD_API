@@ -75,6 +75,8 @@ function createFindChain(value) {
   return {
     select: jest.fn().mockReturnThis(),
     sort: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(value),
   };
 }
@@ -139,6 +141,7 @@ function loadHandlerWithMocks({
     find: findError
       ? jest.fn(() => { throw findError; })
       : jest.fn(() => createFindChain(notificationList)),
+    countDocuments: jest.fn().mockResolvedValue(notificationList.length),
     updateOne: updateError
       ? jest.fn().mockRejectedValue(updateError)
       : jest.fn().mockResolvedValue(updateOneResult),
@@ -336,9 +339,9 @@ describe('Tier 2 — notifications handler integration', () => {
       const parsed = parseResponse(res);
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.success).toBe(true);
-      expect(parsed.body.count).toBe(2);
-      expect(Array.isArray(parsed.body.notifications)).toBe(true);
-      expect(parsed.body.notifications).toHaveLength(2);
+      expect(parsed.body.pagination.total).toBe(2);
+      expect(Array.isArray(parsed.body.data)).toBe(true);
+      expect(parsed.body.data).toHaveLength(2);
     });
 
     test('happy path — returns empty array when user has no notifications', async () => {
@@ -354,8 +357,8 @@ describe('Tier 2 — notifications handler integration', () => {
       );
       const parsed = parseResponse(res);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.count).toBe(0);
-      expect(parsed.body.notifications).toEqual([]);
+      expect(parsed.body.pagination.total).toBe(0);
+      expect(parsed.body.data).toEqual([]);
     });
 
     test('auth — missing authorizer context returns 401', async () => {
@@ -423,7 +426,7 @@ describe('Tier 2 — notifications handler integration', () => {
       const parsed = parseResponse(res);
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.success).toBe(true);
-      expect(parsed.body.notificationId).toBe(notificationId);
+      expect(parsed.body.data).toBeUndefined();
     });
 
     test('ownership check — 404 when notification does not belong to the caller', async () => {
@@ -461,7 +464,7 @@ describe('Tier 2 — notifications handler integration', () => {
       );
       const parsed = parseResponse(res);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('common.missingPathParams');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
     });
 
     test('validation — malformed notificationId (not a valid ObjectId) returns 400', async () => {
@@ -540,8 +543,8 @@ describe('Tier 2 — notifications handler integration', () => {
       const parsed = parseResponse(res);
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.success).toBe(true);
-      expect(parsed.body.notification).toBeDefined();
-      expect(parsed.body.id).toBeUndefined();
+      expect(parsed.body.data).toBeDefined();
+      expect(parsed.body.data._id).toBeDefined();
     });
 
     test('happy path — full optional fields are stored correctly', async () => {

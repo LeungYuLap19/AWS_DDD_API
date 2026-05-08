@@ -78,6 +78,7 @@ function createLeanResult(value) {
   return {
     select: jest.fn().mockReturnThis(),
     sort: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(value),
     exec: jest.fn().mockResolvedValue(value),
@@ -130,6 +131,9 @@ function loadHandlerWithMocks({
   const dewormModel = makeRecordModel();
   const bloodTestModel = makeRecordModel();
   const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
     findOneAndUpdate: jest.fn().mockResolvedValue(rateLimitEntry),
   };
 
@@ -255,7 +259,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petMedicalRecord.errors.invalidPetIdFormat');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 404 when pet does not exist', async () => {
@@ -273,7 +277,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(404);
-      expect(parsed.body.errorKey).toBe('petMedicalRecord.errors.petNotFound');
+      expect(parsed.body.errorKey).toBe('petMedical.errors.petNotFound');
     });
 
     test('returns 403 when caller is not pet owner and not NGO owner', async () => {
@@ -330,8 +334,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.message).toBe('Pet medical record retrieved successfully');
-      expect(parsed.body.form.medical).toHaveLength(1);
+      expect(parsed.body.message).toBe('Retrieved successfully');
+      expect(parsed.body.data).toHaveLength(1);
     });
   });
 
@@ -358,8 +362,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.form.medical).toEqual([]);
-      expect(parsed.body.petId).toBe(petId);
+      expect(parsed.body.data).toEqual([]);
+      expect(parsed.body.pagination.total).toBe(0);
     });
 
     test('POST create with valid date returns 201 without touching Pet summary counters', async () => {
@@ -393,7 +397,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
-      expect(parsed.body.message).toBe('Pet medical record created successfully');
+      expect(parsed.body.message).toBe('Created successfully');
       // Summary counters are dropped from pet-medical; Pet.findOneAndUpdate is
       // never called on POST.
       expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
@@ -417,7 +421,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.errorKey).toBe(
-        'petMedicalRecord.errors.medicalRecord.invalidDateFormat'
+        'petMedical.errors.medicalRecord.invalidDateFormat'
       );
     });
 
@@ -478,7 +482,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.errorKey).toBe(
-        'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat'
+        'common.invalidObjectId'
       );
     });
 
@@ -527,7 +531,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(404);
-      expect(parsed.body.errorKey).toBe('petMedicalRecord.errors.medicalRecord.notFound');
+      expect(parsed.body.errorKey).toBe('petMedical.errors.medicalRecord.notFound');
     });
 
     test('PATCH update happy path returns 200', async () => {
@@ -558,8 +562,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.message).toBe('Pet medical record updated successfully');
-      expect(parsed.body.medicalRecordId).toBe(medicalId);
+      expect(parsed.body.message).toBe('Updated successfully');
+      expect(parsed.body.data._id).toBe(medicalId);
     });
 
     test('DELETE returns 404 when nothing deleted', async () => {
@@ -717,8 +721,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.message).toBe('Pet blood test records retrieved successfully');
-      expect(parsed.body.form.blood_test).toEqual([]);
+      expect(parsed.body.message).toBe('Retrieved successfully');
+      expect(parsed.body.data).toEqual([]);
     });
   });
 

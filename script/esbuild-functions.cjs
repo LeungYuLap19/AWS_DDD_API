@@ -26,6 +26,13 @@ const external = [
   'zod',
   'jsonwebtoken',
   'busboy',
+  // Runtime dependencies kept external so jest module mocks can intercept them
+  // and so the shared layer provides them to all Lambda functions.
+  'mongoose',
+  '@aws-sdk/client-s3',
+  'axios',
+  'bcryptjs',
+  'nodemailer',
 ];
 
 // All functions with an index.ts entry point.

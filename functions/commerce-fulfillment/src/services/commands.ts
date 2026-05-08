@@ -31,6 +31,21 @@ function escapeHtml(value: unknown): string {
 
 let templateCache: string | null = null;
 
+function resolvePtagDetectionTemplatePath(): string {
+  const candidatePaths = [
+    path.join(__dirname, '..', '..', 'static', 'ptag-detection-email.html'),
+    path.join(__dirname, 'static', 'ptag-detection-email.html'),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (fs.existsSync(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  throw new Error('Missing ptag detection email template');
+}
+
 function renderPtagDetectionEmail(
   petName: string,
   tagId: string,
@@ -38,7 +53,7 @@ function renderPtagDetectionEmail(
   locationURL: string
 ): string {
   if (!templateCache) {
-    const templatePath = path.join(__dirname, '..', '..', 'static', 'ptag-detection-email.html');
+    const templatePath = resolvePtagDetectionTemplatePath();
     templateCache = fs.readFileSync(templatePath, 'utf8');
   }
 

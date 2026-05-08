@@ -2,7 +2,7 @@ const path = require('path');
 const dns = require('dns');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const envConfig = require('../env.json');
 
 const handlerModulePath = path.resolve(__dirname, '../dist/functions/ngo/index.js');
@@ -181,6 +181,11 @@ function loadHandlerWithMocks({
   const ngoCountersFindOneAndUpdate = jest.fn().mockResolvedValue(updatedCounter);
   const ngoUserAccessFindOneAndUpdate = jest.fn().mockResolvedValue(updatedAccess);
 
+  const rateLimitModel = {
+    findOne: jest.fn(() => ({ lean: jest.fn().mockResolvedValue(null) })),
+    findOneAndUpdate: jest.fn().mockResolvedValue({ count: 1, expireAt: new Date(Date.now() + 60000) }),
+  };
+
   const session = {
     startTransaction: jest.fn(),
     inTransaction: jest.fn().mockReturnValue(true),
@@ -219,6 +224,7 @@ function loadHandlerWithMocks({
       if (name === 'NGO') return ngoModel;
       if (name === 'NgoUserAccess') return ngoUserAccessModel;
       if (name === 'NgoCounters') return ngoCountersModel;
+      if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model ${name}`);
     }),
   };
@@ -284,10 +290,10 @@ function loadAuthHandlerWithMocks({
       if (name === 'NgoUserAccess') return { findOne: ngoUserAccessFindOne };
       if (name === 'NGO') return { findOne: ngoFindOne };
       if (name === 'RefreshToken') return RefreshTokenModel;
-      if (name === 'EmailVerificationCode') return { findOneAndUpdate: jest.fn(), findOne: jest.fn(), deleteOne: jest.fn() };
-      if (name === 'SmsVerificationCode') return { findOne: jest.fn(), deleteOne: jest.fn() };
-      if (name === 'NgoCounters') return {};
-      return {};
+      if (name === 'EmailVerificationCode') return { findOneAndUpdate: jest.fn(), findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }), deleteOne: jest.fn() };
+      if (name === 'SmsVerificationCode') return { findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }), deleteOne: jest.fn() };
+      if (name === 'NgoCounters') return { findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }) };
+      return { findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }), findOneAndUpdate: jest.fn().mockResolvedValue({ count: 1, expireAt: new Date(Date.now() + 60000) }) };
     }),
   };
 
@@ -306,7 +312,7 @@ function loadAuthHandlerWithMocks({
     { virtual: true }
   );
 
-  jest.doMock('bcrypt', () => ({
+  jest.doMock('bcryptjs', () => ({
     __esModule: true,
     default: {
       compare: jest.fn(async (plain, hashed) => plain === 'Password123!' && hashed === 'hashed-password'),
@@ -314,33 +320,8 @@ function loadAuthHandlerWithMocks({
     },
   }));
 
-  jest.doMock('../dist/functions/auth/src/config/twilio.js', () => ({
-    __esModule: true,
-    createSmsVerification: jest.fn(),
-    checkSmsVerification: jest.fn(),
-    twilioClient: {
-      verify: {
-        v2: {
-          services: jest.fn(() => ({
-            verifications: { create: jest.fn() },
-            verificationChecks: { create: jest.fn() },
-          })),
-        },
-      },
-    },
-  }));
-
-  jest.doMock('../dist/functions/auth/src/config/mail.js', () => ({
-    __esModule: true,
-    sendMail: jest.fn(),
-    smtpTransporter: {
-      sendMail: jest.fn(),
-    },
-  }));
-
-  jest.doMock('../dist/functions/auth/src/utils/rateLimit.js', () => ({
-    __esModule: true,
-    applyRateLimit: jest.fn(async () => null),
+  jest.doMock('nodemailer', () => ({
+    createTransport: jest.fn(() => ({ sendMail: jest.fn().mockResolvedValue({}) })),
   }));
 
   const { handler } = require(authHandlerModulePath);
@@ -692,9 +673,9 @@ describe('Tier 2 - ngo handler integration', () => {
     const body = JSON.parse(res.body);
     expect(res.statusCode).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.role).toBe('ngo');
-    expect(body.ngoId).toBe('507f1f77bcf86cd799439012');
-    expect(body.token).toBeTruthy();
+    expect(body.data.role).toBe('ngo');
+    expect(body.data.ngoId).toBe('507f1f77bcf86cd799439012');
+    expect(body.data.token).toBeTruthy();
     expect(res.headers['Set-Cookie']).toContain('refreshToken=');
   });
 
@@ -817,11 +798,11 @@ describe('Tier 2 - ngo handler integration', () => {
     const body = JSON.parse(res.body);
     expect(res.statusCode).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.userProfile.email).toBe('ngo@test.com');
-    expect(body.userProfile.password).toBeUndefined();
-    expect(body.ngoProfile.name).toBe('Helping Paws');
-    expect(body.ngoProfile.address.country).toBe('String Country');
-    expect(body.ngoProfile.petPlacementOptions).toEqual([
+    expect(body.data.userProfile.email).toBe('ngo@test.com');
+    expect(body.data.userProfile.password).toBeUndefined();
+    expect(body.data.ngoProfile.name).toBe('Helping Paws');
+    expect(body.data.ngoProfile.address.country).toBe('String Country');
+    expect(body.data.ngoProfile.petPlacementOptions).toEqual([
       {
         name: 'Test Name',
         positions: ['Placement 1'],
@@ -831,7 +812,7 @@ describe('Tier 2 - ngo handler integration', () => {
         positions: ['Updated Up', 'Down'],
       },
     ]);
-    expect(body.ngoCounters.ngoPrefix).toBe('HP');
+    expect(body.data.ngoCounters.ngoPrefix).toBe('HP');
   });
 
   test('GET /ngo/me/members scopes aggregation to the authenticated ngoId', async () => {
@@ -888,8 +869,8 @@ describe('Tier 2 - ngo handler integration', () => {
 
     const body = JSON.parse(res.body);
     expect(res.statusCode).toBe(200);
-    expect(body.userList).toHaveLength(1);
-    expect(body.userList[0].ngoPrefix).toBe('HP');
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].ngoPrefix).toBe('HP');
 
     const pipeline = aggregate.mock.calls[0][0];
     expect(pipeline[0].$match.ngoId.toString()).toBe('507f1f77bcf86cd799439012');
@@ -1046,7 +1027,7 @@ describe('Tier 2 - ngo handler integration', () => {
     );
 
     expect(res.statusCode).toBe(403);
-    expect(JSON.parse(res.body).errorKey).toBe('common.unauthorized');
+    expect(JSON.parse(res.body).errorKey).toBe('common.forbidden');
   });
 
   test('PATCH /ngo/me rejects duplicate email conflicts', async () => {
@@ -1138,7 +1119,7 @@ describe('Tier 2 - ngo handler integration', () => {
     );
 
     expect(res.statusCode).toBe(403);
-    expect(JSON.parse(res.body).errorKey).toBe('common.unauthorized');
+    expect(JSON.parse(res.body).errorKey).toBe('common.forbidden');
     expect(session.startTransaction).not.toHaveBeenCalled();
     expect(models.ngoModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(models.ngoCountersModel.findOneAndUpdate).not.toHaveBeenCalled();
@@ -1170,7 +1151,7 @@ describe('Tier 2 - ngo handler integration', () => {
     );
 
     expect(res.statusCode).toBe(403);
-    expect(JSON.parse(res.body).errorKey).toBe('common.unauthorized');
+    expect(JSON.parse(res.body).errorKey).toBe('common.forbidden');
   });
 
   test('GET /ngo/me rejects inactive or unverified NGOs', async () => {
@@ -1202,7 +1183,7 @@ describe('Tier 2 - ngo handler integration', () => {
     );
 
     expect(res.statusCode).toBe(403);
-    expect(JSON.parse(res.body).errorKey).toBe('common.unauthorized');
+    expect(JSON.parse(res.body).errorKey).toBe('common.forbidden');
   });
 
   test('unknown route returns 404 and known path with wrong method returns 405', async () => {
@@ -1299,14 +1280,14 @@ describe('Tier 2 - ngo handler integration', () => {
     const body = JSON.parse(res.body);
     expect(res.statusCode).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.userProfile).toBeNull();
-    expect(body.ngoProfile.name).toBe('Helping Paws');
-    expect(body.ngoProfile.createdAt).toBeUndefined();
-    expect(body.ngoUserAccessProfile.roleInNgo).toBe('admin');
-    expect(body.ngoUserAccessProfile.createdAt).toBeUndefined();
-    expect(body.ngoCounters.ngoPrefix).toBe('HP');
-    expect(body.warnings.userProfile).toBe('ngo.warnings.temporarilyUnavailable');
-    expect(body.warnings.ngoCounters).toBeNull();
+    expect(body.data.userProfile).toBeNull();
+    expect(body.data.ngoProfile.name).toBe('Helping Paws');
+    expect(body.data.ngoProfile.createdAt).toBeUndefined();
+    expect(body.data.ngoUserAccessProfile.roleInNgo).toBe('admin');
+    expect(body.data.ngoUserAccessProfile.createdAt).toBeUndefined();
+    expect(body.data.ngoCounters.ngoPrefix).toBe('HP');
+    expect(body.data.warnings.userProfile).toBe('ngo.warnings.temporarilyUnavailable');
+    expect(body.data.warnings.ngoCounters).toBeNull();
   });
 
   test('unexpected persistence failures are normalized to a safe 500 response', async () => {

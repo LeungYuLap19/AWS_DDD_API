@@ -56,6 +56,8 @@ function createFindChain(value) {
   return {
     select: jest.fn().mockReturnThis(),
     sort: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(value),
   };
 }
@@ -80,6 +82,10 @@ function buildCreatedRecord(overrides = {}) {
     _id: id,
     ...overrides,
   };
+}
+
+function makeJpegBuffer() {
+  return Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
 }
 
 function resetEnv(overrides = {}) {
@@ -142,6 +148,7 @@ function loadHandlerWithMocks({
 
   const petLostModel = {
     find: jest.fn(() => createFindChain(petLostList)),
+    countDocuments: jest.fn().mockResolvedValue(petLostList.length),
     findById: jest.fn(() => createFindByIdChain(petLostDoc)),
     create: jest.fn().mockResolvedValue(lostCreateDoc),
     deleteOne: jest.fn().mockResolvedValue({ acknowledged: true, deletedCount: 1 }),
@@ -149,6 +156,7 @@ function loadHandlerWithMocks({
 
   const petFoundModel = {
     find: jest.fn(() => createFindChain(petFoundList)),
+    countDocuments: jest.fn().mockResolvedValue(petFoundList.length),
     findById: jest.fn(() => createFindByIdChain(petFoundDoc)),
     create: jest.fn().mockResolvedValue(foundCreateDoc),
     deleteOne: jest.fn().mockResolvedValue({ acknowledged: true, deletedCount: 1 }),
@@ -169,6 +177,9 @@ function loadHandlerWithMocks({
   };
 
   const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
     findOneAndUpdate: rateLimitOverflow
       ? jest.fn().mockResolvedValue({ ...rateLimitEntry, count: 999 })
       : jest.fn().mockResolvedValue(rateLimitEntry),
@@ -214,12 +225,41 @@ function loadHandlerWithMocks({
     },
   }));
 
-  jest.doMock('lambda-multipart-parser', () => ({
-    __esModule: true,
-    default: { parse: multipartParseMock },
-  }));
-
-  jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
+  jest.doMock('@aws-ddd-api/shared', () => {
+    const realShared = require(sharedRuntimeModulePath);
+    return {
+      ...realShared,
+      parseMultipartBody: async (event, schema, options = {}) => {
+        if (multipartError) {
+          return { ok: false, statusCode: 400, errorKey: options.parseErrorKey || 'common.invalidBodyParams' };
+        }
+        const form = multipartForm || {};
+        const files = (Array.isArray(form.files) ? form.files : []).map((file) => ({
+          fieldname: file.fieldname || 'image',
+          filename: file.filename || 'test.jpg',
+          contentType: file.contentType || 'image/jpeg',
+          content: file.content || Buffer.from('test'),
+        }));
+        const rawFields = { ...form };
+        delete rawFields.files;
+        if (options.validate) {
+          const validationKey = options.validate(rawFields);
+          if (validationKey !== null) {
+            return { ok: false, statusCode: 400, errorKey: validationKey };
+          }
+        }
+        const normalizedFields = options.normalize ? options.normalize(rawFields) : rawFields;
+        const parsed = schema.safeParse(normalizedFields);
+        if (!parsed.success) {
+          const fallback = options.fallbackErrorKey || 'common.invalidBodyParams';
+          const message = realShared.getFirstZodIssueMessage(parsed.error, fallback);
+          const errorKey = message.includes('.') ? message : fallback;
+          return { ok: false, statusCode: 400, errorKey };
+        }
+        return { ok: true, data: parsed.data, files };
+      },
+    };
+  }, { virtual: true });
 
   const { handler } = require(handlerModulePath);
 
@@ -395,11 +435,11 @@ describe('pet-recovery handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.success).toBe(true);
-      expect(parsed.body.count).toBe(2);
-      expect(parsed.body.pets).toHaveLength(2);
-      expect(parsed.body.pets[0]).not.toHaveProperty('__v');
-      expect(parsed.body.pets[0]).not.toHaveProperty('userId');
-      expect(parsed.body.pets[0].ownerContact1).toBe(91234567);
+      expect(parsed.body.pagination.total).toBe(2);
+      expect(parsed.body.data).toHaveLength(2);
+      expect(parsed.body.data[0]).not.toHaveProperty('__v');
+      expect(parsed.body.data[0]).not.toHaveProperty('userId');
+      expect(parsed.body.data[0].ownerContact1).toBe(91234567);
       expect(petLostModel.find).toHaveBeenCalledWith({});
     });
 
@@ -420,13 +460,13 @@ describe('pet-recovery handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.count).toBe(1);
-      expect(parsed.body.pets[0]).not.toHaveProperty('__v');
+      expect(parsed.body.pagination.total).toBe(1);
+      expect(parsed.body.data[0]).not.toHaveProperty('__v');
     });
 
     test('POST /pet/recovery/lost creates record from multipart form, uploads files, computes serial', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
-      const fileBuffer = Buffer.from('fake-image-bytes');
+      const fileBuffer = makeJpegBuffer();
       const { handler, petLostModel, s3SendMock, lostCreateDoc } = loadHandlerWithMocks({
         multipartForm: {
           name: 'Mochi',
@@ -581,6 +621,71 @@ describe('pet-recovery handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petRecovery.errors.petLost.lostDateRequired');
     });
 
+    test('POST /pet/recovery/lost rejects invalid numeric multipart fields with 400', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler, petLostModel } = loadHandlerWithMocks({
+        multipartForm: {
+          name: 'Mochi',
+          sex: 'Female',
+          animal: 'Dog',
+          lostDate: '01/02/2025',
+          lostLocation: 'Kowloon',
+          lostDistrict: 'Mong Kok',
+          weight: 'heavy',
+          ownerContact1: 'not-a-number',
+          files: [],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/recovery/lost',
+          resource: '/pet/recovery/lost',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(petLostModel.create).not.toHaveBeenCalled();
+    });
+
+    test('POST /pet/recovery/found rejects invalid ownerContact1 multipart type with 400', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler, petFoundModel } = loadHandlerWithMocks({
+        multipartForm: {
+          animal: 'Cat',
+          foundDate: '2025-03-15',
+          foundLocation: 'HK Island',
+          foundDistrict: 'Central',
+          ownerContact1: 'not-a-number',
+          files: [],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/recovery/found',
+          resource: '/pet/recovery/found',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(petFoundModel.create).not.toHaveBeenCalled();
+    });
+
     test('POST /pet/recovery/lost rejects invalid petId format with 400', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
@@ -610,7 +715,7 @@ describe('pet-recovery handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petRecovery.errors.petLost.invalidPetId');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
     });
 
     test('DELETE /pet/recovery/lost/{petLostID} rejects non-ObjectId path param with 400', async () => {
@@ -630,7 +735,7 @@ describe('pet-recovery handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petRecovery.errors.petLost.invalidId');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
       expect(petLostModel.findById).not.toHaveBeenCalled();
     });
 
@@ -651,7 +756,7 @@ describe('pet-recovery handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petRecovery.errors.petLost.invalidId');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
       expect(petLostModel.findById).not.toHaveBeenCalled();
     });
   });

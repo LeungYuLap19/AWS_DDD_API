@@ -128,3 +128,8 @@ walkSharedFiles();
 copyNodeModuleDependencyClosure('zod');
 copyNodeModuleDependencyClosure('jsonwebtoken');
 copyNodeModuleDependencyClosure('busboy');
+copyNodeModuleDependencyClosure('mongoose');
+copyNodeModuleDependencyClosure('@aws-sdk/client-s3');
+copyNodeModuleDependencyClosure('axios');
+copyNodeModuleDependencyClosure('bcryptjs');
+copyNodeModuleDependencyClosure('nodemailer');

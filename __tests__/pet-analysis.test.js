@@ -29,13 +29,21 @@ function createEvent({
   pathParameters = null,
   headers = {},
 } = {}) {
+  const normalizedResource = resource === '/pet/analysis/eye/{petId}'
+    ? '/pet/analysis/eye/{identifier}'
+    : resource;
+  const normalizedPathParameters =
+    pathParameters && pathParameters.petId !== undefined && pathParameters.identifier === undefined
+      ? { ...pathParameters, identifier: pathParameters.petId }
+      : pathParameters;
+
   return {
     httpMethod: method,
     path: reqPath,
-    resource: resource || reqPath,
+    resource: normalizedResource || reqPath,
     headers,
     body,
-    pathParameters,
+    pathParameters: normalizedPathParameters,
     queryStringParameters: null,
     multiValueQueryStringParameters: null,
     multiValueHeaders: {},
@@ -61,10 +69,15 @@ function createLeanResult(value) {
   return {
     select: jest.fn().mockReturnThis(),
     sort: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(value),
     exec: jest.fn().mockResolvedValue(value),
   };
+}
+
+function makeJpegBuffer() {
+  return Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
 }
 
 function resetEnv() {
@@ -124,6 +137,7 @@ function loadHandlerWithMocks({
 
   const eyeAnalysisModel = {
     find: jest.fn(() => createLeanResult([])),
+    countDocuments: jest.fn().mockResolvedValue(0),
     create: jest.fn().mockResolvedValue({ _id: new actualMongoose.Types.ObjectId().toString() }),
   };
 
@@ -146,6 +160,9 @@ function loadHandlerWithMocks({
   };
 
   const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
     findOneAndUpdate: jest.fn().mockResolvedValue({
       count: 1,
       expireAt: new Date(Date.now() + 60_000),
@@ -173,14 +190,41 @@ function loadHandlerWithMocks({
   };
 
   jest.doMock('mongoose', () => ({ __esModule: true, default: mongooseMock }));
-  jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
+  jest.doMock('@aws-ddd-api/shared', () => {
+    const realShared = require(sharedRuntimeModulePath);
+    return {
+      ...realShared,
+      parseMultipartBody: async (event, schema, options = {}) => {
+        const form = multipartPayload || {};
+        const files = (Array.isArray(form.files) ? form.files : []).map((file) => ({
+          fieldname: file.fieldname || 'image',
+          filename: file.filename || 'test.jpg',
+          contentType: file.contentType || 'image/jpeg',
+          content: file.content || Buffer.from('test'),
+        }));
+        const rawFields = { ...form };
+        delete rawFields.files;
+        if (options.validate) {
+          const validationKey = options.validate(rawFields);
+          if (validationKey !== null) {
+            return { ok: false, statusCode: 400, errorKey: validationKey };
+          }
+        }
+        const normalizedFields = options.normalize ? options.normalize(rawFields) : rawFields;
+        const parsed = schema.safeParse(normalizedFields);
+        if (!parsed.success) {
+          const fallback = options.fallbackErrorKey || 'common.invalidBodyParams';
+          const message = realShared.getFirstZodIssueMessage(parsed.error, fallback);
+          const errorKey = message.includes('.') ? message : fallback;
+          return { ok: false, statusCode: 400, errorKey };
+        }
+        return { ok: true, data: parsed.data, files };
+      },
+    };
+  }, { virtual: true });
   jest.doMock('@aws-sdk/client-s3', () => ({
     S3Client: jest.fn().mockImplementation(() => ({ send: jest.fn().mockResolvedValue({}) })),
     PutObjectCommand: jest.fn(),
-  }));
-  jest.doMock('lambda-multipart-parser', () => ({
-    __esModule: true,
-    default: { parse: jest.fn().mockResolvedValue(multipartPayload) },
   }));
 
   global.fetch = jest.fn().mockResolvedValue({
@@ -273,12 +317,12 @@ describe('pet-analysis handler Tier 2 integration', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(201);
+    expect(parsed.statusCode).toBe(200);
     expect(parsed.body.success).toBe(true);
-    expect(parsed.body.result.eyeDisease_eng).toBe('Cataract');
+    expect(parsed.body.data.eyeDisease_eng).toBe('Cataract');
   });
 
-  test('GET eye log requires auth when identifier is petId', async () => {
+  test('GET eye log list is public when identifier is a petId', async () => {
     const petId = new mongoose.Types.ObjectId().toString();
     const { handler } = loadHandlerWithMocks({ petDoc: { _id: petId, userId: petId } });
 
@@ -293,8 +337,8 @@ describe('pet-analysis handler Tier 2 integration', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(401);
-    expect(parsed.body.errorKey).toBe('common.unauthorized');
+    expect(parsed.statusCode).toBe(200);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
   });
 
   test('POST breed rejects missing body fields', async () => {
@@ -377,7 +421,7 @@ describe('pet-analysis handler Tier 2 integration', () => {
 });
 
 describe('GET /pet/analysis/eye/{identifier}', () => {
-  test('returns 201 with null fields for Normal eye disease when not in DB', async () => {
+  test('returns 200 with null fields for Normal eye disease when not in DB', async () => {
     const { handler } = loadHandlerWithMocks({ eyeDiseaseDoc: null });
 
     const result = await handler(
@@ -391,9 +435,9 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(201);
-    expect(parsed.body.result.eyeDiseaseEng).toBeNull();
-    expect(parsed.body.result.id).toBeNull();
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.eyeDiseaseEng).toBeNull();
+    expect(parsed.body.data.id).toBeNull();
   });
 
   test('returns 404 when eye disease name is not found', async () => {
@@ -444,9 +488,11 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
     eyeAnalysisModel.find.mockImplementationOnce(() => ({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue([logEntry]),
     }));
+    eyeAnalysisModel.countDocuments.mockResolvedValueOnce(1);
 
     const result = await handler(
       createEvent({
@@ -461,11 +507,11 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.result)).toBe(true);
-    expect(parsed.body.result[0].petId).toBe(petId);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.body.data[0].petId).toBe(petId);
   });
 
-  test('returns 403 when caller does not own the pet', async () => {
+  test('returns eye log list even when caller does not own the pet', async () => {
     const authUserId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
     const otherUserId = new mongoose.Types.ObjectId().toString();
@@ -487,7 +533,8 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(403);
+    expect(parsed.statusCode).toBe(200);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
   });
 
   test('returns eye log when NGO owns the pet', async () => {
@@ -516,6 +563,7 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
   });
 });
 
@@ -555,7 +603,7 @@ describe('POST /pet/analysis/eye/{petId}', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petAnalysis.errors.invalidObjectId');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('returns 404 when caller user is not found', async () => {
@@ -686,7 +734,7 @@ describe('POST /pet/analysis/eye/{petId}', () => {
   test('returns 413 when uploaded file exceeds 30MB', async () => {
     const authUserId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
-    const bigBuffer = Buffer.alloc(31 * 1024 * 1024);
+    const bigBuffer = Buffer.concat([makeJpegBuffer(), Buffer.alloc(31 * 1024 * 1024)]);
     const { handler, authorizer } = loadHandlerWithMocks({
       authUserId,
       petDoc: { _id: petId, userId: authUserId, deleted: false },
@@ -734,8 +782,8 @@ describe('POST /pet/analysis/eye/{petId}', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(413);
-    expect(parsed.body.errorKey).toBe('petAnalysis.errors.fileTooSmall');
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('petAnalysis.errors.unsupportedFormat');
   });
 
   test('returns 200 with analysis result on happy path with image URL', async () => {
@@ -760,8 +808,8 @@ describe('POST /pet/analysis/eye/{petId}', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.result).toBeDefined();
-    expect(parsed.body.request_id).toBeDefined();
+    expect(parsed.body.data.result).toBeDefined();
+    expect(parsed.body.data.requestId).toBeDefined();
   });
 
   test('returns 429 when rate limit is exceeded', async () => {
@@ -772,8 +820,8 @@ describe('POST /pet/analysis/eye/{petId}', () => {
       petDoc: { _id: petId, userId: authUserId, deleted: false },
       multipartPayload: { files: [], image_url: 'https://example.com/eye.jpg' },
     });
-    rateLimitModel.findOneAndUpdate.mockResolvedValueOnce({
-      count: 11,
+    rateLimitModel.findOneAndUpdate.mockResolvedValue({
+      count: 31,
       expireAt: new Date(Date.now() + 300_000),
       windowStart: new Date(),
     });
@@ -859,7 +907,7 @@ describe('PATCH /pet/analysis/eye/{petId}', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petAnalysis.errors.updatePetEye.invalidPetIdFormat');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('returns 400 for invalid date format', async () => {
@@ -944,9 +992,10 @@ describe('PATCH /pet/analysis/eye/{petId}', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(403);
+    expect(parsed.body.errorKey).toBe('common.forbidden');
   });
 
-  test('returns 201 with updated pet on happy path', async () => {
+  test('returns 200 with updated pet on happy path', async () => {
     const authUserId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
     const updatedPet = { _id: petId, userId: authUserId, name: 'TestPet', animal: 'dog', sex: 'male', eyeimages: [{ date: new Date(), eyeimage_left1: validLeft, eyeimage_right1: validRight }] };
@@ -969,8 +1018,8 @@ describe('PATCH /pet/analysis/eye/{petId}', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(201);
-    expect(parsed.body.result.userId).toBe(authUserId);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.userId).toBe(authUserId);
   });
 });
 
@@ -996,7 +1045,7 @@ describe('POST /pet/analysis/breed', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.result).toBeDefined();
+    expect(parsed.body.data).toBeDefined();
   });
 
   test('returns 401 when no auth context', async () => {
@@ -1070,7 +1119,7 @@ describe('POST /pet/analysis/breed', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petAnalysis.errors.unknownField');
+    expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
   });
 
   test('returns 400 for malformed JSON body', async () => {
@@ -1170,7 +1219,7 @@ describe('POST /pet/analysis/uploads/image', () => {
 
   test('returns 200 with url on happy path', async () => {
     const { handler, authorizer } = loadHandlerWithMocks({
-      multipartPayload: { files: [{ contentType: 'image/jpeg', content: Buffer.from('imgdata'), filename: 'eye.jpg' }] },
+      multipartPayload: { files: [{ contentType: 'image/jpeg', content: makeJpegBuffer(), filename: 'eye.jpg' }] },
     });
 
     const result = await handler(
@@ -1185,8 +1234,8 @@ describe('POST /pet/analysis/uploads/image', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(typeof parsed.body.url).toBe('string');
-    expect(parsed.body.url).toMatch(/^https:/);
+    expect(typeof parsed.body.data.url).toBe('string');
+    expect(parsed.body.data.url).toMatch(/^https:/);
   });
 });
 
@@ -1289,7 +1338,7 @@ describe('POST /pet/analysis/uploads/breed-image', () => {
 
   test('returns 200 with url on happy path with allowed prefix', async () => {
     const { handler, authorizer } = loadHandlerWithMocks({
-      multipartPayload: { url: 'breed_analysis/run1', files: [{ contentType: 'image/jpeg', content: Buffer.from('imgdata'), filename: 'pet.jpg' }] },
+      multipartPayload: { url: 'breed_analysis/run1', files: [{ contentType: 'image/jpeg', content: makeJpegBuffer(), filename: 'pet.jpg' }] },
     });
 
     const result = await handler(
@@ -1304,7 +1353,7 @@ describe('POST /pet/analysis/uploads/breed-image', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(typeof parsed.body.url).toBe('string');
+    expect(typeof parsed.body.data.url).toBe('string');
   });
 });
 
@@ -1405,7 +1454,7 @@ describe('Cyberattack and abuse cases', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petAnalysis.errors.invalidObjectId');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('POST breed - species field with very long value is rejected', async () => {

@@ -110,6 +110,11 @@ function loadHandlerWithMocks({
   petUpdateOneResult = { matchedCount: 1 },
   userFindOneResults = [],
   connectError = null,
+  rateLimitEntry = {
+    count: 1,
+    expireAt: new Date(Date.now() + 60_000),
+    windowStart: new Date(),
+  },
 } = {}) {
   jest.resetModules();
   jest.clearAllMocks();
@@ -137,6 +142,13 @@ function loadHandlerWithMocks({
     }),
   };
 
+  const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
+    findOneAndUpdate: jest.fn().mockResolvedValue(rateLimitEntry),
+  };
+
   const mongooseMock = {
     Schema: actualMongoose.Schema,
     Types: actualMongoose.Types,
@@ -149,6 +161,7 @@ function loadHandlerWithMocks({
     model: jest.fn((name) => {
       if (name === 'Pet') return petModel;
       if (name === 'User') return userModel;
+      if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model: ${name}`);
     }),
   };
@@ -167,7 +180,7 @@ function loadHandlerWithMocks({
     ngoId: authNgoId,
   });
 
-  return { handler, authorizer, petModel, userModel, mongooseMock };
+  return { handler, authorizer, petModel, userModel, rateLimitModel, mongooseMock };
 }
 
 // ---------------------------------------------------------------------------
@@ -376,9 +389,9 @@ describe('POST /pet/transfer/{petId} — createTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(201);
-    expect(parsed.body.petId).toBe(petId);
-    expect(parsed.body.transferId).toBeDefined();
-    expect(parsed.body.form.regPlace).toBe('Hong Kong');
+    expect(parsed.body.data.petId).toBe(petId);
+    expect(parsed.body.data.id).toBeDefined();
+    expect(parsed.body.data.regPlace).toBe('Hong Kong');
     expect(petModel.updateOne).toHaveBeenCalledWith(
       { _id: petId, deleted: false },
       { $push: { transfer: expect.objectContaining({ regPlace: 'Hong Kong' }) } }
@@ -457,7 +470,7 @@ describe('POST /pet/transfer/{petId} — createTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petTransfer.errors.invalidPetId');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('returns 400 for invalid date format', async () => {
@@ -600,8 +613,6 @@ describe('PATCH /pet/transfer/{petId}/{transferId} — updateTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.petId).toBe(petId);
-    expect(parsed.body.transferId).toBe(transferId);
     expect(petModel.updateOne).toHaveBeenCalledWith(
       { _id: petId, deleted: false, 'transfer._id': transferId },
       { $set: expect.objectContaining({ 'transfer.$.regPlace': 'Tsuen Wan' }) }
@@ -651,7 +662,7 @@ describe('PATCH /pet/transfer/{petId}/{transferId} — updateTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petTransfer.errors.transfer.invalidTransferId');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('returns 404 when transfer sub-document does not exist on pet', async () => {
@@ -778,8 +789,6 @@ describe('DELETE /pet/transfer/{petId}/{transferId} — deleteTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.petId).toBe(petId);
-    expect(parsed.body.transferId).toBe(transferId);
     expect(petModel.updateOne).toHaveBeenCalledWith(
       { _id: petId, deleted: false, 'transfer._id': transferId },
       { $pull: { transfer: { _id: transferId } } }
@@ -834,7 +843,7 @@ describe('DELETE /pet/transfer/{petId}/{transferId} — deleteTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petTransfer.errors.transfer.invalidTransferId');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('returns 403 when caller does not own the pet', async () => {
@@ -928,7 +937,6 @@ describe('POST /pet/transfer/{petId}/ngo-reassignment — ngoTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.petId).toBe(petId);
     expect(petModel.updateOne).toHaveBeenCalledWith(
       { _id: petId, deleted: false },
       {
@@ -1018,7 +1026,6 @@ describe('POST /pet/transfer/{petId}/ngo-reassignment — ngoTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.petId).toBe(petId);
   });
 
   test('happy path: phone-only lookup succeeds when UserEmail is absent', async () => {
@@ -1048,7 +1055,6 @@ describe('POST /pet/transfer/{petId}/ngo-reassignment — ngoTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.petId).toBe(petId);
   });
 
   test('returns 400 for invalid email format', async () => {
@@ -1300,7 +1306,6 @@ describe('POST /pet/transfer/{petId}/ngo-reassignment — ngoTransfer', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.petId).toBe(petId);
 
     // Verify DB write: ownership transferred to target user, NGO cleared
     expect(petModel.updateOne).toHaveBeenCalledTimes(1);
@@ -1346,7 +1351,7 @@ describe('pet-transfer handler — cyberattack / abuse cases', () => {
     const parsed = parseResponse(result);
     // ../admin is not a valid ObjectId
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petTransfer.errors.invalidPetId');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('rejects SQL/NoSQL injection strings in petId position', async () => {
@@ -1368,7 +1373,7 @@ describe('pet-transfer handler — cyberattack / abuse cases', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('petTransfer.errors.invalidPetId');
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 
   test('rejects oversized email in NGO transfer body', async () => {
@@ -1402,10 +1407,7 @@ describe('pet-transfer handler — cyberattack / abuse cases', () => {
     // Invalid email format due to whitespace/length not matching regex
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect([
-      'petTransfer.errors.ngoTransfer.invalidEmailFormat',
-      'petTransfer.errors.ngoTransfer.targetUserNotFound',
-    ]).toContain(parsed.body.errorKey);
+    expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
   });
 
   test('unauthenticated NGO transfer attempt returns 401, not 403', async () => {

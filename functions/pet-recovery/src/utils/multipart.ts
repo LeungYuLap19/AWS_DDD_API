@@ -8,13 +8,13 @@ function normalizeBoolean(value: unknown): boolean | undefined {
   return String(value).toLowerCase() === 'true';
 }
 
-function normalizeNumber(value: unknown): number | undefined {
+function normalizeNumber(value: unknown): number | string | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
 
   const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
+  return Number.isFinite(n) ? n : String(value);
 }
 
 export function normalizeLostMultipartBody(

@@ -142,6 +142,15 @@ function loadHandlerWithMocks({
     findOne: jest.fn(() => createLeanResult(petDoc)),
   };
 
+  const rateLimitModel = {
+    findOne: jest.fn(() => createLeanResult(null)),
+    findOneAndUpdate: jest.fn().mockResolvedValue({
+      count: 1,
+      expireAt: new Date(Date.now() + 60_000),
+      windowStart: new Date(),
+    }),
+  };
+
   const sourceModel = {
     findOne: jest.fn(() => createLeanResult(sourceDoc)),
     create: sourceCreateError
@@ -160,6 +169,7 @@ function loadHandlerWithMocks({
     model: jest.fn((name) => {
       if (name === 'Pet') return petModel;
       if (name === 'pet_sources') return sourceModel;
+      if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model ${name}`);
     }),
   };
@@ -167,6 +177,9 @@ function loadHandlerWithMocks({
   jest.doMock('mongoose', () => ({
     __esModule: true,
     default: mongooseMock,
+    Schema: actualMongoose.Schema,
+    Types: actualMongoose.Types,
+    isValidObjectId: actualMongoose.isValidObjectId,
   }));
 
   jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
@@ -325,8 +338,7 @@ describe('pet-source handler Tier 2 integration', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.form).toBeNull();
-    expect(parsed.body.petId).toBe(petId);
+    expect(parsed.body.data).toBeNull();
   });
 
   test('returns 200 with populated form when a source record exists', async () => {
@@ -352,9 +364,9 @@ describe('pet-source handler Tier 2 integration', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.form).not.toBeNull();
-    expect(parsed.body.sourceId).toBe(String(existing._id));
-    expect(parsed.body.petId).toBe(petId);
+    expect(parsed.body.data).not.toBeNull();
+    expect(parsed.body.data.id).toBe(String(existing._id));
+    expect(parsed.body.data.petId).toBe(petId);
   });
 
   test('creates a pet source record successfully', async () => {
@@ -386,8 +398,8 @@ describe('pet-source handler Tier 2 integration', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(201);
-    expect(parsed.body.petId).toBe(petId);
-    expect(parsed.body.sourceId).toBe(String(created._id));
+    expect(parsed.body.data.petId).toBe(petId);
+    expect(parsed.body.data.id).toBe(String(created._id));
     expect(sourceModel.create).toHaveBeenCalledWith({
       petId,
       placeofOrigin: 'Shelter',
@@ -638,7 +650,7 @@ describe('pet-source handler Tier 2 integration', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
-    expect(parsed.body.errorKey).toBe('common.missingParams');
+    expect(parsed.body.errorKey).toBe('common.missingBodyParams');
   });
 
   test('returns 404 when PATCH cannot find an existing source record for the pet', async () => {
@@ -697,8 +709,8 @@ describe('pet-source handler Tier 2 integration', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.petId).toBe(petId);
-    expect(parsed.body.sourceId).toBe(String(existing._id));
+    expect(parsed.body.success).toBe(true);
+    expect(parsed.body.data).toBeUndefined();
     expect(sourceModel.updateOne).toHaveBeenCalledWith(
       { _id: String(existing._id), petId },
       { $set: { causeOfInjury: 'Recovered' } }

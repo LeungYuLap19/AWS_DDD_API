@@ -8,13 +8,13 @@ function normalizeBoolean(value: unknown): boolean | undefined {
   return String(value).toLowerCase() === 'true';
 }
 
-function normalizeNumber(value: unknown): number | undefined {
+function normalizeNumber(value: unknown): number | string | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
 
   const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
+  return Number.isFinite(n) ? n : String(value);
 }
 
 export function normalizeMultipartBody(
@@ -28,9 +28,8 @@ export function normalizeMultipartBody(
     ownerContact2: normalizeNumber(rawFields.ownerContact2),
     contact1Show: normalizeBoolean(rawFields.contact1Show),
     contact2Show: normalizeBoolean(rawFields.contact2Show),
-    breedimage:
-      typeof rawFields.breedimage === 'string' && rawFields.breedimage.trim()
-        ? [rawFields.breedimage]
-        : undefined,
+    ...(typeof rawFields.breedimage === 'string' && rawFields.breedimage.trim()
+      ? { breedimage: [rawFields.breedimage] }
+      : {}),
   };
 }
