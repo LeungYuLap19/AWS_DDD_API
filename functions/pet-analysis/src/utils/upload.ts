@@ -68,7 +68,6 @@ export async function uploadImageFile(
       Bucket: env.AWS_BUCKET_NAME,
       Key: key,
       Body: file.buffer,
-      ACL: 'public-read',
       ContentType: detectedMime,
     })
   );

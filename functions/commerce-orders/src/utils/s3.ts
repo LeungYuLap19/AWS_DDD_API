@@ -26,7 +26,6 @@ export async function uploadQrCodeImage(shortUrl: string): Promise<string> {
         Bucket: env.AWS_BUCKET_NAME,
         Key: key,
         Body: imageBuffer,
-        ACL: 'public-read',
         ContentType: 'image/png',
       })
     );

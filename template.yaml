@@ -281,6 +281,7 @@ Resources:
   SharedFunctionRole: # default app Lambda permissions, 
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-shared'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -297,6 +298,7 @@ Resources:
   PetProfileFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-pet-profile'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -317,12 +319,12 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
                 Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
 
   PetRecoveryFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-pet-recovery'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -343,12 +345,12 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
                 Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
 
   PetAnalysisFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-pet-analysis'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -369,12 +371,16 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
-                Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/*'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/breed_analysis/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/eye/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/profile/*'
 
   AuthorizerFunctionRole: # the IAM role for the authorizer Lambda only - RequestAuthorizerFunction
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-authorizer'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1681,6 +1687,7 @@ Resources:
   CommerceOrdersFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-commerce-orders'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1701,7 +1708,6 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
                 Resource:
                   - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/orders/*'
                   - !Sub 'arn:aws:s3:::${S3BucketName}/qr-codes/*'

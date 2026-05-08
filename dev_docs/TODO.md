@@ -7,23 +7,27 @@
 - [x] response format
 - [x] error handling
 - [x] all list enforce pagination
-- [ ] S3 and multipart
+- [x] S3 and multipart
   - formadata only in mutipart route (do not mix json + multipart)
+
 - [ ] retest, api docs update
 - [ ] Tsdoc
-- [ ] Api docs
 
 ## Optimization, Security Scan and Hardening
 
 - [ ] what can be extract to shared (SoC)
   - db connection, service standard flow, s3 client
-- [ ] template
-  - iam roles, multipart
+- [x] template
+  - iam roles: removed s3:PutObjectAcl (least-privilege), tightened PetAnalysis S3 resources to explicit prefixes, added RoleName to all 6 roles
+  - multipart
 - [ ] mongodb indexing
 - [ ] business logics optimisation
 - [ ] Cold start optimisation
 - [ ] Checkov, semgrep, snyk, CodeGuru Security
-- [ ] schema and sanitizing tightening
+- [ ] schema and sanitizing tightening — see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)
+  - P0: shared path-param validators (objectId/tempId) + apply to ~60 endpoints; add `sanitize-html` for free-text
+  - P1: `.max()` on strings/arrays; replace `.passthrough()` with `.strict()` (pet-profile, pet-analysis, ngo); shared `paginationQuerySchema`; enums for gender/status/lang
+  - P2: consolidate `bootstrap/validators/` + `bootstrap/sanitizers/`; integration tests for injection/XSS/oversize
 - [ ] path optimization (consider move PATCH pet profile by {petId} to /pet-profile/me)
 - [ ] Replace current basic rate limiting with layered rate limiting:
   - Add per-IP, per-identifier, and per-account limits.
