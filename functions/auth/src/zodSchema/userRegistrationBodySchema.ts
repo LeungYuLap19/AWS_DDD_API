@@ -2,30 +2,33 @@ import { z } from 'zod';
 
 const optionalBooleanish = z.union([z.boolean(), z.string()]).optional();
 
-const optionalNullableString = z.string().trim().optional().nullable().or(z.literal(''));
+const optionalNullableString = (max: number) =>
+  z.string().trim().max(max, { message: 'common.invalidBodyParams' }).optional().nullable().or(z.literal(''));
 
 export const userRegistrationBodySchema = z
   .object({
     firstName: z
       .string({ message: 'common.missingBodyParams' })
       .trim()
-      .min(1, { message: 'common.missingBodyParams' }),
+      .min(1, { message: 'common.missingBodyParams' })
+      .max(100, { message: 'common.invalidBodyParams' }),
     lastName: z
       .string({ message: 'common.missingBodyParams' })
       .trim()
-      .min(1, { message: 'common.missingBodyParams' }),
-    email: optionalNullableString.refine(
+      .min(1, { message: 'common.missingBodyParams' })
+      .max(100, { message: 'common.invalidBodyParams' }),
+    email: optionalNullableString(254).refine(
       (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
       { message: 'common.invalidBodyParams' }
     ),
-    phoneNumber: optionalNullableString.refine(
+    phoneNumber: optionalNullableString(20).refine(
       (value) => !value || /^\+[1-9]\d{1,14}$/.test(value),
       { message: 'common.invalidBodyParams' }
     ),
     subscribe: optionalBooleanish,
     promotion: z.boolean().optional(),
-    district: optionalNullableString,
-    image: optionalNullableString.refine(
+    district: optionalNullableString(100),
+    image: optionalNullableString(2048).refine(
       (value) => {
         if (!value) return true;
         try {
@@ -37,7 +40,7 @@ export const userRegistrationBodySchema = z
       },
       { message: 'common.invalidBodyParams' }
     ),
-    birthday: optionalNullableString.refine(
+    birthday: optionalNullableString(32).refine(
       (value) => !value || !Number.isNaN(new Date(value).getTime()),
       { message: 'common.invalidBodyParams' }
     ),

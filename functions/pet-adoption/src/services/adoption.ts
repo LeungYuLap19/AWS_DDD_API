@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { getAuthContext, requireAuthContext } from '@aws-ddd-api/shared';
+import { getAuthContext, parseObjectIdParam, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
+import { response } from '../utils/response';
 import { handleGetAdoptionList, handleGetBrowseDetail } from './browse';
 import {
   handleGetManagedRecord,
@@ -22,7 +23,11 @@ export { handleGetAdoptionList };
  *   - no auth      → public browse detail (adoptionId = id)
  */
 export async function handleGetById(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const id = ctx.event.pathParameters?.id ?? '';
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.id);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
+  }
+  const id = idParam.data;
   const authCtx = getAuthContext(ctx.event);
   if (authCtx) {
     return handleGetManagedRecord(ctx, id);
@@ -37,8 +42,11 @@ export async function handleGetById(ctx: RouteContext): Promise<APIGatewayProxyR
  */
 export async function handleCreate(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
-  const petId = ctx.event.pathParameters?.id ?? '';
-  return handleCreateManagedRecord(ctx, petId);
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.id);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
+  }
+  return handleCreateManagedRecord(ctx, idParam.data);
 }
 
 /**
@@ -48,8 +56,11 @@ export async function handleCreate(ctx: RouteContext): Promise<APIGatewayProxyRe
  */
 export async function handleUpdate(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
-  const petId = ctx.event.pathParameters?.id ?? '';
-  return handleUpdateManagedRecord(ctx, petId);
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.id);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
+  }
+  return handleUpdateManagedRecord(ctx, idParam.data);
 }
 
 /**
@@ -59,6 +70,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<APIGatewayProxyRe
  */
 export async function handleDelete(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
-  const petId = ctx.event.pathParameters?.id ?? '';
-  return handleDeleteManagedRecord(ctx, petId);
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.id);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
+  }
+  return handleDeleteManagedRecord(ctx, idParam.data);
 }

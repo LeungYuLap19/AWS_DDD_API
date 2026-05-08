@@ -2,6 +2,7 @@ import type { APIGatewayProxyResult } from 'aws-lambda';
 import {
   HttpError,
   logWarn,
+  paginationQuerySchema,
   parseBody,
   requireAuthContext,
 } from '@aws-ddd-api/shared';
@@ -102,8 +103,11 @@ export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayPro
   const queryParams = ctx.event.queryStringParameters || {};
   const searchRaw = (queryParams['search'] || '').trim();
   const search = escapeRegex(searchRaw);
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const pagination = paginationQuerySchema().safeParse(queryParams);
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
 
   const { members, totalDocs, totalPages } = await buildNgoMemberList({
     ngoId: authContext.ngoId as string,

@@ -1,4 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
+import { paginationQuerySchema } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectBrowseDB } from '../config/db';
 import { response } from '../utils/response';
@@ -68,8 +69,11 @@ function buildAdoptionListQuery(query: {
  */
 export async function handleGetAdoptionList(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const pagination = paginationQuerySchema().safeParse(queryParams);
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   const locale = typeof queryParams['lang'] === 'string' ? queryParams['lang'] : 'zh';

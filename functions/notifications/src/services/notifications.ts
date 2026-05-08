@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, requireAuthContext, requireRole } from '@aws-ddd-api/shared';
+import { parseBody, paginationQuerySchema, parseObjectIdParam, requireAuthContext, requireRole } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { dispatchNotificationSchema } from '../zodSchema/notificationSchema';
@@ -28,9 +28,11 @@ export async function handleListNotifications(ctx: RouteContext): Promise<APIGat
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
 
-  const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   const Notifications = mongoose.model('Notifications');
@@ -53,15 +55,11 @@ export async function handleListNotifications(ctx: RouteContext): Promise<APIGat
 
 export async function handleArchiveNotification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
-  const notificationId = ctx.event.pathParameters?.notificationId;
-
-  if (!notificationId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.notificationId);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
   }
-
-  if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
-  }
+  const notificationId = idParam.data;
 
   await connectToMongoDB();
 

@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, parseBody } from '@aws-ddd-api/shared';
+import { requireAuthContext, parseBody, parsePathParam, tempIdString } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -30,11 +30,11 @@ type RawDocument = Record<string, unknown>;
 export async function handleGetSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
 
-  const orderId = ctx.event.pathParameters?.orderId ?? '';
-
-  if (!orderId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const orderParam = parsePathParam(ctx.event.pathParameters?.orderId, tempIdString());
+  if (!orderParam.ok) {
+    return response.errorResponse(orderParam.statusCode, orderParam.errorKey, ctx.event);
   }
+  const orderId = orderParam.data;
 
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification') as mongoose.Model<RawDocument>;
@@ -92,11 +92,11 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
 export async function handlePatchSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
 
-  const orderId = ctx.event.pathParameters?.orderId ?? '';
-
-  if (!orderId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const orderParam = parsePathParam(ctx.event.pathParameters?.orderId, tempIdString());
+  if (!orderParam.ok) {
+    return response.errorResponse(orderParam.statusCode, orderParam.errorKey, ctx.event);
   }
+  const orderId = orderParam.data;
 
   const parsed = parseBody(ctx.body, supplierUpdateSchema);
   if (!parsed.ok) {

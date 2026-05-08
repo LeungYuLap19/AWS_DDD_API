@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, parseBody, HttpError, logWarn } from '@aws-ddd-api/shared';
+import { requireAuthContext, parseBody, parsePathParam, tempIdString, HttpError, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -150,11 +150,11 @@ async function dispatchWhatsAppTrackingMessage(
 export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
 
-  const tagId = ctx.event.pathParameters?.tagId ?? '';
-
-  if (!tagId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const tagParam = parsePathParam(ctx.event.pathParameters?.tagId, tempIdString());
+  if (!tagParam.ok) {
+    return response.errorResponse(tagParam.statusCode, tagParam.errorKey, ctx.event);
   }
+  const tagId = tagParam.data;
 
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification');
@@ -209,11 +209,11 @@ export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGa
 export async function handlePatchTagVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
 
-  const tagId = ctx.event.pathParameters?.tagId ?? '';
-
-  if (!tagId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const tagParam = parsePathParam(ctx.event.pathParameters?.tagId, tempIdString());
+  if (!tagParam.ok) {
+    return response.errorResponse(tagParam.statusCode, tagParam.errorKey, ctx.event);
   }
+  const tagId = tagParam.data;
 
   const parsed = parseBody(ctx.body, tagUpdateSchema);
   if (!parsed.ok) {

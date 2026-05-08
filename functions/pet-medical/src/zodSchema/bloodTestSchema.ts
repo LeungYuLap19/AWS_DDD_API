@@ -4,12 +4,13 @@ export const createBloodTestSchema = z
   .object({
     bloodTestDate: z
       .string({ error: 'petMedical.errors.bloodTest.invalidDateFormat' })
+      .max(64, 'petMedical.errors.bloodTest.invalidDateFormat')
       .optional(),
-    heartworm: z.string().optional(),
-    lymeDisease: z.string().optional(),
-    ehrlichiosis: z.string().optional(),
-    anaplasmosis: z.string().optional(),
-    babesiosis: z.string().optional(),
+    heartworm: z.string().trim().max(50, 'common.invalidBodyParams').optional(),
+    lymeDisease: z.string().trim().max(50, 'common.invalidBodyParams').optional(),
+    ehrlichiosis: z.string().trim().max(50, 'common.invalidBodyParams').optional(),
+    anaplasmosis: z.string().trim().max(50, 'common.invalidBodyParams').optional(),
+    babesiosis: z.string().trim().max(50, 'common.invalidBodyParams').optional(),
   })
   .strict();
 

@@ -1,9 +1,12 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
 import {
+  paginationQuerySchema,
   parseMultipartBody,
+  parsePathParam,
   requireAuthContext,
   requireRole,
+  tempIdString,
   logWarn,
 } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
@@ -40,9 +43,11 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
   await connectToMongoDB();
   const Order = mongoose.model('Order');
 
-  const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   const projection = {
@@ -266,11 +271,11 @@ return response.successResponse(200, ctx.event, {
  */
 export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authCtx = requireAuthContext(ctx.event);
-  const tempId = ctx.event.pathParameters?.['tempId'];
-
-  if (!tempId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const tempParam = parsePathParam(ctx.event.pathParameters?.['tempId'], tempIdString());
+  if (!tempParam.ok) {
+    return response.errorResponse(tempParam.statusCode, tempParam.errorKey, ctx.event);
   }
+  const tempId = tempParam.data;
 
   await connectToMongoDB();
   const Order = mongoose.model('Order');
@@ -312,9 +317,11 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification');
 
-  const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   const filter = { cancelled: { $exists: true } };

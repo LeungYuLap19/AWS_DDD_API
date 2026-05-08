@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, parseMultipartBody, requireAuthContext, logWarn } from '@aws-ddd-api/shared';
+import { parseBody, parseMultipartBody, paginationQuerySchema, requireAuthContext, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
@@ -64,9 +64,11 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
     });
   }
 
-  const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   const EyeAnalysis = mongoose.model('EyeAnalysisRecord');

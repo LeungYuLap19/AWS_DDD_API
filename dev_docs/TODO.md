@@ -15,20 +15,21 @@
 
 ## Optimization, Security Scan and Hardening
 
-- [ ] what can be extract to shared (SoC)
+- [ ] what can be extract to shared (SoC) - delay
   - db connection, service standard flow, s3 client
 - [x] template
   - iam roles: removed s3:PutObjectAcl (least-privilege), tightened PetAnalysis S3 resources to explicit prefixes, added RoleName to all 6 roles
   - multipart
-- [ ] mongodb indexing
+- [ ] mongodb indexing - delay
 - [ ] business logics optimisation
 - [ ] Cold start optimisation
 - [ ] Checkov, semgrep, snyk, CodeGuru Security
-- [ ] schema and sanitizing tightening — see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)
+- [x] schema and sanitizing tightening — see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)
   - P0: shared path-param validators (objectId/tempId) + apply to ~60 endpoints; add `sanitize-html` for free-text
   - P1: `.max()` on strings/arrays; replace `.passthrough()` with `.strict()` (pet-profile, pet-analysis, ngo); shared `paginationQuerySchema`; enums for gender/status/lang
-  - P2: consolidate `bootstrap/validators/` + `bootstrap/sanitizers/`; integration tests for injection/XSS/oversize
-- [ ] path optimization (consider move PATCH pet profile by {petId} to /pet-profile/me)
+  - P2: consolidate `bootstrap/validators/` + `bootstrap/sanitizers/`
+  - [ ] P3: integration tests for injection/XSS/oversize
+- [ ] path optimization (consider move PATCH pet profile by {petId} to /pet-profile/me) - delay
 - [ ] Replace current basic rate limiting with layered rate limiting:
   - Add per-IP, per-identifier, and per-account limits.
   - Add separate failure counters/cooldowns for login, OTP verify, refresh abuse, and destructive routes.

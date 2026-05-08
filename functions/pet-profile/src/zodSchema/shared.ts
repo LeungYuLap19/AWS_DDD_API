@@ -1,11 +1,36 @@
 import { z } from 'zod';
+import { sanitizeText } from '@aws-ddd-api/shared';
 import { isValidDateFormat } from '../utils/date';
 
-export const optionalTrimmedString = () => z.string().trim().optional();
-export const optionalNonEmptyString = () => z.string().trim().min(1).optional();
+/** Default max lengths used across pet-profile schemas. */
+export const TEXT_MAX = {
+  /** Short identifiers and names (e.g. pet name, owner name). */
+  short: 100,
+  /** Medium-length text (e.g. location, breed, chipId, tagId). */
+  medium: 200,
+  /** Long free-text fields (description, features, info). */
+  long: 2000,
+} as const;
+
+export const optionalTrimmedString = (max: number = TEXT_MAX.medium) =>
+  z
+    .string()
+    .trim()
+    .max(max, { message: 'common.invalidBodyParams' })
+    .transform(sanitizeText)
+    .optional();
+export const optionalNonEmptyString = (max: number = TEXT_MAX.medium) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max, { message: 'common.invalidBodyParams' })
+    .transform(sanitizeText)
+    .optional();
 export const optionalDateString = (message: string) =>
   z
     .string()
+    .max(64, { message })
     .refine((value) => isValidDateFormat(value), { message })
     .optional();
 
@@ -13,6 +38,7 @@ export const requiredDateString = (requiredMessage: string, formatMessage: strin
   z
     .string({ error: requiredMessage })
     .min(1, requiredMessage)
+    .max(64, formatMessage)
     .refine((value) => isValidDateFormat(value), { message: formatMessage });
 
 export function rejectUnknownFields(

@@ -325,4 +325,59 @@ declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/logging/logger';
   export * from '@aws-ddd-api/shared/rate-limit/mongo';
   export * from '@aws-ddd-api/shared/validation/zod';
+  export * from '@aws-ddd-api/shared/validation/common';
+  export * from '@aws-ddd-api/shared/sanitization/text';
+}
+
+declare module '@aws-ddd-api/shared/validation/common' {
+  import { z } from 'zod';
+
+  export const objectIdString: (errorKey?: string) => z.ZodType<string>;
+  export const tempIdString: (errorKey?: string) => z.ZodType<string>;
+  export const emailString: (errorKey?: string) => z.ZodType<string>;
+  export const phoneE164String: (errorKey?: string) => z.ZodType<string>;
+  export const urlString: (errorKey?: string) => z.ZodType<string>;
+
+  export interface PaginationQueryOptions {
+    maxLimit?: number;
+    defaultLimit?: number;
+    maxPage?: number;
+    errorKey?: string;
+  }
+  export const paginationQuerySchema: (
+    options?: PaginationQueryOptions
+  ) => z.ZodType<{ page: number; limit: number } & Record<string, unknown>>;
+
+  export interface PathParamFailure {
+    ok: false;
+    statusCode: number;
+    errorKey: string;
+  }
+  export interface PathParamSuccess<T> {
+    ok: true;
+    data: T;
+  }
+  export type PathParamResult<T> = PathParamSuccess<T> | PathParamFailure;
+
+  export function parsePathParam<T>(
+    raw: unknown,
+    schema: z.ZodType<T>,
+    fallbackErrorKey?: string
+  ): PathParamResult<T>;
+  export function parseObjectIdParam(
+    raw: unknown,
+    errorKey?: string
+  ): PathParamResult<string>;
+}
+
+declare module '@aws-ddd-api/shared/sanitization/text' {
+  export function escapeHtml(input: string): string;
+  export function sanitizeText(input: unknown): string;
+  export function sanitizeOptionalText<T extends string | null | undefined>(
+    input: T
+  ): T extends string ? string : T;
+  export function sanitizeFields<T extends Record<string, unknown>>(
+    obj: T,
+    fields: readonly (keyof T)[]
+  ): T;
 }

@@ -1,5 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { requireAuthContext } from '@aws-ddd-api/shared';
+import { paginationQuerySchema, parsePathParam, requireAuthContext, tempIdString } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import mongoose from 'mongoose';
 import { connectToMongoDB } from '../config/db';
@@ -34,10 +34,11 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
 export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
-  const tagId = ctx.event.pathParameters?.tagId;
-  if (!tagId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const tagParam = parsePathParam(ctx.event.pathParameters?.tagId, tempIdString());
+  if (!tagParam.ok) {
+    return response.errorResponse(tagParam.statusCode, tagParam.errorKey, ctx.event);
   }
+  const tagId = tagParam.data;
 
   const Pet = mongoose.model('Pet');
   const pet = await Pet.findOne(
@@ -60,8 +61,11 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
 
   const Pet = mongoose.model('Pet');
   const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const pagination = paginationQuerySchema().safeParse(queryParams);
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   if (authContext.ngoId) {

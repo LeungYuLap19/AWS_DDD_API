@@ -8,7 +8,7 @@ import { normalizeMultipartBody } from '../utils/multipart';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 import { uploadImageFile } from '../utils/upload';
-import { patchPetAllowedFields, patchPetBodySchema } from '../zodSchema/patchPetProfileSchemas';
+import { patchPetBodySchema } from '../zodSchema/patchPetProfileSchemas';
 import { ensureUniqueNgoPetId, ensureUniqueTag } from './profileHelpers';
 import {
   applyPatchScalarFields,
@@ -26,14 +26,7 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
   }
 
   const multiResult = await parseMultipartBody(ctx.event, patchPetBodySchema, {
-    validate: (rawFields) => {
-      const unknownField = Object.keys(rawFields).find((key) => !patchPetAllowedFields.has(key));
-      return unknownField ? 'common.invalidBodyParams' : null;
-    },
-    normalize: (rawFields) =>
-      Object.fromEntries(
-        Object.entries(normalizeMultipartBody(rawFields)).filter(([key]) => patchPetAllowedFields.has(key))
-      ),
+    normalize: (rawFields) => normalizeMultipartBody(rawFields),
   });
   if (!multiResult.ok) {
     return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
