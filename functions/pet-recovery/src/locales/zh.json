@@ -1,6 +1,8 @@
 {
   "petRecovery": {
     "errors": {
+      "invalidFileType": "不支援的檔案格式，僅允許 JPEG、PNG、GIF 及 WebP",
+      "fileTooLarge": "檔案超過允許的大小上限（4 MB）",
       "petLost": {
         "nameRequired": "寵物名稱為必填",
         "sexRequired": "寵物性別為必填",

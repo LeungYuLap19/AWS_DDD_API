@@ -88,13 +88,3 @@ export async function uploadImageFile(
 
   return url;
 }
-
-export async function getNextSerialNumber(): Promise<string> {
-  const RecoveryCounter = mongoose.model('RecoveryCounter');
-  const counter = (await RecoveryCounter.findOneAndUpdate(
-    { _id: 'petRecovery' },
-    { $inc: { seq: 1 } },
-    { upsert: true, new: true }
-  )) as { seq?: number } | null;
-  return String(counter?.seq ?? 1);
-}

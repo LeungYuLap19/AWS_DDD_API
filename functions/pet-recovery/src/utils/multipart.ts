@@ -1,12 +1,3 @@
-export type ParsedMultipartFile = {
-  content?: Buffer;
-  filename?: string;
-};
-
-export type ParsedMultipartForm = Record<string, unknown> & {
-  files?: ParsedMultipartFile[];
-};
-
 function normalizeBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;

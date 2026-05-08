@@ -1,0 +1,257 @@
+MULTIPART & S3 STANDARDIZATION NOTES
+======================================
+
+Affected lambdas: pet-profile, pet-analysis, pet-recovery, commerce-orders
+
+
+── RULE 1: MULTIPART-ONLY ROUTES ─────────────────────────────────────────────
+
+All routes that accept file uploads must be multipart/form-data only.
+No JSON fallback. No Content-Type branching. No dual parseBody/parseMultipartBody.
+
+Rationale: mixing JSON + multipart doubles the parsing path, creates two
+normalization surfaces, and makes validation inconsistent.
+
+Current violators:
+  - pet-profile/services/createProfile.ts  (if multipart ... else parseBody)
+  - pet-profile/services/patchProfile.ts   (if isMultipart ... else parseBody)
+
+Fix: remove the else branch entirely. Always call parseMultipartBody.
+
+
+── RULE 2: ALWAYS USE parseMultipartBody FROM SHARED ─────────────────────────
+
+Never import lambda-multipart-parser directly in service files.
+Always use parseMultipartBody from @aws-ddd-api/shared.
+
+parseMultipartBody wraps lambda-multipart-parser and provides:
+  - standardized ParseMultipartBodyResult discriminated union (ok/errorKey)
+  - integrated Zod validation in one call
+  - normalize hook for coercing string fields
+  - validate hook for pre-Zod allowlist checks
+
+Usage pattern:
+  const result = await parseMultipartBody(ctx.event, mySchema, { normalize });
+  if (!result.ok) return response.errorResponse(result.statusCode, result.errorKey, ctx.event);
+  const { data, files } = result;
+
+Current violators:
+  - pet-analysis/services/upload.ts   (raw multipart.parse x2)
+  - pet-analysis/services/eye.ts      (raw multipart.parse, embedded mid-function)
+
+
+── RULE 3: NORMALIZE HELPERS (utils/multipart.ts) ────────────────────────────
+
+Each lambda that needs field coercion keeps a utils/multipart.ts with:
+  - private normalizeBoolean(value) and normalizeNumber(value) helpers
+  - one or more exported normalize functions matching the lambda's schema(s)
+
+Canonical implementation (from pet-recovery — most defensive):
+
+  function normalizeBoolean(value: unknown): boolean | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'boolean') return value;
+    return String(value).toLowerCase() === 'true';
+  }
+
+  function normalizeNumber(value: unknown): number | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+
+Do NOT use pet-profile's version — it does not guard null or empty string,
+and uses Number() without a Number.isFinite check.
+
+Each lambda exports its own named normalize function(s) that compose
+normalizeBoolean/normalizeNumber for its specific schema fields.
+These stay per-lambda (not shared) because each schema has different fields.
+
+
+── RULE 4: UPLOAD HELPER (utils/upload.ts) ───────────────────────────────────
+
+Canonical function name: uploadImageFile
+Canonical signature:
+  async function uploadImageFile(
+    file: { buffer: Buffer; originalname: string },
+    folder: string,
+    owner?: string     // defaults to 'user'
+  ): Promise<string>  // always returns URL; throws on any violation
+
+Canonical behavior — in order:
+  1. Detect MIME from magic bytes (NOT from filename or Content-Type header)
+  2. Reject if MIME not in ALLOWED_UPLOAD_MIME  → throw { code: 'INVALID_FILE_TYPE' }
+  3. Reject if buffer.length > MAX_UPLOAD_BYTES → throw { code: 'FILE_TOO_LARGE' }
+  4. Create ImageCollection record (empty)
+  5. Derive extension from detected MIME via EXT_MAP
+  6. PutObjectCommand to S3
+  7. Update ImageCollection with fileName, url, fileSize, mimeType, owner
+  8. Return url
+
+Allowed MIME set (canonical — matches commerce-orders, most hardened):
+  ALLOWED_UPLOAD_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+  Drop: tiff, bmp, pdf — inconsistent across lambdas, not needed for pet images
+
+Max upload size (canonical):
+  MAX_UPLOAD_BYTES = 4 * 1024 * 1024  // 4 MB
+  Reason: API GW with BinaryMediaTypes base64-encodes body (4 MB raw →
+  ~5.33 MB encoded), safely under Lambda's 6 MB synchronous limit.
+
+Magic bytes detection (canonical — from commerce-orders/utils/s3.ts):
+  JPEG  : FF D8 FF
+  PNG   : 89 50 4E 47 0D 0A 1A 0A
+  GIF   : 47 49 46 38 [37|39] 61
+  WebP  : 52 49 46 46 ?? ?? ?? ?? 57 45 42 50
+
+EXT_MAP (canonical):
+  'image/jpeg' → 'jpg'
+  'image/png'  → 'png'
+  'image/gif'  → 'gif'
+  'image/webp' → 'webp'
+
+Callers catch the thrown error and map to errorResponse:
+  try {
+    const url = await uploadImageFile(file, folder);
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, '<domain>.errors.invalidFileType', ctx.event);
+    if (code === 'FILE_TOO_LARGE')    return response.errorResponse(413, '<domain>.errors.fileTooLarge', ctx.event);
+    throw err;
+  }
+
+Current violators vs canonical:
+  - pet-profile/utils/upload.ts   : extension from filename, no size limit, allows tiff/bmp/pdf
+  - pet-analysis/utils/upload.ts  : extension from filename, no size limit
+  - pet-recovery/utils/upload.ts  : extension from filename, 10 MB limit, returns null instead of throwing
+  - commerce-orders/utils/s3.ts   : canonical (magic bytes, 4 MB, throws) ✓ — rename function to uploadImageFile
+
+
+── RULE 5: S3 CLIENT (config/s3.ts) ─────────────────────────────────────────
+
+Each lambda keeps its own config/s3.ts for now (SoC extraction is in
+Optimization TODO, not Standardization).
+
+All must be identical:
+  import { S3Client } from '@aws-sdk/client-s3';
+  import env from './env';
+  const s3Client = new S3Client({ region: env.AWS_BUCKET_REGION });
+  export default s3Client;
+
+All four lambdas already match this. No changes needed here.
+
+
+── STANDARDS REVIEW NOTES ─────────────────────────────────────────────────────
+
+Rule 3 normalize helpers:
+  - normalizeNumber uses Number.isFinite guard — correct. Number(null) = 0,
+    Number('') = 0, both are finite and would silently pass without the guard.
+  - normalizeBoolean handles null, undefined, empty string, boolean passthrough,
+    and string coercion — complete.
+  - pet-profile's version is missing all of those guards. pet-recovery is canonical.
+
+Rule 4 uploadImageFile / magic bytes:
+  - detectMimeFromBuffer requires buffer.length >= 12.
+    Minimum needed: JPEG=3, PNG=8, GIF=6, WebP=12. The 12-byte minimum is correct.
+  - ACL: 'public-read' works only when the S3 bucket has Object Ownership =
+    "Object writer" (ACLs enabled). If bucket enforces "Bucket owner enforced"
+    (AWS default since Apr 2023), PutObjectAcl and ACL params throw
+    AccessControlListNotSupported. If the bucket is already configured this way,
+    no code change needed here. Track under Optimization/Hardening when moving
+    to bucket policy for public access instead of per-object ACL.
+  - Throwing on violation (INVALID_FILE_TYPE / FILE_TOO_LARGE) is correct:
+    callers catch and map to errorResponse. Do not return null or undefined.
+
+Rule 4 size limit rationale (4 MB):
+  - API GW with BinaryMediaTypes base64-encodes the body: 4 MB raw → ~5.33 MB
+    encoded. Lambda's synchronous invocation payload limit is 6 MB. Headroom: ~0.67 MB.
+  - Lambda memory (256 MB global) holds the decoded buffer comfortably.
+  - 4 MB is the correct canonical limit. Eye analysis currently allows 30 MB —
+    this is intentionally different because eye.ts uses the VM endpoint URL path
+    (imageUrl) as alternative to uploading, so large direct uploads should be
+    reconsidered. Flag for review.
+
+
+── TEMPLATE AUDIT ────────────────────────────────────────────────────────────
+
+1. RequestModel + ValidateBody on multipart routes — misleading no-op
+
+   API Gateway body validation only applies to JSON bodies. When Content-Type
+   matches a BinaryMediaType (multipart/form-data is declared), API GW
+   base64-encodes the body and SKIPS request model validation entirely.
+   So GenericJsonObjectRequest + ValidateBody: true on multipart routes is a
+   silent no-op — it does not validate, nor does it reject.
+
+   Validation responsibility falls 100% to Lambda (parseMultipartBody + Zod).
+
+   Current multipart routes that have RequestModel (no-op, but misleading):
+     - PetProfileCreatePOST          POST /pet/profile
+     - PetProfileByIdPATCH           PATCH /pet/profile/{petId}
+     - PetAnalysisEyePOST            POST /pet/analysis/eye/{identifier}
+     - PetAnalysisEyePATCH           PATCH /pet/analysis/eye/{identifier}
+     - PetAnalysisBreedPOST          POST /pet/analysis/breed
+     - PetAnalysisUploadImagePOST    POST /pet/analysis/uploads/image
+     - PetAnalysisUploadBreedImagePOST POST /pet/analysis/uploads/breed-image
+     - PetRecoveryLostCreatePOST     POST /pet/recovery/lost
+     - PetRecoveryFoundCreatePOST    POST /pet/recovery/found
+     - CommerceOrdersPOST            POST /commerce/orders
+
+   Fix: remove RequestModel block from all multipart-only routes.
+   This makes it explicit that body validation lives in Lambda.
+
+2. IAM roles — s3:PutObjectAcl permission
+
+   All four upload roles include s3:PutObjectAcl:
+     PetProfileFunctionRole, PetRecoveryFunctionRole,
+     PetAnalysisFunctionRole, CommerceOrdersFunctionRole.
+
+   This is required only when using ACL: 'public-read' in PutObjectCommand.
+   If bucket Object Ownership is ever moved to "Bucket owner enforced",
+   both the IAM permission and the ACL param in code become irrelevant
+   (and the permission would cause no harm but the ACL param would throw).
+   Keep as-is for now. Revisit under Hardening with bucket policy migration.
+
+3. IAM S3 resource paths — least privilege check
+
+   PetProfileFunctionRole   : user-uploads/pets/*          ✓ matches code paths
+   PetRecoveryFunctionRole  : user-uploads/pets/*          ✓ matches code paths
+   CommerceOrdersFunctionRole: user-uploads/orders/*, qr-codes/* ✓ tightest, correct
+   PetAnalysisFunctionRole  : user-uploads/*               ⚠ intentionally broad —
+     covers breed_analysis, pets, eye, profile sub-prefixes from handleUploadPetBreedImage.
+     Can be tightened to:
+       user-uploads/breed_analysis/*
+       user-uploads/pets/*
+       user-uploads/eye/*
+       user-uploads/profile/*
+     Flag for Optimization pass (low risk, no functional change).
+
+4. Lambda timeout for upload routes
+
+   Global timeout: 10 seconds (Globals.Function.Timeout).
+   Upload routes need: multipart parse + S3 PutObject + 2× DB writes.
+   With canonical 4 MB limit on a VPC Lambda, 10 s is tight on cold start.
+   Consider overriding Timeout: 15 on upload-specific functions:
+     PetProfileFunction, PetAnalysisFunction, PetRecoveryFunction,
+     CommerceOrdersFunction.
+   Track under Optimization. Do not increase above 29 s (API GW hard limit).
+
+5. BinaryMediaTypes declaration — correct, no change needed
+
+   RestApi.BinaryMediaTypes: ['multipart/form-data'] is correct.
+   This is a global API-level setting that applies to ALL routes.
+   No per-route BinaryMediaType configuration is possible in API GW REST APIs.
+   The single declaration is sufficient for all four upload lambdas.
+
+
+── IMPLEMENTATION ORDER ──────────────────────────────────────────────────────
+
+1. pet-profile      — drop JSON fallback in createProfile + patchProfile
+                      align utils/multipart.ts normalize helpers
+                      align utils/upload.ts to canonical uploadImageFile
+2. pet-analysis     — swap lambda-multipart-parser for parseMultipartBody
+                      in upload.ts (x2 handlers) and eye.ts
+                      align utils/upload.ts to canonical uploadImageFile
+3. pet-recovery     — normalize helpers already good (is the canonical source)
+                      align utils/upload.ts to canonical uploadImageFile (drop null return)
+4. commerce-orders  — rename addImageFileToStorage → uploadImageFile
+                      move ALLOWED_UPLOAD_MIME / MAX_UPLOAD_BYTES / detectMimeFromBuffer
+                      to top of upload.ts (separate from helpers.ts)

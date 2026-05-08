@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, parseMultipartBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseMultipartBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { loadAuthorizedPet } from '../utils/auth';
@@ -25,45 +25,20 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
     return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
-  const contentType = (
-    ctx.event.headers?.['content-type'] ||
-    ctx.event.headers?.['Content-Type'] ||
-    ''
-  ).toLowerCase();
-  const isMultipart = contentType.includes('multipart/form-data');
-  let files: Array<{ content?: Buffer; filename?: string }> = [];
-  let parsedData: (typeof patchPetBodySchema)['_output'];
-  if (isMultipart) {
-    const multiResult = await parseMultipartBody(ctx.event, patchPetBodySchema, {
-      validate: (rawFields) => {
-        const unknownField = Object.keys(rawFields).find((key) => !patchPetAllowedFields.has(key));
-        return unknownField ? 'common.invalidBodyParams' : null;
-      },
-      normalize: (rawFields) =>
-        Object.fromEntries(
-          Object.entries(normalizeMultipartBody(rawFields)).filter(([key]) => patchPetAllowedFields.has(key))
-        ),
-    });
-    if (!multiResult.ok) {
-      return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
-    }
-    files = multiResult.files;
-    parsedData = multiResult.data;
-  } else {
-    const rawFields = (ctx.body as Record<string, unknown>) || {};
-    const unknownField = Object.keys(rawFields).find((key) => !patchPetAllowedFields.has(key));
-    if (unknownField) {
-      return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
-    }
-    const filteredBody = Object.fromEntries(
-      Object.entries(rawFields).filter(([key]) => patchPetAllowedFields.has(key))
-    );
-    const parseResult = parseBody(filteredBody, patchPetBodySchema);
-    if (!parseResult.ok) {
-      return response.errorResponse(parseResult.statusCode, parseResult.errorKey, ctx.event);
-    }
-    parsedData = parseResult.data;
+  const multiResult = await parseMultipartBody(ctx.event, patchPetBodySchema, {
+    validate: (rawFields) => {
+      const unknownField = Object.keys(rawFields).find((key) => !patchPetAllowedFields.has(key));
+      return unknownField ? 'common.invalidBodyParams' : null;
+    },
+    normalize: (rawFields) =>
+      Object.fromEntries(
+        Object.entries(normalizeMultipartBody(rawFields)).filter(([key]) => patchPetAllowedFields.has(key))
+      ),
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
   }
+  const { files, data: parsedData } = multiResult;
 
   await connectToMongoDB();
 
@@ -96,12 +71,18 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
         continue;
       }
 
-      const url = await uploadImageFile({
-        buffer: file.content,
-        folder: `user-uploads/pets/${mutablePet._id}`,
-        originalname: file.filename,
-      });
-      mutablePet.breedimage.push(url);
+      try {
+        const url = await uploadImageFile(
+          { buffer: file.content, originalname: file.filename ?? '' },
+          `user-uploads/pets/${mutablePet._id}`
+        );
+        mutablePet.breedimage.push(url);
+      } catch (err: unknown) {
+        const code = (err as { code?: string }).code;
+        if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'petProfile.errors.invalidFileType', ctx.event);
+        if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'petProfile.errors.fileTooLarge', ctx.event);
+        throw err;
+      }
     }
   }
 

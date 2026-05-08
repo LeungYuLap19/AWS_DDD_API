@@ -749,10 +749,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/profile
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetProfileCreateOPTIONS:
           Type: Api
           Properties:
@@ -774,10 +770,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/profile/{petId}
             Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetProfileByIdDELETE:
           Type: Api
           Properties:
@@ -1275,10 +1267,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/eye/{identifier}
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetAnalysisEyePATCH:
           Type: Api
           Properties:
@@ -1305,20 +1293,12 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/uploads/image
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetAnalysisUploadBreedImagePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/uploads/breed-image
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetAnalysisEyeOPTIONS:
           Type: Api
           Properties:
@@ -1385,10 +1365,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/recovery/lost
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetRecoveryLostListOPTIONS:
           Type: Api
           Properties:
@@ -1425,10 +1401,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/recovery/found
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetRecoveryFoundListOPTIONS:
           Type: Api
           Properties:
@@ -1771,10 +1743,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/orders
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         CommerceOrdersOperationsGET:
           Type: Api
           Properties:

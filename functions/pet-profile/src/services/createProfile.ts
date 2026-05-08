@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, parseMultipartBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseMultipartBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { parseFlexibleDate } from '../utils/date';
@@ -21,30 +21,13 @@ import {
 export async function handleCreatePetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 
-  const contentType = (
-    ctx.event.headers?.['content-type'] ||
-    ctx.event.headers?.['Content-Type'] ||
-    ''
-  ).toLowerCase();
-  let files: Array<{ content?: Buffer; filename?: string }> = [];
-  let parsedData: (typeof createPetBodySchema)['_output'];
-  if (contentType.includes('multipart/form-data')) {
-    const multiResult = await parseMultipartBody(ctx.event, createPetBodySchema, {
-      normalize: normalizeMultipartBody,
-    });
-    if (!multiResult.ok) {
-      return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
-    }
-    files = multiResult.files;
-    parsedData = multiResult.data;
-  } else {
-    const rawFields = (ctx.body as Record<string, unknown>) || {};
-    const parseResult = parseBody(normalizeMultipartBody(rawFields), createPetBodySchema);
-    if (!parseResult.ok) {
-      return response.errorResponse(parseResult.statusCode, parseResult.errorKey, ctx.event);
-    }
-    parsedData = parseResult.data;
+  const multiResult = await parseMultipartBody(ctx.event, createPetBodySchema, {
+    normalize: normalizeMultipartBody,
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
   }
+  const { files, data: parsedData } = multiResult;
 
   await connectToMongoDB();
 
@@ -79,12 +62,18 @@ export async function handleCreatePetProfile(ctx: RouteContext): Promise<APIGate
         continue;
       }
 
-      const url = await uploadImageFile({
-        buffer: file.content,
-        folder: `user-uploads/pets/${new mongoose.Types.ObjectId()}`,
-        originalname: file.filename,
-      });
-      uploadedImageUrls.push(url);
+      try {
+        const url = await uploadImageFile(
+          { buffer: file.content, originalname: file.filename ?? '' },
+          `user-uploads/pets/${new mongoose.Types.ObjectId()}`
+        );
+        uploadedImageUrls.push(url);
+      } catch (err: unknown) {
+        const code = (err as { code?: string }).code;
+        if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'petProfile.errors.invalidFileType', ctx.event);
+        if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'petProfile.errors.fileTooLarge', ctx.event);
+        throw err;
+      }
     }
   }
 

@@ -2,32 +2,10 @@ import mongoose from 'mongoose';
 import axios from 'axios';
 import { logWarn } from '@aws-ddd-api/shared';
 import env from '../config/env';
-import { ALLOWED_UPLOAD_MIME, MAX_UPLOAD_BYTES, detectMimeFromBuffer } from './s3';
-
 // ── Email ─────────────────────────────────────────────────────────────────────
 
 export function normalizeEmail(email: unknown): string {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
-}
-
-// ── File validation ───────────────────────────────────────────────────────────
-
-export interface MultipartFile {
-  content: Buffer;
-  filename: string;
-  fieldname: string;
-  contentType: string;
-  encoding: string;
-}
-
-export function validateUploadFiles(files: MultipartFile[], maxCount = 1): string | null {
-  if (files.length > maxCount) return 'orders.errors.tooManyFiles';
-  for (const f of files) {
-    if (f.content.length > MAX_UPLOAD_BYTES) return 'orders.errors.fileTooLarge';
-    const detectedMime = detectMimeFromBuffer(f.content);
-    if (!detectedMime || !ALLOWED_UPLOAD_MIME.has(detectedMime)) return 'orders.errors.invalidFileType';
-  }
-  return null;
 }
 
 // ── Tag ID generation ─────────────────────────────────────────────────────────

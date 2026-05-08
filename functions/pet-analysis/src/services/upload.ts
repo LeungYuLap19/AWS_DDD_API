@@ -1,14 +1,13 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import multipart from 'lambda-multipart-parser';
-import { requireAuthContext, logWarn } from '@aws-ddd-api/shared';
+import { requireAuthContext, parseMultipartBody } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import { uploadImageFile } from '../utils/upload';
 import { toTrimmedString } from '../utils/validators';
+import { uploadImageSchema, uploadBreedImageSchema } from '../zodSchema/uploadSchema';
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png']);
 const ALLOWED_UPLOAD_PREFIXES = new Set(['breed_analysis', 'pets', 'eye', 'profile']);
 
 export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayProxyResult> {
@@ -26,14 +25,11 @@ export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayPr
     return rateLimitResponse;
   }
 
-  let formData: Awaited<ReturnType<typeof multipart.parse>>;
-  try {
-    formData = await multipart.parse(ctx.event);
-  } catch (error) {
-    logWarn('Multipart parse failed', { event: ctx.event, error, scope: 'pet-analysis.services.upload.handleUploadImage' });
-    return response.errorResponse(400, 'petAnalysis.errors.invalidMultipart', ctx.event);
+  const multiResult = await parseMultipartBody(ctx.event, uploadImageSchema, {});
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
   }
-  const files = formData.files || [];
+  const files = multiResult.files;
 
   if (files.length === 0) {
     return response.errorResponse(400, 'petAnalysis.errors.noFilesUploaded', ctx.event);
@@ -44,15 +40,22 @@ export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayPr
   }
 
   const firstFile = files[0];
-  if (!ALLOWED_IMAGE_TYPES.has(firstFile.contentType || '')) {
-    return response.errorResponse(400, 'petAnalysis.errors.invalidImageFormat', ctx.event);
+  if (!firstFile.content) {
+    return response.errorResponse(400, 'petAnalysis.errors.noFilesUploaded', ctx.event);
   }
 
-  const url = await uploadImageFile({
-    buffer: firstFile.content,
-    originalname: firstFile.filename,
-    folder: 'user-uploads/breed_analysis',
-  });
+  let url: string;
+  try {
+    url = await uploadImageFile(
+      { buffer: firstFile.content, originalname: firstFile.filename ?? '' },
+      'user-uploads/breed_analysis'
+    );
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'petAnalysis.errors.invalidImageFormat', ctx.event);
+    if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'petAnalysis.errors.fileTooLarge', ctx.event);
+    throw err;
+  }
 
   return response.successResponse(200, ctx.event, {
     message: 'success.created',
@@ -77,24 +80,17 @@ export async function handleUploadPetBreedImage(
     return rateLimitResponse;
   }
 
-  let formData: Awaited<ReturnType<typeof multipart.parse>>;
-  try {
-    formData = await multipart.parse(ctx.event);
-  } catch (error) {
-    logWarn('Multipart parse failed', { event: ctx.event, error, scope: 'pet-analysis.services.upload.handleUploadPetBreedImage' });
-    return response.errorResponse(400, 'petAnalysis.errors.invalidMultipart', ctx.event);
+  const multiResult = await parseMultipartBody(ctx.event, uploadBreedImageSchema, {});
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
   }
-  const firstFile = formData.files?.[0];
 
-  if (!firstFile) {
+  const firstFile = multiResult.files[0];
+  if (!firstFile?.content) {
     return response.errorResponse(400, 'petAnalysis.errors.noFilesUploaded', ctx.event);
   }
 
-  if (!ALLOWED_IMAGE_TYPES.has(firstFile.contentType || '')) {
-    return response.errorResponse(400, 'petAnalysis.errors.invalidImageFormat', ctx.event);
-  }
-
-  const rawPath = toTrimmedString(formData.url);
+  const rawPath = toTrimmedString(multiResult.data.url);
   if (!rawPath) {
     return response.errorResponse(400, 'petAnalysis.errors.invalidFolder', ctx.event);
   }
@@ -110,14 +106,22 @@ export async function handleUploadPetBreedImage(
     return response.errorResponse(400, 'petAnalysis.errors.invalidFolder', ctx.event);
   }
 
-  const url = await uploadImageFile({
-    buffer: firstFile.content,
-    originalname: firstFile.filename,
-    folder: `user-uploads/${segments.join('/')}`,
-  });
+  let url: string;
+  try {
+    url = await uploadImageFile(
+      { buffer: firstFile.content, originalname: firstFile.filename ?? '' },
+      `user-uploads/${segments.join('/')}`
+    );
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'petAnalysis.errors.invalidImageFormat', ctx.event);
+    if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'petAnalysis.errors.fileTooLarge', ctx.event);
+    throw err;
+  }
 
   return response.successResponse(200, ctx.event, {
     message: 'success.created',
     data: { url },
   });
 }
+

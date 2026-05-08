@@ -28,7 +28,9 @@
       "invalidParentDateFormat": "父母生日格式錯誤",
       "invalidMotherParity": "母犬產次格式錯誤",
       "invalidRemovedIndices": "移除圖片索引格式錯誤",
-      "fieldTooLong": "一個或多個欄位超出允許長度"
+      "fieldTooLong": "一個或多個欄位超出允許長度",
+      "invalidFileType": "不支援的檔案格式，僅允許 JPEG、PNG、GIF 及 WebP",
+      "fileTooLarge": "檔案超過允許的大小上限（4 MB）"
     }
   }
 }

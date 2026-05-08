@@ -1,7 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
-import { parseBody, requireAuthContext, logWarn } from '@aws-ddd-api/shared';
+import { parseBody, parseMultipartBody, requireAuthContext, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
@@ -12,15 +11,7 @@ import { sanitizeEyeLog, sanitizePet } from '../utils/sanitize';
 import { uploadImageFile } from '../utils/upload';
 import { isValidDateFormat, isValidImageUrl, toTrimmedString } from '../utils/validators';
 import { updatePetEyeSchema } from '../zodSchema/updatePetEyeSchema';
-
-const ALLOWED_IMAGE_TYPES = new Set([
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/gif',
-  'image/tiff',
-]);
-const MAX_FILE_SIZE_MB = 30;
+import { eyePostUploadSchema } from '../zodSchema/uploadSchema';
 
 async function postJson(url: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
   const analysisResponse = await fetch(url, {
@@ -134,48 +125,40 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
 
     await loadAuthorizedPet(ctx.event, petId, { allowNgo: true });
 
-    let formData: Awaited<ReturnType<typeof multipart.parse>>;
-    try {
-      formData = await multipart.parse(ctx.event);
-    } catch {
-      return response.errorResponse(400, 'petAnalysis.errors.invalidMultipart', ctx.event);
+    const eyeMultiResult = await parseMultipartBody(ctx.event, eyePostUploadSchema, {});
+    if (!eyeMultiResult.ok) {
+      return response.errorResponse(eyeMultiResult.statusCode, eyeMultiResult.errorKey, ctx.event);
     }
-    const imageUrl = toTrimmedString(formData.image_url);
-    const file = formData.files?.[0];
+    const imageUrl = toTrimmedString(eyeMultiResult.data.image_url);
+    const file = eyeMultiResult.files[0];
 
-    if (!imageUrl && !file) {
+    if (!imageUrl && !file?.content) {
       activityLog.error = 'MISSING_ARGUMENTS';
       await activityLog.save();
       return response.errorResponse(400, 'petAnalysis.errors.missingArguments', ctx.event);
     }
 
     let downloadURL = imageUrl;
-    if (file) {
-      const fileSizeInMb = file.content.length / (1024 * 1024);
-
-      if (!ALLOWED_IMAGE_TYPES.has(file.contentType || '')) {
-        activityLog.error = 'IMAGE_ERROR_UNSUPPORTED_FORMAT';
-        await activityLog.save();
-        return response.errorResponse(400, 'petAnalysis.errors.unsupportedFormat', ctx.event);
+    if (file?.content) {
+      try {
+        downloadURL = await uploadImageFile(
+          { buffer: file.content, originalname: file.filename ?? '' },
+          `user-uploads/eye/${petId}`
+        );
+      } catch (uploadErr: unknown) {
+        const code = (uploadErr as { code?: string }).code;
+        if (code === 'INVALID_FILE_TYPE') {
+          activityLog.error = 'IMAGE_ERROR_UNSUPPORTED_FORMAT';
+          await activityLog.save();
+          return response.errorResponse(400, 'petAnalysis.errors.unsupportedFormat', ctx.event);
+        }
+        if (code === 'FILE_TOO_LARGE') {
+          activityLog.error = 'IMAGE_FILE_TOO_LARGE';
+          await activityLog.save();
+          return response.errorResponse(413, 'petAnalysis.errors.fileTooLarge', ctx.event);
+        }
+        throw uploadErr;
       }
-
-      if (fileSizeInMb > MAX_FILE_SIZE_MB) {
-        activityLog.error = 'IMAGE_FILE_TOO_LARGE';
-        await activityLog.save();
-        return response.errorResponse(413, 'petAnalysis.errors.fileTooLarge', ctx.event);
-      }
-
-      if (fileSizeInMb === 0) {
-        activityLog.error = 'IMAGE_FILE_TOO_SMALL';
-        await activityLog.save();
-        return response.errorResponse(413, 'petAnalysis.errors.fileTooSmall', ctx.event);
-      }
-
-      downloadURL = await uploadImageFile({
-        buffer: file.content,
-        originalname: file.filename,
-        folder: `user-uploads/eye/${petId}`,
-      });
     }
 
     const endpointURL = `${env.VM_PUBLIC_IP}${env.DOCKER_IMAGE}`;

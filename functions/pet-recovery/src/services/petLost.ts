@@ -83,23 +83,24 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
 
   const PetLost = mongoose.model('PetLost');
   const recordId = new mongoose.Types.ObjectId();
+  const serialNumber = await getNextSerialNumber();
 
   const uploadedUrls: string[] = [];
-  const [serialNumber] = await Promise.all([
-    getNextSerialNumber(),
-    (async () => {
-      if (!Array.isArray(files) || files.length === 0) return;
-      for (const file of files) {
-        if (!file?.content) continue;
-        const url = await uploadImageFile({
-          buffer: file.content,
-          folder: `user-uploads/pets/${recordId}`,
-          originalname: file.filename,
-        });
-        if (url) uploadedUrls.push(url);
-      }
-    })(),
-  ]);
+  for (const file of files ?? []) {
+    if (!file?.content) continue;
+    try {
+      const url = await uploadImageFile(
+        { buffer: file.content, originalname: file.filename ?? '' },
+        `user-uploads/pets/${recordId}`
+      );
+      uploadedUrls.push(url);
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'petRecovery.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'petRecovery.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
+  }
 
   const record = await PetLost.create({
     _id: recordId,

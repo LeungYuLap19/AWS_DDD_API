@@ -11,14 +11,13 @@ import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
 import { purchaseConfirmationSchema } from '../zodSchema/orderSchema';
 import { sanitizeOrder, sanitizeOrderVerification } from '../utils/sanitize';
-import { addImageFileToStorage, uploadQrCodeImage } from '../utils/s3';
+import { uploadImageFile } from '../utils/upload';
+import { uploadQrCodeImage } from '../utils/s3';
 import {
   normalizeEmail,
-  validateUploadFiles,
   generateUniqueTagId,
   resolveCanonicalPrice,
   resolveShortUrl,
-  type MultipartFile,
 } from '../utils/helpers';
 import { sendOrderEmail } from '../utils/smtp';
 import { sendWhatsAppOrderMessage } from '../utils/whatsapp';
@@ -106,42 +105,48 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
 
   const email = normalizeEmail(rawEmail);
 
-  // 5. Validate and upload image files
-  const allFiles = multiResult.files as MultipartFile[];
+  // 5. Upload image files
+  const allFiles = multiResult.files;
   const petImgFiles = allFiles.filter((f) => f.fieldname === 'pet_img');
   const discountProofFiles = allFiles.filter((f) => f.fieldname === 'discount_proof');
 
-  const fileError = validateUploadFiles(petImgFiles) || validateUploadFiles(discountProofFiles);
-  if (fileError) {
-    return response.errorResponse(400, fileError, ctx.event);
+  if (petImgFiles.length > 1) {
+    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
+  }
+  if (discountProofFiles.length > 1) {
+    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
   }
 
   let petImgUrl = '';
-  if (petImgFiles.length > 0) {
-    const urls = await Promise.all(
-      petImgFiles.map((f) =>
-        addImageFileToStorage(
-          { buffer: f.content, originalname: f.filename },
-          `user-uploads/orders/${tempId}`,
-          'user'
-        )
-      )
-    );
-    petImgUrl = urls[0] ?? '';
+  if (petImgFiles.length > 0 && petImgFiles[0].content) {
+    try {
+      petImgUrl = await uploadImageFile(
+        { buffer: petImgFiles[0].content, originalname: petImgFiles[0].filename ?? '' },
+        `user-uploads/orders/${tempId}`,
+        'user'
+      );
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'orders.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'orders.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
   }
 
   let discountProofUrl = '';
-  if (discountProofFiles.length > 0) {
-    const urls = await Promise.all(
-      discountProofFiles.map((f) =>
-        addImageFileToStorage(
-          { buffer: f.content, originalname: f.filename },
-          `user-uploads/orders/${tempId}/discount-proofs`,
-          'user'
-        )
-      )
-    );
-    discountProofUrl = urls[0] ?? '';
+  if (discountProofFiles.length > 0 && discountProofFiles[0].content) {
+    try {
+      discountProofUrl = await uploadImageFile(
+        { buffer: discountProofFiles[0].content, originalname: discountProofFiles[0].filename ?? '' },
+        `user-uploads/orders/${tempId}/discount-proofs`,
+        'user'
+      );
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'orders.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'orders.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
   }
 
   // 6. Resolve server-authoritative price

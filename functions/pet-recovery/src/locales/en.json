@@ -1,6 +1,8 @@
 {
   "petRecovery": {
     "errors": {
+      "invalidFileType": "Unsupported file type. Only JPEG, PNG, GIF, and WebP are allowed",
+      "fileTooLarge": "File exceeds the maximum allowed size (4 MB)",
       "petLost": {
         "nameRequired": "Pet name is required",
         "sexRequired": "Pet sex is required",

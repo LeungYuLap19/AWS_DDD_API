@@ -28,7 +28,9 @@
       "invalidParentDateFormat": "Invalid parent date format",
       "invalidMotherParity": "Invalid mother parity value",
       "invalidRemovedIndices": "Invalid removed image indices",
-      "fieldTooLong": "One or more fields exceed the maximum allowed length"
+      "fieldTooLong": "One or more fields exceed the maximum allowed length",
+      "invalidFileType": "Unsupported file type. Only JPEG, PNG, GIF, and WebP are allowed",
+      "fileTooLarge": "File exceeds the maximum allowed size (4 MB)"
     }
   }
 }
