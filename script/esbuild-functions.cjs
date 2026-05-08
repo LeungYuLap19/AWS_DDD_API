@@ -7,7 +7,7 @@
  * external so the runtime layer copy is used instead.
  *
  * Layer-provided packages (must stay external):
- *   @aws-ddd-api/shared, zod, jsonwebtoken, lambda-multipart-parser
+ *   @aws-ddd-api/shared, zod, jsonwebtoken, busboy
  *
  * Run: node script/esbuild-functions.cjs
  */
@@ -25,7 +25,7 @@ const external = [
   '@aws-ddd-api/shared',
   'zod',
   'jsonwebtoken',
-  'lambda-multipart-parser',
+  'busboy',
 ];
 
 // All functions with an index.ts entry point.

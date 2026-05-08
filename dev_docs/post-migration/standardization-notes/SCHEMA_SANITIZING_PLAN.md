@@ -63,7 +63,7 @@ Legend: ✓ ok · ⚠️ partial · ❌ missing · n/a not applicable
 
 ## 3. Phased Plan
 
-### P0 — Security-critical (do first)
+### P0 — Security-critical ✅ COMPLETED
 
 - **Shared path-param validators** in `bootstrap/` (or layers/shared):
   - `objectIdString` (mongoose `ObjectId.isValid`)
@@ -72,7 +72,7 @@ Legend: ✓ ok · ⚠️ partial · ❌ missing · n/a not applicable
 - **Apply to all path params** used in DB queries (audit list above + `pet-medical`, `pet-profile`, `pet-transfer`, `pet-source`, `pet-recovery` lost/found IDs, `notifications`, `pet-adoption`, `commerce-fulfillment`, `commerce-orders/tempId`).
 - **HTML sanitization**: add `sanitize-html` (or a small allow-list escaper); apply to free-text fields *post-parse* via a `sanitizeText`/`sanitizeRichText` helper. Targets: pet-profile (`features`,`info`,`name`,`owner`,`location`), pet-recovery (`description`,`remarks`), ngo (`description`), pet-transfer (`transferRemark`,`regPlace`), commerce-fulfillment (`contact`,`shortUrl`,`petName`), pet-medical free-text fields.
 
-### P1 — Schema tightening
+### P1 — Schema tightening ✅ COMPLETED
 
 - Add `.max()` to all string fields per buckets: names 255, short codes 64, addresses 500, descriptions/remarks 2000.
 - Replace `.passthrough()` + manual rejection with `.strict()`:
@@ -84,7 +84,7 @@ Legend: ✓ ok · ⚠️ partial · ❌ missing · n/a not applicable
 - Array bounds: `pet-profile.breedimage` `.max(10)`; `logistics.netCodeList` `.max(100)`.
 - Switch basic email regex → `z.string().email()`; canonicalize phone to E.164 in `normalizePhone`.
 
-### P2 — Infrastructure / observability
+### P2 — Infrastructure / observability ✅ COMPLETED
 
 - Consolidate validators into a `bootstrap/validators/` shared module (objectId, tempId, email, phone, url, dates, pagination).
 - Centralized `sanitize` module (`bootstrap/sanitizers/`) with `sanitizeHtml`, `sanitizeText`, `stripControlChars`.
