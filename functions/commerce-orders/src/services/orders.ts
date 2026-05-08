@@ -42,8 +42,8 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
   const Order = mongoose.model('Order');
 
   const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '', 10) || 1);
-  const limit = Math.min(500, Math.max(1, parseInt(queryParams['limit'] ?? '', 10) || 100));
+  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
   const skip = (page - 1) * limit;
 
   const projection = {
@@ -308,8 +308,8 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
   const OrderVerification = mongoose.model('OrderVerification');
 
   const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '', 10) || 1);
-  const limit = Math.min(500, Math.max(1, parseInt(queryParams['limit'] ?? '', 10) || 100));
+  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
   const skip = (page - 1) * limit;
 
   const filter = { cancelled: { $exists: true } };

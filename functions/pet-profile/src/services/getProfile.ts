@@ -59,10 +59,12 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
   await connectToMongoDB();
 
   const Pet = mongoose.model('Pet');
-  const pageNumber = Math.max(1, parseInt(ctx.event.queryStringParameters?.page || '1', 10));
+  const queryParams = ctx.event.queryStringParameters || {};
+  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
+  const skip = (page - 1) * limit;
 
   if (authContext.ngoId) {
-    const queryParams = ctx.event.queryStringParameters || {};
     const search = typeof queryParams.search === 'string' ? queryParams.search.trim() : '';
     const sortByAllowlist = new Set([
       'updatedAt',
@@ -96,8 +98,8 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
     const [pets, totalNumber] = await Promise.all([
       Pet.find(query)
         .sort({ [sortBy]: sortOrder, _id: -1 })
-        .skip((pageNumber - 1) * 30)
-        .limit(30)
+        .skip(skip)
+        .limit(limit)
         .lean(),
       Pet.countDocuments(query),
     ]);
@@ -105,7 +107,7 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
     return response.successResponse(200, ctx.event, {
       message: 'success.retrieved',
       data: sanitizePetListSummary(pets),
-      pagination: { page: pageNumber, limit: 30, total: totalNumber, totalPages: Math.ceil(totalNumber / 30) },
+      pagination: { page, limit, total: totalNumber, totalPages: Math.ceil(totalNumber / limit) },
     });
   }
 
@@ -113,8 +115,8 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
   const [pets, totalNumber] = await Promise.all([
     Pet.find(query)
       .sort({ updatedAt: -1 })
-      .skip((pageNumber - 1) * 10)
-      .limit(10)
+      .skip(skip)
+      .limit(limit)
       .lean(),
     Pet.countDocuments(query),
   ]);
@@ -122,6 +124,6 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: sanitizePetListSummary(pets),
-    pagination: { page: pageNumber, limit: 10, total: totalNumber, totalPages: Math.ceil(totalNumber / 10) },
+    pagination: { page, limit, total: totalNumber, totalPages: Math.ceil(totalNumber / limit) },
   });
 }

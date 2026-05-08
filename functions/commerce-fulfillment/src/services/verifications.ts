@@ -38,7 +38,7 @@ export async function handleGetVerificationList(ctx: RouteContext): Promise<APIG
 
   const queryParams = ctx.event.queryStringParameters || {};
   const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
-  const limit = Math.min(500, Math.max(1, parseInt(queryParams['limit'] ?? '100', 10) || 100));
+  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
   const skip = (page - 1) * limit;
 
   await connectToMongoDB();

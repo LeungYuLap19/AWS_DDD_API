@@ -99,20 +99,23 @@ export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayPro
   await connectToMongoDB();
   const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
 
-  const searchRaw = (ctx.event.queryStringParameters?.search || '').trim();
+  const queryParams = ctx.event.queryStringParameters || {};
+  const searchRaw = (queryParams['search'] || '').trim();
   const search = escapeRegex(searchRaw);
-  const page = Math.max(parseInt(ctx.event.queryStringParameters?.page || '1', 10), 1);
+  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
 
   const { members, totalDocs, totalPages } = await buildNgoMemberList({
     ngoId: authContext.ngoId as string,
     search,
     page,
+    limit,
   });
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: members,
-    pagination: { page, limit: 50, total: totalDocs, totalPages },
+    pagination: { page, limit, total: totalDocs, totalPages },
   });
 }
 

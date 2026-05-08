@@ -28,9 +28,9 @@ export async function handleListNotifications(ctx: RouteContext): Promise<APIGat
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
 
-  const params = ctx.event.queryStringParameters ?? {};
-  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(params.limit ?? '20', 10) || 20));
+  const queryParams = ctx.event.queryStringParameters || {};
+  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
   const skip = (page - 1) * limit;
 
   const Notifications = mongoose.model('Notifications');

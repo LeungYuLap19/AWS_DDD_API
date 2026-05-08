@@ -9,9 +9,9 @@ import { response } from '../utils/response';
 export async function handleGetCatalog(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
-  const params = ctx.event.queryStringParameters ?? {};
-  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
-  const limit = Math.min(500, Math.max(1, parseInt(params.limit ?? '100', 10) || 100));
+  const queryParams = ctx.event.queryStringParameters || {};
+  const page = Math.max(1, parseInt(queryParams['page'] ?? '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(queryParams['limit'] ?? '30', 10) || 30));
   const skip = (page - 1) * limit;
 
   const ProductList = mongoose.model('ProductList');

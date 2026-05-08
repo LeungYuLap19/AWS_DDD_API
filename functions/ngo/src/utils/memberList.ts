@@ -17,13 +17,14 @@ export async function buildNgoMemberList({
   ngoId,
   search,
   page,
+  limit,
 }: {
   ngoId: string;
   search: string;
   page: number;
+  limit: number;
 }) {
   const NgoUserAccess = mongoose.model('NgoUserAccess');
-  const limit = 50;
   const skip = (page - 1) * limit;
 
   const pipeline: Record<string, unknown>[] = [
