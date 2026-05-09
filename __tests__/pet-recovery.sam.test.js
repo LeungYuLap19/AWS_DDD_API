@@ -103,6 +103,11 @@ function publicHeaders(extra = {}) {
   };
 }
 
+function responseData(body) {
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
 function expectedUnauthenticatedStatuses() {
   return AUTH_BYPASS === 'true' ? [401, 403, 404] : [401, 403];
 }
@@ -431,8 +436,9 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body?.pets)).toBe(true);
-      expect(typeof res.body?.count).toBe('number');
+      const data = responseData(res.body);
+      expect(Array.isArray(data)).toBe(true);
+      expect(typeof res.body?.pagination?.total).toBe('number');
     });
 
     test('repeated GET requests return stable count', async () => {
@@ -444,7 +450,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body.count).toBe(second.body.count);
+      expect(first.body.pagination.total).toBe(second.body.pagination.total);
     });
   });
 
@@ -468,10 +474,11 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       const res = await reqMultipart('POST', '/pet/recovery/lost', formData, state.primaryToken);
 
       expect(res.status).toBe(201);
-      expect(res.body?.id).toBeDefined();
+      const createData = responseData(res.body);
+      expect(createData?.id).toBeDefined();
 
       const persisted = await petLostCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.id),
+        _id: new mongoose.Types.ObjectId(createData.id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.name).toBe(`Buddy-${RUN_ID}`);
@@ -498,16 +505,17 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       const res = await reqMultipart('POST', '/pet/recovery/lost', formData, state.primaryToken);
 
       expect(res.status).toBe(201);
-      expect(res.body?.id).toBeDefined();
+      const createData = responseData(res.body);
+      expect(createData?.id).toBeDefined();
 
       const persisted = await petLostCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.id),
+        _id: new mongoose.Types.ObjectId(createData.id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.petId).toBe(state.primaryPetId.toString());
 
       // Cleanup the lost record
-      await petLostCol().deleteOne({ _id: new mongoose.Types.ObjectId(res.body.id) });
+      await petLostCol().deleteOne({ _id: new mongoose.Types.ObjectId(createData.id) });
     });
 
     test('returns 400 when required field "name" is missing', async () => {
@@ -631,7 +639,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
         state.primaryToken
       );
       expect(createRes.status).toBe(201);
-      const petLostID = createRes.body.id;
+      const petLostID = responseData(createRes.body).id;
 
       const deleteRes = await req(
         'DELETE',
@@ -659,7 +667,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
         state.primaryToken
       );
       expect(createRes.status).toBe(201);
-      const petLostID = createRes.body.id;
+      const petLostID = responseData(createRes.body).id;
 
       await req(
         'DELETE',
@@ -676,7 +684,8 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       );
 
       expect(listRes.status).toBe(200);
-      const ids = listRes.body.pets.map((p) => String(p._id));
+      const listData = responseData(listRes.body);
+      const ids = listData.map((p) => String(p._id));
       expect(ids).not.toContain(petLostID);
     });
 
@@ -708,7 +717,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petRecovery.errors.petLost.invalidId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 403 when caller deletes another user\'s report — record survives in DB', async () => {
@@ -763,8 +772,9 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body?.pets)).toBe(true);
-      expect(typeof res.body?.count).toBe('number');
+      const data = responseData(res.body);
+      expect(Array.isArray(data)).toBe(true);
+      expect(typeof res.body?.pagination?.total).toBe('number');
     });
 
     test('repeated GET requests return stable count', async () => {
@@ -776,7 +786,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body.count).toBe(second.body.count);
+      expect(first.body.pagination.total).toBe(second.body.pagination.total);
     });
   });
 
@@ -799,10 +809,11 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       const res = await reqMultipart('POST', '/pet/recovery/found', formData, state.primaryToken);
 
       expect(res.status).toBe(201);
-      expect(res.body?.id).toBeDefined();
+      const createData = responseData(res.body);
+      expect(createData?.id).toBeDefined();
 
       const persisted = await petFoundCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.id),
+        _id: new mongoose.Types.ObjectId(createData.id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.animal).toBe('Cat');
@@ -877,7 +888,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
         state.primaryToken
       );
       expect(createRes.status).toBe(201);
-      const petFoundID = createRes.body.id;
+      const petFoundID = responseData(createRes.body).id;
 
       const deleteRes = await req(
         'DELETE',
@@ -905,7 +916,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
         state.primaryToken
       );
       expect(createRes.status).toBe(201);
-      const petFoundID = createRes.body.id;
+      const petFoundID = responseData(createRes.body).id;
 
       await req(
         'DELETE',
@@ -922,7 +933,8 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       );
 
       expect(listRes.status).toBe(200);
-      const ids = listRes.body.pets.map((p) => String(p._id));
+      const listData = responseData(listRes.body);
+      const ids = listData.map((p) => String(p._id));
       expect(ids).not.toContain(petFoundID);
     });
 
@@ -954,7 +966,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petRecovery.errors.petFound.invalidId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 403 when caller deletes another user\'s report — record survives in DB', async () => {
@@ -1014,7 +1026,7 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
         state.secondaryToken
       );
       expect(createRes.status).toBe(201);
-      const petLostID = createRes.body.id;
+      const petLostID = responseData(createRes.body).id;
 
       // First delete succeeds
       const del1 = await req(
@@ -1057,13 +1069,14 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
 
       // Either safely creates with the string value or rejects the input — both acceptable.
       if (res.status === 201) {
+        const createData = responseData(res.body);
         const persisted = await petFoundCol().findOne({
-          _id: new mongoose.Types.ObjectId(res.body.id),
+          _id: new mongoose.Types.ObjectId(createData.id),
         });
         expect(typeof persisted.foundLocation).toBe('string');
         expect(persisted.foundLocation).toBe('$set injection');
 
-        await petFoundCol().deleteOne({ _id: new mongoose.Types.ObjectId(res.body.id) });
+        await petFoundCol().deleteOne({ _id: new mongoose.Types.ObjectId(createData.id) });
       } else {
         expect([400, 422]).toContain(res.status);
       }
@@ -1085,11 +1098,13 @@ describe('Tier 3+4 - /pet/recovery via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(201);
       expect(second.status).toBe(201);
-      expect(String(first.body.id)).not.toBe(String(second.body.id));
+      const firstData = responseData(first.body);
+      const secondData = responseData(second.body);
+      expect(String(firstData.id)).not.toBe(String(secondData.id));
 
       // Cleanup
-      await petLostCol().deleteOne({ _id: new mongoose.Types.ObjectId(first.body.id) });
-      await petLostCol().deleteOne({ _id: new mongoose.Types.ObjectId(second.body.id) });
+      await petLostCol().deleteOne({ _id: new mongoose.Types.ObjectId(firstData.id) });
+      await petLostCol().deleteOne({ _id: new mongoose.Types.ObjectId(secondData.id) });
     });
   });
 });

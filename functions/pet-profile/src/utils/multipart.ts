@@ -1,35 +1,35 @@
-export type ParsedMultipartForm = Record<string, unknown> & {
-  files?: Array<{ content?: Buffer; filename?: string }>;
-};
-
-export function normalizeMultipartBoolean(value: unknown): boolean | undefined {
-  if (value === undefined) {
+function normalizeBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null || value === '') {
     return undefined;
   }
-
+  if (typeof value === 'boolean') {
+    return value;
+  }
   return String(value).toLowerCase() === 'true';
 }
 
-export function normalizeMultipartNumber(value: unknown): number | undefined {
-  if (value === undefined || value === '') {
+function normalizeNumber(value: unknown): number | string | undefined {
+  if (value === undefined || value === null || value === '') {
     return undefined;
   }
 
-  return Number(value);
+  const n = Number(value);
+  return Number.isFinite(n) ? n : String(value);
 }
 
-export function normalizeMultipartBody(rawFields: Record<string, unknown>): Record<string, unknown> {
+export function normalizeMultipartBody(
+  rawFields: Record<string, unknown>
+): Record<string, unknown> {
   return {
     ...rawFields,
-    weight: normalizeMultipartNumber(rawFields.weight),
-    sterilization: normalizeMultipartBoolean(rawFields.sterilization),
-    ownerContact1: normalizeMultipartNumber(rawFields.ownerContact1),
-    ownerContact2: normalizeMultipartNumber(rawFields.ownerContact2),
-    contact1Show: normalizeMultipartBoolean(rawFields.contact1Show),
-    contact2Show: normalizeMultipartBoolean(rawFields.contact2Show),
-    breedimage:
-      typeof rawFields.breedimage === 'string' && rawFields.breedimage.trim()
-        ? [rawFields.breedimage]
-        : undefined,
+    weight: normalizeNumber(rawFields.weight),
+    sterilization: normalizeBoolean(rawFields.sterilization),
+    ownerContact1: normalizeNumber(rawFields.ownerContact1),
+    ownerContact2: normalizeNumber(rawFields.ownerContact2),
+    contact1Show: normalizeBoolean(rawFields.contact1Show),
+    contact2Show: normalizeBoolean(rawFields.contact2Show),
+    ...(typeof rawFields.breedimage === 'string' && rawFields.breedimage.trim()
+      ? { breedimage: [rawFields.breedimage] }
+      : {}),
   };
 }

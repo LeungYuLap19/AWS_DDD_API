@@ -1,10 +1,7 @@
-import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import type { requireAuthContext } from '@aws-ddd-api/shared';
-import type { RouteContext } from '../../../../types/lambda';
-import { HttpError } from '../utils/httpError';
-import { response } from '../utils/response';
+import { requireAuthContext, HttpError } from '@aws-ddd-api/shared';
 
+/** Minimal user record shape used by pet-profile ownership and existence checks. */
 export type UserDocument = {
   _id: { toString(): string } | string;
   deleted?: boolean;
@@ -25,20 +22,7 @@ export const PUBLIC_TAG_PROJECTION = {
   receivedDate: 1,
 };
 
-export function handleKnownError(error: unknown, event: RouteContext['event']): APIGatewayProxyResult | null {
-  if (error instanceof HttpError) {
-    return response.errorResponse(error.statusCode, error.errorKey, event);
-  }
-
-  const key = error instanceof Error ? error.message : '';
-  if (key.includes('.')) {
-    const statusCode = (error as { statusCode?: number }).statusCode || 400;
-    return response.errorResponse(statusCode, key, event);
-  }
-
-  return null;
-}
-
+/** Returns the active user document for pet-profile ownership flows. */
 export async function resolveActiveUser(userId: string): Promise<UserDocument | null> {
   const User = mongoose.model('User');
   return (await User.findOne({
@@ -47,6 +31,10 @@ export async function resolveActiveUser(userId: string): Promise<UserDocument | 
   }).lean()) as UserDocument | null;
 }
 
+/**
+ * Creates the default NGO-transfer stub stored on newly created pet documents
+ * so later NGO reassignment flows have a predictable first element.
+ */
 export function buildTransferNgoSeed() {
   return [
     {
@@ -62,7 +50,10 @@ export function buildTransferNgoSeed() {
   ];
 }
 
-// Pass excludePetId to skip the pet being updated (patch flow).
+/**
+ * Enforces uniqueness of `tagId` across non-deleted pets. Pass
+ * `excludePetId` during patch flows to skip the current pet.
+ */
 export async function ensureUniqueTag(tagId: string | undefined, excludePetId?: string): Promise<void> {
   if (!tagId) {
     return;
@@ -76,11 +67,14 @@ export async function ensureUniqueTag(tagId: string | undefined, excludePetId?: 
 
   const existingTag = await Pet.findOne(query).select('_id').lean();
   if (existingTag) {
-    throw new HttpError(409, 'petProfile.errors.duplicatePetTag');
+    throw new HttpError('petProfile.errors.duplicatePetTag', 409);
   }
 }
 
-// Pass excludePetId to skip the pet being updated (patch flow).
+/**
+ * Enforces uniqueness of `ngoPetId` across non-deleted pets. Pass
+ * `excludePetId` during patch flows to skip the current pet.
+ */
 export async function ensureUniqueNgoPetId(ngoPetId: string, excludePetId?: string): Promise<void> {
   if (!ngoPetId) {
     return;
@@ -94,10 +88,14 @@ export async function ensureUniqueNgoPetId(ngoPetId: string, excludePetId?: stri
 
   const existingPet = await Pet.findOne(query).lean();
   if (existingPet) {
-    throw new HttpError(409, 'petProfile.errors.duplicateNgoPetId');
+    throw new HttpError('petProfile.errors.duplicateNgoPetId', 409);
   }
 }
 
+/**
+ * Generates the next NGO-local pet id from `NgoCounters` after proving that
+ * the caller is acting for the same NGO carried in the auth context.
+ */
 export async function maybeGenerateNgoPetId(params: {
   authContext: ReturnType<typeof requireAuthContext>;
   ngoId?: string;
@@ -107,15 +105,15 @@ export async function maybeGenerateNgoPetId(params: {
   }
 
   if (params.authContext.userRole !== 'ngo') {
-    throw new HttpError(403, 'petProfile.errors.ngoRoleRequired');
+    throw new HttpError('petProfile.errors.ngoRoleRequired', 403);
   }
 
   if (!params.authContext.ngoId) {
-    throw new HttpError(403, 'petProfile.errors.ngoIdClaimRequired');
+    throw new HttpError('petProfile.errors.ngoIdClaimRequired', 403);
   }
 
   if (String(params.authContext.ngoId) !== String(params.ngoId)) {
-    throw new HttpError(403, 'common.forbidden');
+    throw new HttpError('common.forbidden', 403);
   }
 
   const NgoCounters = mongoose.model('NgoCounters');

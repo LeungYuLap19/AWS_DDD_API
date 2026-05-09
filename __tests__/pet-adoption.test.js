@@ -146,6 +146,11 @@ function loadHandlerWithMocks({
   deleteResult = { deletedCount: 1 },
   connectError = null,
   createError = null,
+  rateLimitEntry = {
+    count: 1,
+    expireAt: new Date(Date.now() + 60_000),
+    windowStart: new Date(),
+  },
 } = {}) {
   jest.resetModules();
   jest.clearAllMocks();
@@ -179,6 +184,13 @@ function loadHandlerWithMocks({
     deleteOne: jest.fn().mockResolvedValue(deleteResult),
   };
 
+  const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
+    findOneAndUpdate: jest.fn().mockResolvedValue(rateLimitEntry),
+  };
+
   function makeConnection(modelFactory) {
     const conn = {
       readyState: 1,
@@ -210,6 +222,10 @@ function loadHandlerWithMocks({
       uri.includes('adoption') ? browseConn : mainConn
     ),
     models: {},
+    model: jest.fn((name) => {
+      if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
+      throw new Error(`Unexpected top-level model: ${name}`);
+    }),
   };
 
   jest.doMock('mongoose', () => ({ __esModule: true, default: mongooseMock }));
@@ -400,7 +416,7 @@ describe('pet-adoption — GET /pet/adoption/{id} (with auth → managed record 
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.form).toBeNull();
+    expect(parsed.body.data).toBeNull();
   });
 
   test('returns 200 with form when record exists', async () => {
@@ -425,7 +441,7 @@ describe('pet-adoption — GET /pet/adoption/{id} (with auth → managed record 
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.form).not.toBeNull();
+    expect(parsed.body.data).not.toBeNull();
   });
 });
 
@@ -540,6 +556,33 @@ describe('pet-adoption — POST /pet/adoption/{id} (managed create)', () => {
     expect(parseResponse(result).statusCode).toBe(409);
   });
 
+  test('returns 400 when postAdoptionName exceeds the max length', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const { handler, authorizer, petAdoptionModel } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: makePetDoc(new mongoose.Types.ObjectId(userId)),
+      adoptionDoc: null,
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: `/pet/adoption/${petId}`,
+        resource: '/pet/adoption/{id}',
+        pathParameters: { id: petId },
+        body: JSON.stringify({ postAdoptionName: 'A'.repeat(101) }),
+        authorizer,
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+    expect(petAdoptionModel.create).not.toHaveBeenCalled();
+  });
+
   test('returns 201 on successful create', async () => {
     const userId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
@@ -610,8 +653,12 @@ describe('pet-adoption — PATCH /pet/adoption/{id} (managed update)', () => {
   });
 
   test('returns 400 on empty update body', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
-    const { handler } = loadHandlerWithMocks();
+    const { handler, authorizer } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: makePetDoc(new mongoose.Types.ObjectId(userId)),
+    });
 
     const result = await handler(
       createEvent({
@@ -620,11 +667,38 @@ describe('pet-adoption — PATCH /pet/adoption/{id} (managed update)', () => {
         resource: '/pet/adoption/{id}',
         pathParameters: { id: petId },
         body: JSON.stringify({}),
+        authorizer,
       }),
       createContext()
     );
 
     expect(parseResponse(result).statusCode).toBe(400);
+  });
+
+  test('returns 400 when postAdoptionName is a NoSQL-style operator object', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const { handler, authorizer, petAdoptionModel } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: makePetDoc(new mongoose.Types.ObjectId(userId)),
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'PATCH',
+        path: `/pet/adoption/${petId}`,
+        resource: '/pet/adoption/{id}',
+        pathParameters: { id: petId },
+        body: JSON.stringify({ postAdoptionName: { $gt: '' } }),
+        authorizer,
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+    expect(petAdoptionModel.updateOne).not.toHaveBeenCalled();
   });
 
   test('returns 404 when no record exists for petId', async () => {

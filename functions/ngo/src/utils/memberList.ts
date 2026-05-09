@@ -13,17 +13,22 @@ type MemberListItem = {
   ngoCounter?: { ngoPrefix?: string; seq?: number };
 };
 
+/**
+ * Builds the paginated NGO member list aggregation, including optional text
+ * search and a late lookup of NGO counter metadata used by the response view.
+ */
 export async function buildNgoMemberList({
   ngoId,
   search,
   page,
+  limit,
 }: {
   ngoId: string;
   search: string;
   page: number;
+  limit: number;
 }) {
   const NgoUserAccess = mongoose.model('NgoUserAccess');
-  const limit = 50;
   const skip = (page - 1) * limit;
 
   const pipeline: Record<string, unknown>[] = [

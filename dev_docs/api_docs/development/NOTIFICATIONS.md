@@ -2,9 +2,9 @@
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-Per-user notification inbox and admin dispatch. Users read and archive their own notifications. Admin dispatches notifications to any target user.
+**Lambda:** `aws-ddd-api-{stage}-notifications`
 
-> Conventions: see shared API Gateway / auth / error-response rules below.
+Per-user notification inbox plus admin-only dispatch. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `notifications`, `count`, or `notification` payloads are stale.
 
 ---
 
@@ -12,45 +12,111 @@ Per-user notification inbox and admin dispatch. Users read and archive their own
 
 ### Route Summary
 
-| Method | Path | Auth | Lambda | Purpose |
-| --- | --- | --- | --- | --- |
-| GET | `/notifications/me` | `x-api-key` + Bearer JWT | `notifications` | List caller's notifications |
-| PATCH | `/notifications/me/{notificationId}` | `x-api-key` + Bearer JWT | `notifications` | Archive a single notification |
-| POST | `/notifications/dispatch` | `x-api-key` + Bearer JWT + `admin` role | `notifications` | Create a notification for a target user |
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/notifications/me` | `x-api-key` + Bearer JWT | List the caller's notifications |
+| PATCH | `/notifications/me/{notificationId}` | `x-api-key` + Bearer JWT | Archive a single caller-owned notification |
+| POST | `/notifications/dispatch` | `x-api-key` + Bearer JWT with `admin` role | Create a notification for any target user |
+
+### Integration-Critical Behavior
+
+| Topic | Current DDD behavior |
+| --- | --- |
+| List wrapper | `GET /notifications/me` returns `data: Notification[]` plus `pagination` |
+| Archive response | PATCH returns no `data` |
+| Dispatch response | Dispatch returns the full created notification inside `data`, not just the new `_id` |
+| Ownership model | Archive filters by both `_id` and `userId`; another user's notification returns `404 common.notFound`, not `403` |
+| Archive semantics | PATCH always sets `isArchived: true`; the request body is ignored |
+| Dispatch permissions | Only `admin` role can dispatch |
+| Archived list behavior | `GET /notifications/me` still returns rows where `isArchived` is already `true` |
+
+---
+
+## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
-All routes require a valid API Gateway API key in the `x-api-key` header. Requests missing the key are rejected by API Gateway with `403 Forbidden` before the Lambda runs.
+All routes use the API key requirement and default token authorizer.
 
-`OPTIONS` preflight routes are public and do not require `x-api-key`.
+| Route group | API key required at API Gateway | API Gateway authorizer |
+| --- | --- | --- |
+| `GET /notifications/me` | Yes | `DddTokenAuthorizer` |
+| `PATCH /notifications/me/{notificationId}` | Yes | `DddTokenAuthorizer` |
+| `POST /notifications/dispatch` | Yes | `DddTokenAuthorizer` |
+| `OPTIONS` for the above routes | No | None |
 
-Local SAM testing (`sam local start-api`) does not enforce `x-api-key`.
+Protected deployed requests must send:
 
-### Authentication
+```http
+x-api-key: <api-gateway-api-key>
+Authorization: Bearer <access-token>
+```
 
-| Route | Mechanism |
-| --- | --- |
-| `GET /notifications/me` | Bearer JWT required. Scope is derived from JWT `userId`. |
-| `PATCH /notifications/me/{notificationId}` | Bearer JWT required. Ownership enforced against JWT `userId`. |
-| `POST /notifications/dispatch` | Bearer JWT required. Caller must have role `admin`. |
+Dispatch requests must also send `Content-Type: application/json`.
 
-Access tokens use HS256. JWT payload populates `userId`, `userEmail`, `userRole` on the Lambda event.
+### Authorization Rules
 
-### Required Headers
+- `GET /notifications/me` scopes results to `jwt.userId`
+- `PATCH /notifications/me/{notificationId}` only archives rows where `_id` and `userId` both match
+- `POST /notifications/dispatch` requires `admin` role via `requireRole`
 
-| Scenario | Headers |
-| --- | --- |
-| Deployed API Gateway | `Content-Type: application/json`, `x-api-key: <key>` |
-| Local SAM | `Content-Type: application/json` |
-| All routes | Add `Authorization: Bearer <access-token>` |
+### Localization
+
+- Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
+- Use `errorKey` for branching logic
+
+---
+
+## Success And Error Conventions
 
 ### Success Response Shape
+
+List success:
 
 ```json
 {
   "success": true,
-  "message": "success.retrieved",
-  "<endpoint-specific-fields>": "..."
+  "message": "Retrieved successfully",
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 0,
+    "totalPages": 0
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Archive success:
+
+```json
+{
+  "success": true,
+  "message": "Updated successfully",
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Dispatch success:
+
+```json
+{
+  "success": true,
+  "message": "Created successfully",
+  "data": {
+    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
+    "userId": "665f1a2b3c4d5e6f7a8b9c01",
+    "type": "vaccine_reminder",
+    "petId": "665f1a2b3c4d5e6f7a8b9c02",
+    "petName": "Mochi",
+    "nextEventDate": "2026-06-01T00:00:00.000Z",
+    "nearbyPetLost": null,
+    "isArchived": false,
+    "createdAt": "2026-05-08T12:00:00.000Z",
+    "updatedAt": "2026-05-08T12:00:00.000Z"
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -60,51 +126,36 @@ Access tokens use HS256. JWT payload populates `userId`, `userEmail`, `userRole`
 {
   "success": false,
   "errorKey": "common.notFound",
-  "error": "<localized message>",
-  "requestId": "<lambda-request-id>"
+  "error": "localized message",
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `success` | `boolean` | Always `false` |
-| `errorKey` | `string` | Machine-readable key for integration logic |
-| `error` | `string` | Localized message — do not use for branching |
-| `requestId` | `string` | Lambda request ID for CloudWatch lookup |
+### Notification Record Shape
 
-### Localization
+Notifications returned in list and dispatch responses may include:
 
-Append `?lang=en` to the URL for English. Default is `zh` (Traditional Chinese).
+- `_id`
+- `userId`
+- `type`
+- `petId`
+- `petName`
+- `nextEventDate`
+- `nearbyPetLost`
+- `isArchived`
+- `createdAt`
+- `updatedAt`
 
----
-
-## Notification Document Shape
-
-The notification document returned in list and dispatch responses has the following fields. The `__v` field is stripped.
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `_id` | `string` (ObjectId) | |
-| `userId` | `string` (ObjectId) | Owner of the notification |
-| `type` | `string` | One of the supported notification types (see below) |
-| `isArchived` | `boolean` | `false` by default; `true` after `PATCH` archive |
-| `petId` | `string` (ObjectId) \| `null` | Optional linked pet |
-| `petName` | `string` \| `null` | Optional pet name |
-| `nextEventDate` | `string` (ISO date) \| `null` | Stored as UTC Date; serialized as ISO string |
-| `nearbyPetLost` | `string` \| `null` | Nearby lost pet reference; format is context-dependent |
-| `createdAt` | `string` (ISO date) | Mongoose timestamps |
-| `updatedAt` | `string` (ISO date) | Mongoose timestamps |
+`__v` is removed before the record is returned.
 
 ### Supported Notification Types
 
-| Value | Trigger domain |
-| --- | --- |
-| `nearby_pet_lost` | Pet Recovery — nearby lost-pet post created |
-| `vaccine_reminder` | Pet Medical — vaccine due date approaching |
-| `deworming_reminder` | Pet Medical — deworming due date approaching |
-| `medical_reminder` | Pet Medical — general medical event due |
-| `adoption_follow_up` | Pet Adoption — follow-up action required |
-| `ownership_transfer` | Pet Transfer — ownership transfer initiated or completed |
+- `nearby_pet_lost`
+- `vaccine_reminder`
+- `deworming_reminder`
+- `medical_reminder`
+- `adoption_follow_up`
+- `ownership_transfer`
 
 ---
 
@@ -112,127 +163,101 @@ The notification document returned in list and dispatch responses has the follow
 
 ### GET /notifications/me
 
-List all notifications belonging to the authenticated caller, sorted newest first. Returns both archived and unarchived records — frontend should filter on `isArchived` if needed.
+List the caller's notifications.
 
-**Lambda:** `notifications`  
-**Auth:** Bearer JWT required  
-**Rate limit:** None
+**Lambda owner:** `notifications`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Request:** No body, no query params.
+#### Query Parameters
 
-**Example request:**
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | No | Shared pagination schema |
+| `limit` | integer | No | Shared pagination schema |
 
-```http
-GET /notifications/me HTTP/1.1
-Authorization: Bearer <access-token>
-x-api-key: <api-key>
-```
+The result is sorted by `createdAt` descending.
 
-**Success (200):**
+#### List Success (200)
 
 ```json
 {
   "success": true,
   "message": "Retrieved successfully",
-  "count": 2,
-  "notifications": [
+  "data": [
     {
       "_id": "665f1a2b3c4d5e6f7a8b9c0d",
       "userId": "665f1a2b3c4d5e6f7a8b9c01",
       "type": "vaccine_reminder",
       "isArchived": false,
-      "petId": "665f1a2b3c4d5e6f7a8b9c02",
-      "petName": "Mochi",
-      "nextEventDate": "2026-06-01T00:00:00.000Z",
-      "nearbyPetLost": null,
-      "createdAt": "2026-05-01T10:00:00.000Z",
-      "updatedAt": "2026-05-01T10:00:00.000Z"
+      "petName": "Mochi"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 1,
+    "totalPages": 1
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Errors:**
+#### List Errors
 
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 500 | `common.internalError` | Unexpected error |
-
----
+| 400 | `common.invalidQueryParams` | Invalid pagination query |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### PATCH /notifications/me/{notificationId}
 
-Archives a single notification owned by the caller. Sets `isArchived: true`. The request body is ignored. The operation is idempotent — archiving an already-archived notification returns `200`.
+Archive one caller-owned notification.
 
-**Lambda:** `notifications`  
-**Auth:** Bearer JWT required  
-**Rate limit:** None
+**Lambda owner:** `notifications`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Path parameters:**
+#### Path Parameters
 
 | Param | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `notificationId` | string (ObjectId) | Yes | Must be a valid MongoDB ObjectId |
+| `notificationId` | string | Yes | MongoDB ObjectId |
 
-**Request:** No body required.
+#### Request Body
 
-**Example request:**
+None required. The handler ignores body content.
 
-```http
-PATCH /notifications/me/665f1a2b3c4d5e6f7a8b9c0d HTTP/1.1
-Authorization: Bearer <access-token>
-x-api-key: <api-key>
-```
+#### Archive Errors
 
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "success.updated",
-  "notificationId": "665f1a2b3c4d5e6f7a8b9c0d"
-}
-```
-
-**Errors:**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingPathParams` | `notificationId` path param is missing |
-| 400 | `common.invalidObjectId` | `notificationId` is not a valid MongoDB ObjectId |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 404 | `common.notFound` | No notification matching `_id` + `userId` — either does not exist or belongs to another user |
-| 500 | `common.internalError` | Unexpected error |
-
-**Ownership:** The query filters on both `_id: notificationId` and `userId: authContext.userId`. A notification belonging to another user returns `404`, not `403`. This prevents caller ID enumeration.
-
----
+| 400 | `common.invalidObjectId` | Invalid `notificationId` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 404 | `common.notFound` | Notification not found or not owned by caller |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### POST /notifications/dispatch
 
-Creates a notification record for any target user. Caller must have role `admin`.
+Create a notification for any target user. Admin only.
 
-This is the internal dispatch endpoint used by other services or admin tooling. It is not a self-service create — regular users cannot create notifications for themselves via this endpoint.
+**Lambda owner:** `notifications`  
+**Auth:** `x-api-key` + Bearer JWT with `admin` role  
+**Content-Type:** `application/json`
 
-**Lambda:** `notifications`  
-**Auth:** Bearer JWT required; role `admin` enforced  
-**Rate limit:** None
-
-**Body:**
+#### Dispatch Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `targetUserId` | string (ObjectId) | Yes | MongoDB ObjectId of the recipient user |
-| `type` | string (enum) | Yes | One of the supported notification types |
-| `petId` | string (ObjectId) | No | Nullable. Linked pet ObjectId |
-| `petName` | string | No | Nullable. Linked pet name |
-| `nextEventDate` | string | No | Nullable. Accepted formats: ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ssZ`) or `DD/MM/YYYY` |
-| `nearbyPetLost` | string | No | Nullable. Nearby lost-pet reference string |
+| `targetUserId` | string | Yes | MongoDB ObjectId |
+| `type` | enum string | Yes | One of the supported notification types |
+| `petId` | string or `null` | No | MongoDB ObjectId when present |
+| `petName` | string or `null` | No | Max 100 chars |
+| `nextEventDate` | string or `null` | No | ISO-like or `DD/MM/YYYY` |
+| `nearbyPetLost` | string or `null` | No | Max 2000 chars |
 
-Unknown fields are rejected (`.strict()` schema).
+The body schema is strict. Extra keys are rejected.
 
-**Example request:**
+#### Dispatch Example Request
 
 ```json
 {
@@ -244,92 +269,28 @@ Unknown fields are rejected (`.strict()` schema).
 }
 ```
 
-**Success (200):**
+#### Dispatch Errors
 
-```json
-{
-  "success": true,
-  "message": "success.created",
-  "notification": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "userId": "665f1a2b3c4d5e6f7a8b9c01",
-    "type": "vaccine_reminder",
-    "isArchived": false,
-    "petId": "665f1a2b3c4d5e6f7a8b9c02",
-    "petName": "Mochi",
-    "nextEventDate": "2026-06-01T00:00:00.000Z",
-    "nearbyPetLost": null,
-    "createdAt": "2026-05-06T10:00:00.000Z",
-    "updatedAt": "2026-05-06T10:00:00.000Z"
-  }
-}
-```
-
-**Errors:**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `notifications.errors.typeRequired` | `type` missing or not one of the supported enum values |
-| 400 | `notifications.errors.invalidDate` | `nextEventDate` provided but not valid ISO 8601 or `DD/MM/YYYY` |
-| 400 | `common.invalidObjectId` | `targetUserId` or `petId` is not a valid MongoDB ObjectId |
-| 400 | `common.invalidBodyParams` | Malformed JSON body, or request body contains unrecognized fields (strict schema) |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.forbidden` | Caller role is not `admin` |
-| 500 | `common.internalError` | Unexpected error |
-
----
-
-## DDD Contract Delta vs Legacy
-
-The DDD Notifications API intentionally differs from the legacy `PetLostandFound` endpoints in the following ways. Frontend integrators must update their integration.
-
-| Concern | Legacy (`AWS_API`) | DDD (`AWS_DDD_API`) |
-| --- | --- | --- |
-| **Route paths** | `/v2/account/{userId}/notifications` | `/notifications/me` (GET/PATCH) |
-| **Scope enforcement** | Path `userId` must match JWT `userId` | No path userId — scope is always the JWT caller |
-| **Archive method** | `PUT` | `PATCH` |
-| **Notification creation** | Any authenticated user POSTs their own notification via `POST /v2/account/{userId}/notifications` | Only `admin` role can dispatch via `POST /notifications/dispatch` — self-service creation removed |
-| **Dispatch target** | User creates for themselves | Admin dispatches to any `targetUserId` |
-| **Type validation** | No enum constraint in legacy | Enum-enforced: one of six known types |
-| **Date formats** | `DD/MM/YYYY` only | ISO 8601 or `DD/MM/YYYY` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `notifications.errors.typeRequired` | Invalid or missing notification type |
+| 400 | `notifications.errors.invalidDate` | Invalid `nextEventDate` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 403 | `common.forbidden` | Caller is not `admin` |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ---
 
 ## Frontend Integration Guide
 
-### Reading Notifications
+1. Read inbox state from `data` and pagination state from `pagination`; do not use the older `notifications` or `count` keys.
+2. Treat `common.notFound` from archive as a stale-client state: the item is missing or not owned by the current user.
+3. Use the dispatch route only from admin tooling. There is no self-service notification creation endpoint in the current DDD API.
 
-```
-GET /notifications/me
-Authorization: Bearer <access-token>
-x-api-key: <api-key>
-```
+---
 
-Filter the returned array on `isArchived === false` to show active notifications.
+## Verification Snapshot
 
-### Archiving A Notification
-
-```
-PATCH /notifications/me/{notificationId}
-Authorization: Bearer <access-token>
-x-api-key: <api-key>
-```
-
-No body needed. On `404`, the notification either does not exist or belongs to another user.
-
-### Dispatching A Notification (Admin Only)
-
-```
-POST /notifications/dispatch
-Authorization: Bearer <admin-access-token>
-x-api-key: <api-key>
-Content-Type: application/json
-
-{
-  "targetUserId": "<user-objectid>",
-  "type": "<notification-type>",
-  ...optional fields
-}
-```
-
-Non-admin callers receive `403 common.forbidden`.
+This document is grounded in `functions/notifications/src/services/notifications.ts`, `functions/notifications/src/zodSchema/notificationSchema.ts`, and the current router wiring. The main post-migration correction is the wrapper-based `data` / `pagination` contract.

@@ -99,7 +99,8 @@ declare module '@aws-ddd-api/shared/http/router' {
   import type { ResponseHelpers } from '@aws-ddd-api/shared/http/response';
 
   export type RouteHandler = (routeContext: ApiRouteContext) => Promise<APIGatewayProxyResult>;
-  export type RouteMap = Record<string, RouteHandler>;
+  export type LazyRouteLoader = () => Promise<RouteHandler>;
+  export type RouteMap = Record<string, LazyRouteLoader>;
 
   export interface CreateRouterOptions {
     response: ResponseHelpers;
@@ -153,7 +154,7 @@ declare module '@aws-ddd-api/shared/auth/context' {
     principalId?: string;
   }
 
-  export class AuthContextError extends Error {
+  export class HttpError extends Error {
     statusCode: number;
     errorKey: string;
     constructor(errorKey: string, statusCode: number);
@@ -188,6 +189,7 @@ declare module '@aws-ddd-api/shared/logging/logger' {
 
 declare module '@aws-ddd-api/shared/validation/zod' {
   import type { ZodType } from 'zod';
+  import type { APIGatewayProxyEvent } from 'aws-lambda';
 
   export function getZodIssues(error: unknown): unknown[];
   export function getFirstZodIssueMessage(error: unknown, fallback?: string): string;
@@ -215,6 +217,30 @@ declare module '@aws-ddd-api/shared/validation/zod' {
     schema: ZodType<T>,
     options?: ParseBodyOptions
   ): ParseBodyResult<T>;
+
+  export interface ParsedMultipartFile {
+    content?: Buffer;
+    filename?: string;
+    contentType?: string;
+    fieldname?: string;
+  }
+  export interface ParseMultipartBodySuccess<T> {
+    ok: true;
+    data: T;
+    files: ParsedMultipartFile[];
+  }
+  export type ParseMultipartBodyResult<T> = ParseMultipartBodySuccess<T> | ParseBodyFailure;
+  export interface ParseMultipartBodyOptions {
+    validate?: (rawFields: Record<string, unknown>) => string | null;
+    normalize?: (rawFields: Record<string, unknown>) => Record<string, unknown>;
+    parseErrorKey?: string;
+    fallbackErrorKey?: string;
+  }
+  export function parseMultipartBody<T>(
+    event: APIGatewayProxyEvent,
+    schema: ZodType<T>,
+    options?: ParseMultipartBodyOptions
+  ): Promise<ParseMultipartBodyResult<T>>;
 }
 
 declare module '@aws-ddd-api/shared/config/boolean' {
@@ -268,7 +294,16 @@ declare module '@aws-ddd-api/shared/rate-limit/mongo' {
   import type { APIGatewayProxyEvent } from 'aws-lambda';
   import type { Mongoose } from 'mongoose';
 
+  export type RateLimitScope = 'ip' | 'identifier' | 'ip+identifier' | 'account' | 'global';
+
+  export interface RateLimitPolicy {
+    limit: number;
+    scope: RateLimitScope;
+    windowSeconds: number;
+  }
+
   export function requireMongoRateLimit(options: {
+    accountId?: string | number | null;
     action: string;
     collectionName?: string;
     event: APIGatewayProxyEvent;
@@ -277,13 +312,50 @@ declare module '@aws-ddd-api/shared/rate-limit/mongo' {
     identifier?: string | number | null;
     includeIp?: boolean;
     keySalt?: string;
-    limit: number;
+    limit?: number;
     modelName?: string;
     mongoose: Mongoose;
     nowMs?: number;
+    policies?: RateLimitPolicy[];
     ttlWindowMultiplier?: number;
-    windowSeconds: number;
+    windowSeconds?: number;
   }): Promise<void>;
+
+  export function requireMongoRateLimitNotInCooldown(options: {
+    accountId?: string | number | null;
+    action: string;
+    collectionName?: string;
+    cooldownSeconds: number;
+    event: APIGatewayProxyEvent;
+    failOpen?: boolean;
+    hashKey?: boolean;
+    identifier?: string | number | null;
+    keySalt?: string;
+    modelName?: string;
+    mongoose: Mongoose;
+    nowMs?: number;
+    scope?: RateLimitScope;
+    threshold: number;
+    ttlWindowMultiplier?: number;
+  }): Promise<void>;
+
+  export function recordMongoRateLimitFailure(options: {
+    accountId?: string | number | null;
+    action: string;
+    collectionName?: string;
+    cooldownSeconds: number;
+    event: APIGatewayProxyEvent;
+    failOpen?: boolean;
+    hashKey?: boolean;
+    identifier?: string | number | null;
+    keySalt?: string;
+    modelName?: string;
+    mongoose: Mongoose;
+    nowMs?: number;
+    scope?: RateLimitScope;
+    threshold: number;
+    ttlWindowMultiplier?: number;
+  }): Promise<{ cooldownTriggered: boolean; count: number; retryAfterSeconds: number }>;
 }
 
 declare module '@aws-ddd-api/shared' {
@@ -300,4 +372,59 @@ declare module '@aws-ddd-api/shared' {
   export * from '@aws-ddd-api/shared/logging/logger';
   export * from '@aws-ddd-api/shared/rate-limit/mongo';
   export * from '@aws-ddd-api/shared/validation/zod';
+  export * from '@aws-ddd-api/shared/validation/common';
+  export * from '@aws-ddd-api/shared/sanitization/text';
+}
+
+declare module '@aws-ddd-api/shared/validation/common' {
+  import { z } from 'zod';
+
+  export const objectIdString: (errorKey?: string) => z.ZodType<string>;
+  export const tempIdString: (errorKey?: string) => z.ZodType<string>;
+  export const emailString: (errorKey?: string) => z.ZodType<string>;
+  export const phoneE164String: (errorKey?: string) => z.ZodType<string>;
+  export const urlString: (errorKey?: string) => z.ZodType<string>;
+
+  export interface PaginationQueryOptions {
+    maxLimit?: number;
+    defaultLimit?: number;
+    maxPage?: number;
+    errorKey?: string;
+  }
+  export const paginationQuerySchema: (
+    options?: PaginationQueryOptions
+  ) => z.ZodType<{ page: number; limit: number } & Record<string, unknown>>;
+
+  export interface PathParamFailure {
+    ok: false;
+    statusCode: number;
+    errorKey: string;
+  }
+  export interface PathParamSuccess<T> {
+    ok: true;
+    data: T;
+  }
+  export type PathParamResult<T> = PathParamSuccess<T> | PathParamFailure;
+
+  export function parsePathParam<T>(
+    raw: unknown,
+    schema: z.ZodType<T>,
+    fallbackErrorKey?: string
+  ): PathParamResult<T>;
+  export function parseObjectIdParam(
+    raw: unknown,
+    errorKey?: string
+  ): PathParamResult<string>;
+}
+
+declare module '@aws-ddd-api/shared/sanitization/text' {
+  export function escapeHtml(input: string): string;
+  export function sanitizeText(input: unknown): string;
+  export function sanitizeOptionalText<T extends string | null | undefined>(
+    input: T
+  ): T extends string ? string : T;
+  export function sanitizeFields<T extends Record<string, unknown>>(
+    obj: T,
+    fields: readonly (keyof T)[]
+  ): T;
 }

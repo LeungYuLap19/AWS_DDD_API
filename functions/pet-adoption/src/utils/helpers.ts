@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { AuthContextError } from '@aws-ddd-api/shared';
+import { HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 
@@ -156,7 +156,7 @@ type AuthorizedPet = {
 
 /**
  * Resolves pet from the main DB and checks caller ownership.
- * Throws AuthContextError on not-found or unauthorized.
+ * Throws HttpError on not-found or unauthorized.
  */
 export async function authorizePetAccess(
   conn: mongoose.Connection,
@@ -169,7 +169,7 @@ export async function authorizePetAccess(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new AuthContextError('petAdoption.errors.managed.petNotFound', 404);
+    throw new HttpError('petAdoption.errors.managed.petNotFound', 404);
   }
 
   const isOwner = pet.userId !== null && String(pet.userId) === callerId.userId;
@@ -179,7 +179,7 @@ export async function authorizePetAccess(
     String(pet.ngoId) === callerId.ngoId;
 
   if (!isOwner && !isNgoOwner) {
-    throw new AuthContextError('common.forbidden', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 }
 
@@ -190,7 +190,7 @@ export function toErrorResponse(
   error: unknown,
   event: RouteContext['event']
 ): APIGatewayProxyResult | null {
-  if (error instanceof AuthContextError) {
+  if (error instanceof HttpError) {
     return response.errorResponse(error.statusCode, error.errorKey, event);
   }
   const statusCode = (error as { statusCode?: unknown })?.statusCode;

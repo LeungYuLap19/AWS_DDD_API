@@ -7,7 +7,6 @@ import { response } from '../utils/response';
 import { sanitizeOrderVerification } from '../utils/sanitize';
 import { normalizeEmail, isValidObjectId } from '../utils/normalize';
 import { loadAuthorizedOrderByTempId } from '../utils/selfAccess';
-import { getAuthContext } from '@aws-ddd-api/shared';
 
 const ORDER_VERIFICATION_READ_PROJECTION = [
   '_id', 'tagId', 'staffVerification', 'contact', 'verifyDate', 'tagCreationDate',
@@ -28,18 +27,17 @@ const PRIVILEGED_ROLES = new Set(['admin', 'developer']);
  * Legacy: GET /v2/orderVerification/whatsapp-order-link/{_id} (OrderVerification)
  */
 export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  try {
-    requireAuthContext(ctx.event);
+  const authContext = requireAuthContext(ctx.event);
 
-    const verificationId = ctx.event.pathParameters?.verificationId ?? '';
+  const verificationId = ctx.event.pathParameters?.verificationId ?? '';
 
-    if (!verificationId) {
-      return response.errorResponse(400, 'fulfillment.errors.missingVerificationId', ctx.event);
-    }
+  if (!verificationId) {
+    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  }
 
-    if (!isValidObjectId(verificationId)) {
-      return response.errorResponse(400, 'fulfillment.errors.invalidVerificationId', ctx.event);
-    }
+  if (!isValidObjectId(verificationId)) {
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
+  }
 
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification');
@@ -53,31 +51,27 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
     return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
   }
 
-  const authContext = getAuthContext(ctx.event);
   const userRole = authContext?.userRole;
 
   if (!userRole || !PRIVILEGED_ROLES.has(userRole)) {
     if (orderVerify.orderId) {
-      const orderAuth = await loadAuthorizedOrderByTempId(
+      const { order } = await loadAuthorizedOrderByTempId(
         ctx.event,
         Order,
         orderVerify.orderId as string
       );
-      if (!orderAuth.isValid) {
-        return orderAuth.error!;
-      }
-      if (!orderAuth.order) {
+      if (!order) {
         const callerEmail = normalizeEmail(authContext?.userEmail);
         const ownerEmail = normalizeEmail(orderVerify.masterEmail as string | undefined);
         if (!callerEmail || !ownerEmail || callerEmail !== ownerEmail) {
-          return response.errorResponse(403, 'common.unauthorized', ctx.event);
+          return response.errorResponse(403, 'common.forbidden', ctx.event);
         }
       }
     } else {
       const callerEmail = normalizeEmail(authContext?.userEmail);
       const ownerEmail = normalizeEmail(orderVerify.masterEmail as string | undefined);
       if (!callerEmail || !ownerEmail || callerEmail !== ownerEmail) {
-        return response.errorResponse(403, 'common.unauthorized', ctx.event);
+        return response.errorResponse(403, 'common.forbidden', ctx.event);
       }
     }
   }
@@ -107,16 +101,8 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
     updatedAt: safeEntity.updatedAt,
   };
 
-    return response.successResponse(200, ctx.event, {
-      message: 'Order Verification info retrieved successfully',
-      form,
-      id: safeEntity._id,
-    });
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
-      return response.errorResponse(statusCode, (error as { errorKey?: string })?.errorKey ?? 'common.forbidden', ctx.event);
-    }
-    return response.errorResponse(500, 'common.internalError', ctx.event);
-  }
+  return response.successResponse(200, ctx.event, {
+    message: 'success.retrieved',
+    data: { id: safeEntity._id, ...form },
+  });
 }

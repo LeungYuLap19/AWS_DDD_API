@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { isTrue, parseBody } from '@aws-ddd-api/shared';
-import bcrypt from 'bcrypt';
+import { isTrue, logWarn, parseBody } from '@aws-ddd-api/shared';
+import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
@@ -45,15 +45,24 @@ async function hasRecentVerificationProof(email?: string, phoneNumber?: string):
 async function consumeVerificationProofs(email?: string, phoneNumber?: string) {
   if (email) {
     const EmailVerificationCode = mongoose.model('EmailVerificationCode');
-    await EmailVerificationCode.deleteOne({ _id: email }).catch(() => undefined);
+    await EmailVerificationCode.deleteOne({ _id: email }).catch((error) =>
+      logWarn('Verification cleanup failed for email code', { error, scope: 'auth.services.registration' })
+    );
   }
 
   if (phoneNumber) {
     const SmsVerificationCode = mongoose.model('SmsVerificationCode');
-    await SmsVerificationCode.deleteOne({ _id: phoneNumber }).catch(() => undefined);
+    await SmsVerificationCode.deleteOne({ _id: phoneNumber }).catch((error) =>
+      logWarn('Verification cleanup failed for SMS code', { error, scope: 'auth.services.registration' })
+    );
   }
 }
 
+/**
+ * Creates a verified end-user account after recent email/phone challenge proof
+ * is confirmed, then consumes those verification artifacts and issues the
+ * initial access token plus refresh cookie.
+ */
 export async function handleUserRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, userRegistrationBodySchema);
   if (!parsed.ok) {
@@ -62,11 +71,18 @@ export async function handleUserRegistration(ctx: RouteContext): Promise<APIGate
 
   await connectToMongoDB();
 
+  const probeEmail = normalizeEmail(parsed.data.email);
   const rateLimitResponse = await applyRateLimit({
     action: 'auth.registration.user',
     event: ctx.event,
-    limit: 12,
-    windowSeconds: 10 * 60,
+    identifier: probeEmail,
+    policies: [
+      { scope: 'ip', limit: 12, windowSeconds: 10 * 60 },
+      // Per-email cap: bound how many times the same email can be claimed
+      // across rotated IPs.
+      { scope: 'identifier', limit: 3, windowSeconds: 60 * 60 },
+      { scope: 'ip+identifier', limit: 5, windowSeconds: 10 * 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -168,15 +184,17 @@ export async function handleUserRegistration(ctx: RouteContext): Promise<APIGate
 
   return response.successResponse(201, ctx.event, {
     message: 'auth.registration.user.createSuccessful',
-    userId: user._id,
-    role: user.role,
-    isVerified: true,
-    token,
+    data: { userId: user._id, role: user.role, isVerified: true, token },
   }, {
     'Set-Cookie': buildRefreshCookie(refreshToken, ctx.event),
   });
 }
 
+/**
+ * Creates a new NGO onboarding record set across `User`, `NGO`,
+ * `NgoUserAccess`, and `NgoCounters`, preserving duplicate checks and the
+ * approval-required post-registration state before session issuance.
+ */
 export async function handleNgoRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, ngoRegistrationBodySchema);
   if (!parsed.ok) {
@@ -185,11 +203,18 @@ export async function handleNgoRegistration(ctx: RouteContext): Promise<APIGatew
 
   await connectToMongoDB();
 
+  const probeEmail = normalizeEmail(parsed.data.email);
   const rateLimitResponse = await applyRateLimit({
     action: 'auth.registration.ngo',
     event: ctx.event,
-    limit: 8,
-    windowSeconds: 10 * 60,
+    identifier: probeEmail,
+    policies: [
+      { scope: 'ip', limit: 8, windowSeconds: 10 * 60 },
+      // Per-email cap: bound how many times the same email can be claimed
+      // across rotated IPs.
+      { scope: 'identifier', limit: 3, windowSeconds: 60 * 60 },
+      { scope: 'ip+identifier', limit: 5, windowSeconds: 10 * 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -307,13 +332,15 @@ export async function handleNgoRegistration(ctx: RouteContext): Promise<APIGatew
 
     return response.successResponse(201, ctx.event, {
       message: 'auth.registration.ngo.createSuccessful',
-      userId: newUser._id,
-      role: newUser.role,
-      isVerified: true,
-      token,
-      ngoId: newNgo._id,
-      ngoUserAccessId: newNgoUserAccess._id,
-      ngoCounterId: newNgoCounter._id,
+      data: {
+        userId: newUser._id,
+        role: newUser.role,
+        isVerified: true,
+        token,
+        ngoId: newNgo._id,
+        ngoUserAccessId: newNgoUserAccess._id,
+        ngoCounterId: newNgoCounter._id,
+      },
     }, {
       'Set-Cookie': buildRefreshCookie(refreshToken, ctx.event),
     });

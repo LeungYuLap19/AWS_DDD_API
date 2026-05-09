@@ -110,6 +110,8 @@ function loadHandlerWithMocks({
   const actualMongoose = jest.requireActual('mongoose');
 
   const productListFind = jest.fn().mockReturnValue({
+    skip: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
     lean: productListError
       ? jest.fn().mockRejectedValue(productListError)
       : jest.fn().mockResolvedValue(productListResult),
@@ -120,10 +122,23 @@ function loadHandlerWithMocks({
     : jest.fn().mockResolvedValue(productLogCreate);
 
   const shopInfoFind = jest.fn().mockReturnValue({
+    skip: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
     lean: shopInfoError
       ? jest.fn().mockRejectedValue(shopInfoError)
       : jest.fn().mockResolvedValue(shopInfoResult),
   });
+
+  const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
+    findOneAndUpdate: jest.fn().mockResolvedValue({
+      count: 1,
+      expireAt: new Date(Date.now() + 60_000),
+      windowStart: new Date(),
+    }),
+  };
 
   const mongooseMock = {
     Schema: actualMongoose.Schema,
@@ -135,9 +150,10 @@ function loadHandlerWithMocks({
     models: {},
     isValidObjectId: actualMongoose.isValidObjectId,
     model: jest.fn((name) => {
-      if (name === 'ProductList') return { find: productListFind };
+      if (name === 'ProductList') return { find: productListFind, countDocuments: jest.fn().mockResolvedValue(productListResult.length) };
       if (name === 'ProductLog') return { create: productLogModelCreate };
-      if (name === 'ShopInfo') return { find: shopInfoFind };
+      if (name === 'ShopInfo') return { find: shopInfoFind, countDocuments: jest.fn().mockResolvedValue(shopInfoResult.length) };
+      if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model "${name}"`);
     }),
   };
@@ -240,9 +256,9 @@ describe('GET /commerce/catalog', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.items)).toBe(true);
-    expect(parsed.body.items).toHaveLength(2);
-    expect(parsed.body.items[0].product_name_eng).toBe('PTag Air');
+    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.body.data).toHaveLength(2);
+    expect(parsed.body.data[0].product_name_eng).toBe('PTag Air');
   });
 
   test('returns 200 with empty array when catalog is empty', async () => {
@@ -255,7 +271,7 @@ describe('GET /commerce/catalog', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.items).toEqual([]);
+    expect(parsed.body.data).toEqual([]);
   });
 
   test('does not require auth — succeeds without requestContext.authorizer', async () => {
@@ -288,8 +304,8 @@ describe('GET /commerce/catalog', () => {
 
 describe('POST /commerce/catalog/events', () => {
   const validBody = {
-    petId: 'pet-123',
-    userId: 'user-456',
+    petId: new mongoose.Types.ObjectId().toString(),
+    userId: new mongoose.Types.ObjectId().toString(),
     userEmail: 'user@example.com',
     productUrl: 'https://shop.example.com/ptag-air',
   };
@@ -312,7 +328,7 @@ describe('POST /commerce/catalog/events', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(201);
-    expect(parsed.body.id).toBeDefined();
+    expect(parsed.body.data.id).toBeDefined();
   });
 
   test('happy path — accepts optional accessAt field', async () => {
@@ -485,7 +501,7 @@ describe('POST /commerce/catalog/events', () => {
   test('attack — extra/unexpected fields are not persisted (mass assignment)', async () => {
     const { handler, productLogModelCreate } = loadHandlerWithMocks();
 
-    await handler(
+    const result = await handler(
       createEvent({
         method: 'POST',
         path: '/commerce/catalog/events',
@@ -495,10 +511,8 @@ describe('POST /commerce/catalog/events', () => {
       createContext()
     );
 
-    const callArg = productLogModelCreate.mock.calls[0]?.[0];
-    expect(callArg).toBeDefined();
-    expect(callArg.isAdmin).toBeUndefined();
-    expect(callArg.role).toBeUndefined();
+    expect(parseResponse(result).statusCode).toBe(400);
+    expect(productLogModelCreate).not.toHaveBeenCalled();
   });
 
   test('attack — NoSQL operator injection in string fields is rejected by schema', async () => {
@@ -573,9 +587,9 @@ describe('GET /commerce/storefront', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.shops)).toBe(true);
-    expect(parsed.body.shops).toHaveLength(1);
-    expect(parsed.body.shops[0].shopCode).toBe('HK01');
+    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.body.data).toHaveLength(1);
+    expect(parsed.body.data[0].shopCode).toBe('HK01');
   });
 
   test('returns 200 with empty array when no shops configured', async () => {
@@ -588,7 +602,7 @@ describe('GET /commerce/storefront', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.shops).toEqual([]);
+    expect(parsed.body.data).toEqual([]);
   });
 
   test('does not require auth — succeeds without requestContext.authorizer', async () => {

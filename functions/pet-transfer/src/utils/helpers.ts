@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { type AuthContext, AuthContextError } from '@aws-ddd-api/shared';
+import { type AuthContext, HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 
@@ -8,29 +8,37 @@ import { response } from './response';
 // Path parameter helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Returns the required `petId` path param and rejects missing or malformed
+ * Mongo object ids with `HttpError`.
+ */
 export function getValidatedPetId(event: RouteContext['event']): string {
   const petId = event.pathParameters?.petId;
 
   if (!petId) {
-    throw new AuthContextError('petTransfer.errors.missingPetId', 400);
+    throw new HttpError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('petTransfer.errors.invalidPetId', 400);
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   return petId;
 }
 
+/**
+ * Returns the required `transferId` path param and rejects missing or
+ * malformed Mongo object ids with `HttpError`.
+ */
 export function getValidatedTransferId(event: RouteContext['event']): string {
   const transferId = event.pathParameters?.transferId;
 
   if (!transferId) {
-    throw new AuthContextError('petTransfer.errors.transfer.missingTransferId', 400);
+    throw new HttpError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(transferId)) {
-    throw new AuthContextError('petTransfer.errors.transfer.invalidTransferId', 400);
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   return transferId;
@@ -46,6 +54,10 @@ type AuthorizedPet = {
   ngoId?: unknown;
 };
 
+/**
+ * Loads a pet for transfer operations and enforces either direct ownership or
+ * matching NGO ownership before allowing the caller to mutate transfer data.
+ */
 export async function authorizePetAccess(
   authContext: AuthContext,
   petId: string
@@ -56,7 +68,7 @@ export async function authorizePetAccess(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new AuthContextError('petTransfer.errors.petNotFound', 404);
+    throw new HttpError('petTransfer.errors.petNotFound', 404);
   }
 
   const isOwner = pet.userId !== null && String(pet.userId) === authContext.userId;
@@ -64,15 +76,16 @@ export async function authorizePetAccess(
     Boolean(authContext.ngoId) && pet.ngoId !== null && String(pet.ngoId) === authContext.ngoId;
 
   if (!isOwner && !isNgoOwner) {
-    throw new AuthContextError('common.forbidden', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 
   return pet;
 }
 
+/** Throws `common.forbidden` unless the caller is acting as an NGO user. */
 export function requireNGORole(authContext: AuthContext): void {
   if (!authContext.userRole || authContext.userRole.toLowerCase() !== 'ngo') {
-    throw new AuthContextError('common.forbidden', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 }
 
@@ -80,11 +93,16 @@ export function requireNGORole(authContext: AuthContext): void {
 // Error response helper
 // ---------------------------------------------------------------------------
 
+/**
+ * Converts known `HttpError`-shaped failures into the domain response format
+ * so route handlers can centralize error handling without widening catch
+ * blocks.
+ */
 export function toErrorResponse(
   error: unknown,
   event: RouteContext['event']
 ): APIGatewayProxyResult | null {
-  if (error instanceof AuthContextError) {
+  if (error instanceof HttpError) {
     return response.errorResponse(error.statusCode, error.errorKey, event);
   }
 
@@ -101,6 +119,10 @@ export function toErrorResponse(
 // Date helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Validates the legacy date formats accepted by pet-transfer: DD/MM/YYYY,
+ * YYYY-MM-DD, and full ISO datetime strings with optional timezone offsets.
+ */
 export function isValidDateFormat(dateString: string): boolean {
   if (!dateString || typeof dateString !== 'string') return false;
 
@@ -144,6 +166,10 @@ export function isValidDateFormat(dateString: string): boolean {
   return false;
 }
 
+/**
+ * Parses the legacy date formats accepted by pet-transfer: DD/MM/YYYY,
+ * YYYY-MM-DD, or full ISO datetime strings.
+ */
 export function parseDateFlexible(dateString: string): Date | null {
   if (!dateString) return null;
 

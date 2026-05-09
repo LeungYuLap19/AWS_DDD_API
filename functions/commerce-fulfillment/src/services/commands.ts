@@ -31,6 +31,21 @@ function escapeHtml(value: unknown): string {
 
 let templateCache: string | null = null;
 
+function resolvePtagDetectionTemplatePath(): string {
+  const candidatePaths = [
+    path.join(__dirname, '..', '..', 'static', 'ptag-detection-email.html'),
+    path.join(__dirname, 'static', 'ptag-detection-email.html'),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (fs.existsSync(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  throw new Error('Missing ptag detection email template');
+}
+
 function renderPtagDetectionEmail(
   petName: string,
   tagId: string,
@@ -38,7 +53,7 @@ function renderPtagDetectionEmail(
   locationURL: string
 ): string {
   if (!templateCache) {
-    const templatePath = path.join(__dirname, '..', '..', 'static', 'ptag-detection-email.html');
+    const templatePath = resolvePtagDetectionTemplatePath();
     templateCache = fs.readFileSync(templatePath, 'utf8');
   }
 
@@ -55,18 +70,18 @@ function renderPtagDetectionEmail(
  * Legacy: POST /purchase/send-ptag-detection-email (purchaseConfirmation)
  */
 export async function handleSendPtagDetectionEmail(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  requireRole(ctx.event, ['admin', 'developer']);
+
+  const parsed = parseBody(ctx.body, ptagDetectionEmailSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
+  const { name, tagId, dateTime, locationURL, email } = parsed.data;
+
+  const html = renderPtagDetectionEmail(name, tagId, dateTime, locationURL);
+
   try {
-    requireRole(ctx.event, ['admin', 'developer']);
-
-    const parsed = parseBody(ctx.body, ptagDetectionEmailSchema);
-    if (!parsed.ok) {
-      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-    }
-
-    const { name, tagId, dateTime, locationURL, email } = parsed.data;
-
-    const html = renderPtagDetectionEmail(name, tagId, dateTime, locationURL);
-
     await createSmtpTransporter().sendMail({
       from: process.env.SMTP_FROM,
       to: email,
@@ -74,15 +89,11 @@ export async function handleSendPtagDetectionEmail(ctx: RouteContext): Promise<A
       subject: `PTag | 您的寵物 ${name} (${tagId}) 最新位置更新 | Your pet ${name} (${tagId}) Latest location update`,
       html,
     });
-
-    return response.successResponse(200, ctx.event, {
-      message: 'Email sent successfully.',
-    });
-  } catch (error) {
-    const statusCode = (error as { statusCode?: number })?.statusCode;
-    if (statusCode === 401 || statusCode === 403) {
-      return response.errorResponse(statusCode, (error as { errorKey?: string })?.errorKey ?? 'common.forbidden', ctx.event);
-    }
-    return response.errorResponse(500, 'common.internalError', ctx.event);
+  } catch {
+    return response.errorResponse(503, 'fulfillment.errors.emailServiceUnavailable', ctx.event);
   }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'success.created',
+  });
 }

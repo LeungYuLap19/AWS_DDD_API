@@ -3,17 +3,13 @@
     "errors": {
       "notFound": "Order verification not found.",
       "alreadyCancelled": "This order verification has already been cancelled.",
-      "missingOrderId": "orderId is required.",
-      "missingTagId": "tagId is required.",
-      "missingVerificationId": "_id is required.",
-      "invalidVerificationId": "_id is invalid.",
       "duplicateOrderId": "An order verification with this orderId already exists.",
       "invalidDate": "Invalid date format. Use DD/MM/YYYY.",
       "invalidField": "Invalid field value.",
       "invalidPendingStatus": "pendingStatus must be a boolean.",
-      "missingFields": "Required fields are missing.",
       "invalidEmail": "Invalid email address.",
-      "invalidLocationURL": "Location URL must be a valid HTTPS address."
+      "invalidLocationURL": "Location URL must be a valid HTTPS address.",
+      "emailServiceUnavailable": "Email service is currently unavailable"
     }
   }
 }

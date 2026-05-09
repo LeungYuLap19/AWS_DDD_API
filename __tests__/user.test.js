@@ -25,6 +25,9 @@ const VALID_ORIGIN = 'http://localhost:3000';
 let dbReady = false;
 let dbConnectAttempted = false;
 let dbConnectError = null;
+let samReady = false;
+let samReadyChecked = false;
+let samReadyError = null;
 
 const state = {
   primaryUserId: new mongoose.Types.ObjectId(),
@@ -370,6 +373,29 @@ async function ensureDbOrSkip() {
   return true;
 }
 
+async function ensureSamOrSkip() {
+  if (samReady) return true;
+  if (samReadyChecked) {
+    if (samReadyError) {
+      console.warn(`[skip] SAM local unavailable: ${samReadyError.message}`);
+    }
+    return false;
+  }
+
+  samReadyChecked = true;
+
+  try {
+    await ensureSamLocalReachable();
+    samReady = true;
+    samReadyError = null;
+    return true;
+  } catch (error) {
+    samReadyError = error;
+    console.warn(`[skip] SAM local unavailable: ${error.message}`);
+    return false;
+  }
+}
+
 afterAll(async () => {
   if (dbReady && mongoose.connection.readyState !== 0) {
     await usersCol().deleteMany({
@@ -412,8 +438,8 @@ describe('Tier 2 - user handler integration', () => {
     const body = JSON.parse(res.body);
     expect(res.statusCode).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.user.email).toBe('tier2@test.com');
-    expect(body.user.password).toBeUndefined();
+    expect(body.data.email).toBe('tier2@test.com');
+    expect(body.data.password).toBeUndefined();
   });
 
   test('PATCH /user/me parses event.body as a string and rejects malformed JSON safely', async () => {
@@ -506,28 +532,29 @@ describe('Tier 2 - user handler integration', () => {
 });
 
 describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
-  beforeAll(async () => {
-    await ensureSamLocalReachable();
+  const samTest = (name, fn) => test(name, async () => {
+    if (!(await ensureSamOrSkip())) return;
+    return fn();
   });
 
-  test('denied-origin preflight is not provable in this env because env.json uses ALLOWED_ORIGINS=*', () => {
+  samTest('denied-origin preflight is not provable in this env because env.json uses ALLOWED_ORIGINS=*', () => {
     expect(ALLOWED_ORIGINS).toBe('*');
   });
 
   describe('happy paths', () => {
-    test('GET /user/me returns the sanitized current user over HTTP', async () => {
+    samTest('GET /user/me returns the sanitized current user over HTTP', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req('GET', '/user/me', undefined, authHeaders(state.primaryToken));
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.user.email).toBe(state.primaryEmail);
-      expect(res.body.user.password).toBeUndefined();
+      expect(res.body.data.email).toBe(state.primaryEmail);
+      expect(res.body.data.password).toBeUndefined();
       expect(res.headers['access-control-allow-origin']).toBe('*');
     });
 
-    test('PATCH /user/me persists the update and follow-up GET sees the new state', async () => {
+    samTest('PATCH /user/me persists the update and follow-up GET sees the new state', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const patchRes = await req(
@@ -542,7 +569,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
 
       expect(patchRes.status).toBe(200);
-      expect(patchRes.body.user.firstName).toBe('Renamed Primary');
+      expect(patchRes.body.data.firstName).toBe('Renamed Primary');
 
       const persisted = await usersCol().findOne({ _id: state.primaryUserId });
       expect(persisted.firstName).toBe('Renamed Primary');
@@ -550,11 +577,11 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
 
       const getRes = await req('GET', '/user/me', undefined, authHeaders(state.primaryToken));
       expect(getRes.status).toBe(200);
-      expect(getRes.body.user.firstName).toBe('Renamed Primary');
-      expect(getRes.body.user.district).toBe('Wan Chai');
+      expect(getRes.body.data.firstName).toBe('Renamed Primary');
+      expect(getRes.body.data.district).toBe('Wan Chai');
     });
 
-    test('repeated GET requests remain stable across warm invocations', async () => {
+    samTest('repeated GET requests remain stable across warm invocations', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const first = await req('GET', '/user/me', undefined, authHeaders(state.primaryToken));
@@ -562,12 +589,12 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(second.body.user._id || second.body.user.id || second.body.user.email).toBeDefined();
+      expect(second.body.data._id || second.body.data.id || second.body.data.email).toBeDefined();
     });
   });
 
   describe('input validation - 400', () => {
-    test('PATCH /user/me rejects malformed JSON', async () => {
+    samTest('PATCH /user/me rejects malformed JSON', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -581,7 +608,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(res.body.success).toBe(false);
     });
 
-    test('PATCH /user/me rejects invalid email format', async () => {
+    samTest('PATCH /user/me rejects invalid email format', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -595,7 +622,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
-    test('PATCH /user/me rejects invalid phone format', async () => {
+    samTest('PATCH /user/me rejects invalid phone format', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -609,7 +636,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
-    test('PATCH /user/me rejects invalid birthday format', async () => {
+    samTest('PATCH /user/me rejects invalid birthday format', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -623,7 +650,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
-    test('PATCH /user/me rejects invalid image URL format', async () => {
+    samTest('PATCH /user/me rejects invalid image URL format', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -637,7 +664,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
-    test('PATCH /user/me rejects NoSQL operator injection and leaves DB unchanged', async () => {
+    samTest('PATCH /user/me rejects NoSQL operator injection and leaves DB unchanged', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const before = await usersCol().findOne({ _id: state.primaryUserId });
@@ -655,7 +682,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
   });
 
   describe('business logic - 4xx', () => {
-    test('PATCH /user/me rejects duplicate email conflicts', async () => {
+    samTest('PATCH /user/me rejects duplicate email conflicts', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -669,7 +696,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('user.errors.emailExists');
     });
 
-    test('PATCH /user/me rejects duplicate phone conflicts', async () => {
+    samTest('PATCH /user/me rejects duplicate phone conflicts', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -683,7 +710,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('user.errors.phoneExists');
     });
 
-    test('repeat delete returns not found on the second request', async () => {
+    samTest('repeat delete returns not found on the second request', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const disposableUserId = new mongoose.Types.ObjectId();
@@ -739,7 +766,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
   });
 
   describe('authentication and authorisation', () => {
-    test('GET /user/me rejects missing Authorization header', async () => {
+    samTest('GET /user/me rejects missing Authorization header', async () => {
       const res = await req('GET', '/user/me', undefined, {
         origin: VALID_ORIGIN,
         'x-forwarded-for': `198.51.119.${(TEST_TS % 200) + 1}`,
@@ -748,12 +775,12 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(expectedUnauthenticatedStatuses()).toContain(res.status);
     });
 
-    test('GET /user/me rejects a garbage bearer token', async () => {
+    samTest('GET /user/me rejects a garbage bearer token', async () => {
       const res = await req('GET', '/user/me', undefined, authHeaders('this.is.garbage'));
       expect([401, 403]).toContain(res.status);
     });
 
-    test('GET /user/me rejects a malformed bearer header without the Bearer prefix', async () => {
+    samTest('GET /user/me rejects a malformed bearer header without the Bearer prefix', async () => {
       const res = await req('GET', '/user/me', undefined, {
         Authorization: state.primaryToken || 'not-a-bearer-header',
         origin: VALID_ORIGIN,
@@ -763,7 +790,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(expectedUnauthenticatedStatuses()).toContain(res.status);
     });
 
-    test('GET /user/me rejects an expired JWT', async () => {
+    samTest('GET /user/me rejects an expired JWT', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const expiredToken = signUserToken({
@@ -776,7 +803,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect([401, 403]).toContain(res.status);
     });
 
-    test('GET /user/me rejects a tampered JWT', async () => {
+    samTest('GET /user/me rejects a tampered JWT', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const tampered = `${state.primaryToken.slice(0, -1)}${state.primaryToken.slice(-1) === 'a' ? 'b' : 'a'}`;
@@ -784,7 +811,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect([401, 403]).toContain(res.status);
     });
 
-    test('GET /user/me rejects an alg:none JWT attack', async () => {
+    samTest('GET /user/me rejects an alg:none JWT attack', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const algNoneToken = buildAlgNoneToken({
@@ -796,7 +823,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect([401, 403]).toContain(res.status);
     });
 
-    test('GET /user/me does not allow role escalation through a valid non-user role token', async () => {
+    samTest('GET /user/me accepts a valid NGO-scoped token when it resolves to the same user document', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const ngoRoleToken = signUserToken({
@@ -807,12 +834,12 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
 
       const res = await req('GET', '/user/me', undefined, authHeaders(ngoRoleToken));
       expect(res.status).toBe(200);
-      expect(res.body.user.email).toBe(state.primaryEmail);
+      expect(res.body.data.email).toBe(state.primaryEmail);
     });
   });
 
   describe('cyberattacks and sequential security state changes', () => {
-    test('PATCH /user/me strips mass-assignment fields and does not mutate protected state', async () => {
+    samTest('PATCH /user/me rejects mass-assignment fields and does not mutate protected state', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const before = await usersCol().findOne({ _id: state.primaryUserId });
@@ -830,15 +857,16 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
       const after = await usersCol().findOne({ _id: state.primaryUserId });
 
-      expect(res.status).toBe(200);
-      expect(after.firstName).toBe('Mass Assignment Attempt');
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
+      expect(after.firstName).toBe(before.firstName);
       expect(after.role).toBe(before.role);
       expect(after.credit).toBe(before.credit);
       expect(after.password).toBe(before.password);
       expect(after.deleted).toBe(false);
     });
 
-    test('PATCH /user/me ignores an injected _id field and keeps ownership bound to the JWT user', async () => {
+    samTest('PATCH /user/me rejects an injected _id field and keeps ownership bound to the JWT user', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -854,12 +882,13 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       const primary = await usersCol().findOne({ _id: state.primaryUserId });
       const conflict = await usersCol().findOne({ _id: state.conflictUserId });
 
-      expect(res.status).toBe(200);
-      expect(primary.email).toBe(`${RUN_ID}-id-injection@test.com`);
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
+      expect(primary.email).toBe(state.primaryEmail);
       expect(conflict.email).toBe(state.conflictEmail);
     });
 
-    test('repeated hostile duplicate-email updates remain stable and do not mutate persisted state', async () => {
+    samTest('repeated hostile duplicate-email updates remain stable and do not mutate persisted state', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
 
@@ -882,7 +911,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(primary.email).toBe(state.primaryEmail);
     });
 
-    test('DELETE /user/me persists deletion, blocks later GET/PATCH, and revokes refresh token for /auth/tokens/refresh', async () => {
+    samTest('DELETE /user/me persists deletion, blocks later GET/PATCH, and revokes refresh token for /auth/tokens/refresh', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const deleteRes = await req(
@@ -931,17 +960,17 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
   });
 
   describe('runtime boundary behavior', () => {
-  test('OPTIONS /user/me returns a successful preflight for the dev wildcard origin policy', async () => {
-    const res = await req('OPTIONS', '/user/me', undefined, {
-      origin: VALID_ORIGIN,
+    samTest('OPTIONS /user/me returns a successful preflight for the dev wildcard origin policy', async () => {
+      const res = await req('OPTIONS', '/user/me', undefined, {
+        origin: VALID_ORIGIN,
+      });
+
+      expect(res.status).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('*');
+      expect(res.headers['access-control-allow-headers']).toContain('x-api-key');
     });
 
-    expect(res.status).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe('*');
-    expect(res.headers['access-control-allow-headers']).toContain('x-api-key');
-  });
-
-    test('POST /user/me is not routed by the live SAM API', async () => {
+    samTest('POST /user/me is not routed by the live SAM API', async () => {
       const res = await req(
         'POST',
         '/user/me',

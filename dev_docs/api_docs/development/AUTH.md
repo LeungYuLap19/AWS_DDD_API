@@ -1,61 +1,93 @@
-# Auth Flow API
+# Auth API
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-Verification-first authentication flow for the DDD API. Email and SMS challenges are used for normal user verification, login, and account-linking flows. NGO login is password-based. Refresh uses a rotated refresh-token cookie.
+**Lambda:** `aws-ddd-api-{stage}-auth`
+
+Verification-first authentication for the DDD API. Normal users verify email or phone first, then either log in automatically or complete registration. NGO accounts are created by a dedicated registration route and later log in with email + password. Refresh rotates the refresh-token cookie and issues a new access token.
+
+This document is written against the current `AWS_DDD_API` implementation, `template.yaml`, the current auth schemas and service code, and the available NGO + refresh integration tests. Where legacy docs or older tests imply pre-migration flat response payloads, the current DDD auth contract documented here is authoritative.
+
+---
 
 ## Overview
 
 ### Route Summary
 
-| Method | Path | Auth | Lambda | Purpose |
-| --- | --- | --- | --- | --- |
-| POST | `/auth/challenges` | `x-api-key`; no Bearer JWT required | `auth` | Generate email or SMS verification code |
-| POST | `/auth/challenges/verify` | `x-api-key`; Bearer JWT optional for linking | `auth` | Verify email or SMS challenge |
-| POST | `/auth/registrations/user` | `x-api-key`; no Bearer JWT required | `auth` | Create normal user after recent verification proof |
-| POST | `/auth/registrations/ngo` | `x-api-key`; no Bearer JWT required | `auth` | Create NGO admin user + NGO profile |
-| POST | `/auth/login/ngo` | `x-api-key`; no Bearer JWT required | `auth` | NGO password login |
-| POST | `/auth/tokens/refresh` | `x-api-key` + refresh cookie | `auth` | Rotate refresh cookie and issue new access token |
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| POST | `/auth/challenges` | `x-api-key`; no Bearer JWT required | Create email or SMS verification challenge |
+| POST | `/auth/challenges/verify` | `x-api-key`; Bearer JWT optional for linking | Verify email or SMS challenge |
+| POST | `/auth/registrations/user` | `x-api-key`; no Bearer JWT required | Create a normal user after recent verification proof |
+| POST | `/auth/registrations/ngo` | `x-api-key`; no Bearer JWT required | Create NGO user, NGO profile, NGO access, and NGO counter |
+| POST | `/auth/login/ngo` | `x-api-key`; no Bearer JWT required | NGO email/password login |
+| POST | `/auth/tokens/refresh` | `x-api-key` + refresh cookie | Rotate refresh cookie and issue a new access token |
 
 ### Flow Summary
 
-1. `POST /auth/challenges` with either `email` or `phoneNumber`
-2. `POST /auth/challenges/verify`
-3. Branch on response:
-   - Existing active user: access token returned, refresh cookie set
-   - New normal user: `{ verified: true, isNewUser: true }`
-   - Logged-in caller with Bearer JWT: identifier is linked to current account
-4. New normal user only: `POST /auth/registrations/user` within 10 minutes of verification
-5. Later session renewal: `POST /auth/tokens/refresh`
+#### Normal User Flow
 
-NGO onboarding is separate:
+1. `POST /auth/challenges` with `email` or `phoneNumber`
+2. `POST /auth/challenges/verify`
+3. Branch on `data.isNewUser`
+4. If `true`, call `POST /auth/registrations/user` within 10 minutes of successful verification
+5. Persist the returned access token and allow the browser to store the `refreshToken` cookie
+6. When access token expires, call `POST /auth/tokens/refresh`
+
+#### Returning User Flow
+
+1. `POST /auth/challenges`
+2. `POST /auth/challenges/verify`
+3. Response includes `data.token` and `Set-Cookie: refreshToken=...`
+4. Frontend stores the access token and uses refresh when needed
+
+#### Link Email Or Phone To Existing Account
+
+1. Caller is already logged in with a valid Bearer JWT
+2. `POST /auth/challenges`
+3. `POST /auth/challenges/verify` with the same Bearer JWT
+4. Response includes `data.linked.email` or `data.linked.phoneNumber`
+
+#### NGO Flow
 
 1. `POST /auth/registrations/ngo`
-2. Subsequent NGO logins use `POST /auth/login/ngo`
-3. Later session renewal still uses `POST /auth/tokens/refresh`
+2. Persist returned access token and refresh cookie
+3. Later logins use `POST /auth/login/ngo`
+4. Token renewal uses `POST /auth/tokens/refresh`
+
+---
 
 ## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
-All endpoints in this doc require a valid API Gateway API key.
+All routes in this document require a valid API Gateway API key.
+
+```http
+x-api-key: <api-gateway-api-key>
+```
 
 | Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| `/auth/*` routes in this doc | Yes | None |
+| `/auth/challenges` | Yes | None |
+| `/auth/challenges/verify` | Yes | None at API Gateway. Optional JWT is parsed inside the Lambda for linking. |
+| `/auth/login/ngo` | Yes | None |
+| `/auth/registrations/user` | Yes | None |
+| `/auth/registrations/ngo` | Yes | None |
+| `/auth/tokens/refresh` | Yes | None |
 
-`OPTIONS` preflight routes remain public and do not require `x-api-key`.
+`OPTIONS` preflight requests do not require `x-api-key`.
 
-### Authentication
+### Authentication Rules
 
 | Scenario | Requirement |
 | --- | --- |
-| Challenge generation | `x-api-key`; no Bearer JWT required |
-| Challenge verification for new/existing user | `x-api-key`; no Bearer JWT required |
-| Challenge verification for identifier linking | `x-api-key`; add `Authorization: Bearer <access-token>` when linking to an existing signed-in account |
-| User registration | `x-api-key`; no Bearer JWT required; requires recent consumed verification proof in DB |
-| NGO registration | `x-api-key`; no Bearer JWT required |
-| NGO login | `x-api-key`; no Bearer JWT required |
+| Create challenge | `x-api-key` only |
+| Verify challenge for login/new-user decision | `x-api-key` only |
+| Verify challenge for linking | `x-api-key` + `Authorization: Bearer <access-token>` |
+| User registration | `x-api-key` only |
+| NGO registration | `x-api-key` only |
+| NGO login | `x-api-key` only |
 | Refresh | `x-api-key` + `Cookie: refreshToken=<token>` |
 
 Access tokens use HS256 and expire in 15 minutes.
@@ -64,23 +96,49 @@ Access tokens use HS256 and expire in 15 minutes.
 
 | Scenario | Headers |
 | --- | --- |
-| JSON request | `Content-Type: application/json`, `x-api-key: <api-gateway-api-key>` |
-| Linking flow | Add `Authorization: Bearer <access-token>` |
-| Refresh | `x-api-key: <api-gateway-api-key>`, `Cookie: refreshToken=<token>` |
+| JSON request | `Content-Type: application/json`, `x-api-key: <key>` |
+| Linking verify request | Add `Authorization: Bearer <access-token>` |
+| Refresh | `x-api-key: <key>`, `Cookie: refreshToken=<token>` |
 
 ### Refresh Cookie Contract
 
-Login / registration / returning-user verification responses set:
+Verification of an existing user, user registration, NGO registration, NGO login, and refresh all set a refresh cookie.
 
 ```http
-Set-Cookie: refreshToken=<token>; HttpOnly; Secure; SameSite=Strict; Path=/<stage>/auth/tokens/refresh; Max-Age=<seconds>
+Set-Cookie: refreshToken=<token>; HttpOnly; Secure; SameSite=Strict; Path=/development/auth/tokens/refresh; Max-Age=<seconds>
 ```
 
-Notes:
+Important behavior:
 
-- On deployed stages, cookie path is `/<stage>/auth/tokens/refresh`, for example `/development/auth/tokens/refresh`
-- On local invocation without an API Gateway stage, path falls back to `/auth/tokens/refresh`
-- Refresh tokens are single-use: refresh deletes the old record and creates a new one
+- The actual cookie path is `/<stage>/auth/tokens/refresh`; with the current default deployed stage name it is `/development/auth/tokens/refresh`
+- On local invocation without a stage prefix, the fallback path is `/auth/tokens/refresh`
+- Refresh tokens are single-use; refresh deletes the old token record and creates a new one
+
+---
+
+## Success And Error Conventions
+
+### Success Response Shape
+
+Auth routes use the shared success envelope.
+
+```json
+{
+  "success": true,
+  "message": "localized success message",
+  "data": {},
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Route-specific notes:
+
+- Challenge creation returns `success`, `message`, `requestId` with no `data`
+- Verify returns branch-specific payload inside `data`
+- User registration returns `data: { userId, role, isVerified, token }`
+- NGO registration returns `data: { userId, role, isVerified, token, ngoId, ngoUserAccessId, ngoCounterId }`
+- NGO login returns `data: { userId, role, isVerified, token, ngoId }`
+- Refresh returns `data: { accessToken, id }`
 
 ### Error Response Shape
 
@@ -88,72 +146,53 @@ Notes:
 {
   "success": false,
   "errorKey": "auth.challenge.verificationFailed",
-  "error": "Verification failed. Please check your identifier and code and try again.",
+  "error": "localized string",
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-### Success Response Shape
+Frontend integrations should branch on `errorKey`, not the localized `error` string.
 
-All Lambda-produced success responses include `success: true` and `requestId`. `message` is present on the routes documented below.
+### Request Body Validation Rules
 
-```json
-{
-  "success": true,
-  "message": "Verification successful",
-  "requestId": "aws-lambda-request-id"
-}
-```
+All JSON routes use the shared `parseBody` helper.
 
-### Request Body Validation
-
-All JSON-body auth routes (`POST /auth/challenges`, `POST /auth/challenges/verify`, `POST /auth/registrations/user`, `POST /auth/registrations/ngo`, `POST /auth/login/ngo`) run their decoded body through the shared `parseBody` helper before any business logic.
-
-The helper returns these standardized `400` `errorKey`s:
-
-| Condition | `errorKey` |
+| Condition | Current `errorKey` |
 | --- | --- |
-| Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
-| Body is missing, `null`, non-object, or an empty object `{}` | `common.missingParams` |
-| Zod schema rejected the body and the first issue message is a dotted i18n key (for example `common.missingBodyParams`, `auth.login.ngo.invalidEmailFormat`, `auth.challenge.codeIncorrect`) | that key |
-| Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
-
-The route-specific 400 keys listed in each endpoint's error table (`common.missingBodyParams`, `common.invalidBodyParams`, `auth.*` keys, etc.) come from the schema messages and are returned by `parseBody` when matched.
-
-Deployed API Gateway may also reject malformed or non-object JSON before Lambda runs with its own `400`. `GET` routes and the `POST /auth/tokens/refresh` route do not use a JSON body and are unaffected.
+| Body is malformed JSON | `common.invalidBodyParams` |
+| Body is missing, `null`, or fails required-field checks in schema | `common.missingBodyParams` or route-specific key depending on schema |
+| Body contains invalid field types or invalid shapes | `common.invalidBodyParams` or route-specific schema key |
+| Unknown extra fields on strict schemas | `common.invalidBodyParams` |
 
 ### Localization
 
-`error` is localized. `errorKey` is the stable integration key.
-
 - Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
 - Default locale in the shared runtime is `en`
-- Success messages are translated using the same request-locale resolution
-- The `lang` field accepted by the email challenge routes affects email content generation, not API response localization
+- `POST /auth/challenges` also inspects body `lang` for email-content localization only; response localization still follows query, cookie, then `Accept-Language`
+
+---
 
 ## Endpoints
 
 ### POST /auth/challenges
 
-Generate a verification challenge. Body must contain either `email` or `phoneNumber`, not both.
+Create an email or SMS verification challenge.
 
-**Lambda:** `auth`  
-**Auth:** `x-api-key` required; no Bearer JWT required  
-**Rate limit:** email `5 / 300s`, SMS `5 / 600s`
+**Lambda owner:** `auth`  
+**Auth:** `x-api-key` only
 
-Deployment note:
+#### Request Body Variants
 
-- This route has an API Gateway request model (`type: object`) in SAM
-- On deployed API Gateway, malformed JSON or non-object JSON can be rejected before Lambda with an API Gateway-generated `400`
+Exactly one of the following body shapes must be used.
 
-**Body variant A: email**
+##### Email Challenge Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `email` | string | Yes | Valid email |
-| `lang` | string | No | Used for email content language; `en` or fallback `zh` |
+| `email` | string | Yes | Valid email address, max 254 chars |
+| `lang` | string | No | Max 16 chars; `en` sends English email content, other values fall back to Chinese content |
 
-**Example**
+#### Email Challenge Example Request
 
 ```json
 {
@@ -162,13 +201,13 @@ Deployment note:
 }
 ```
 
-**Body variant B: SMS**
+##### SMS Challenge Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `phoneNumber` | string | Yes | E.164 format, e.g. `+85291234567` |
+| `phoneNumber` | string | Yes | E.164 format, max 20 chars, e.g. `+85291234567` |
 
-**Example**
+#### SMS Challenge Example Request
 
 ```json
 {
@@ -176,7 +215,16 @@ Deployment note:
 }
 ```
 
-**Success: email (200)**
+#### Rate Limits
+
+| Variant | Policy |
+| --- | --- |
+| Email challenge | IP 20 / 5 min, identifier 3 / 5 min |
+| SMS challenge | IP 20 / 10 min, identifier 3 / 10 min |
+
+#### Success Responses
+
+Email challenge success returns `200`.
 
 ```json
 {
@@ -186,70 +234,54 @@ Deployment note:
 }
 ```
 
-**Success: SMS (201)**
+SMS challenge success returns `201` with the same envelope shape.
 
-```json
-{
-  "success": true,
-  "message": "Verification code generated successfully",
-  "requestId": "aws-lambda-request-id"
-}
-```
+#### Errors
 
-**Errors**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing request body |
-| 400 | `common.missingBodyParams` | Missing required field |
-| 400 | `common.invalidBodyParams` | Invalid email / phone format or wrong union shape |
-| 503 | `auth.challenge.smsServiceUnavailable` | Twilio Verify request failed |
-| 500 | `common.internalError` | Unexpected error |
+| 400 | `common.missingBodyParams` | Missing required identifier field |
+| 400 | `common.invalidBodyParams` | Invalid email, invalid phone number, mixed/invalid union body, or bad `lang` |
+| 429 | `common.rateLimited` | Challenge rate limit exceeded |
+| 503 | `auth.challenge.emailServiceUnavailable` | Email provider failed |
+| 503 | `auth.challenge.smsServiceUnavailable` | SMS provider failed |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### POST /auth/challenges/verify
 
-Verify an email or SMS challenge. Behavior depends on caller context.
+Verify an email or SMS challenge. The response branch depends on whether the caller is already logged in and whether the verified identifier already belongs to an existing active user.
 
-| Context | Result |
-| --- | --- |
-| No JWT, identifier not attached to active user | `verified: true`, `isNewUser: true` |
-| No JWT, identifier belongs to active user | login success, access token returned, refresh cookie set |
-| Valid Bearer JWT present | identifier is linked to caller account |
+**Lambda owner:** `auth`  
+**Auth:** `x-api-key`; Bearer JWT optional for linking
 
-**Lambda:** `auth`  
-**Auth:** `x-api-key` required; Bearer JWT optional for linking  
-**Rate limit:** email `10 / 300s`, SMS `10 / 600s`
+#### Verify Request Body Variants
 
-Deployment note:
-
-- This route has an API Gateway request model (`type: object`) in SAM
-- On deployed API Gateway, malformed JSON or non-object JSON can be rejected before Lambda with an API Gateway-generated `400`
-
-**Body variant A: email**
+##### Email Verify Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `email` | string | Yes | Valid email |
+| `email` | string | Yes | Valid email address |
 | `code` | string | Yes | Exactly 6 digits |
-| `lang` | string | No | Language hint |
+| `lang` | string | No | Max 16 chars; accepted by schema but not used by verify logic for response localization |
 
-**Example**
+#### Email Verify Example Request
 
 ```json
 {
   "email": "user@example.com",
-  "code": "123456"
+  "code": "123456",
+  "lang": "en"
 }
 ```
 
-**Body variant B: SMS**
+##### SMS Verify Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `phoneNumber` | string | Yes | E.164 format |
-| `code` | string | Yes | Twilio Verify code |
+| `code` | string | Yes | SMS verification code |
 
-**Example**
+#### SMS Verify Example Request
 
 ```json
 {
@@ -258,411 +290,418 @@ Deployment note:
 }
 ```
 
-**Success: new user proof (200)**
+#### Branch Behavior
+
+| Condition | Response branch |
+| --- | --- |
+| No Bearer JWT, verified identifier has no active user | `data: { verified: true, isNewUser: true }` |
+| No Bearer JWT, verified identifier belongs to an active user | `data: { verified: true, isNewUser: false, userId, role, isVerified, token }` + refresh cookie |
+| Valid Bearer JWT present | `data: { verified: true, isNewUser: false, userId, role, isVerified, linked: { email } }` or `linked: { phoneNumber }` |
+
+#### Rate Limits And Cooldowns
+
+| Variant | Rate limits | Failure cooldown |
+| --- | --- | --- |
+| Email verify | IP 30 / 5 min, identifier 5 / 5 min | 15 min cooldown after 5 failures |
+| SMS verify | IP 30 / 10 min, identifier 5 / 10 min | 15 min cooldown after 5 failures |
+
+#### Success Example: New User Branch
 
 ```json
 {
   "success": true,
   "message": "Verification successful",
-  "verified": true,
-  "isNewUser": true,
+  "data": {
+    "verified": true,
+    "isNewUser": true
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-No token and no cookie are returned in this branch.
+Frontend action: collect profile fields and call `POST /auth/registrations/user` within 10 minutes.
 
-**Success: existing active user login (200)**
+#### Success Example: Existing User Login Branch
 
 ```json
 {
   "success": true,
   "message": "Verification successful",
-  "verified": true,
-  "isNewUser": false,
-  "userId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "role": "user",
-  "isVerified": true,
-  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "data": {
+    "verified": true,
+    "isNewUser": false,
+    "userId": "665f1a2b3c4d5e6f7a8b9c0d",
+    "role": "user",
+    "isVerified": true,
+    "token": "eyJhbGciOiJIUzI1NiIs..."
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
 Also sets `Set-Cookie: refreshToken=...`.
 
-Implementation note:
-
-- This branch currently looks up any active `User` record by email or phone, not only `role: "user"`
-- The response `role` mirrors the matched user document
-- The token issued by this branch is always created via `issueUserAccessToken(...)`, so NGO-specific claims like `ngoId` and `ngoName` are not attached here
-- NGO clients should use `POST /auth/login/ngo` for supported NGO login
-
-**Success: linking email or phone to logged-in caller (200)**
+#### Success Example: Linking Branch
 
 ```json
 {
   "success": true,
   "message": "Verification successful",
-  "verified": true,
-  "isNewUser": false,
-  "userId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "role": "user",
-  "isVerified": true,
-  "linked": {
-    "email": "user@example.com"
+  "data": {
+    "verified": true,
+    "isNewUser": false,
+    "userId": "665f1a2b3c4d5e6f7a8b9c0d",
+    "role": "user",
+    "isVerified": true,
+    "linked": {
+      "email": "user@example.com"
+    }
   },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-`linked` contains either `email` or `phoneNumber`, depending on the verified identifier.
+For SMS linking, `linked` contains `phoneNumber` instead.
 
-**Errors**
+#### Verify Errors
 
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing request body |
-| 400 | `common.missingBodyParams` | Missing required field |
-| 400 | `common.invalidBodyParams` | Invalid email / phone / code format or wrong union shape |
-| 400 | `auth.challenge.verificationFailed` | Email verification code not found, expired, consumed, or mismatched |
-| 400 | `auth.challenge.codeIncorrect` | SMS code incorrect |
-| 400 | `auth.challenge.codeExpired` | SMS code expired or canceled |
-| 401 | `common.unauthorized` | Invalid Bearer token supplied for linking |
-| 409 | `auth.challenge.emailAlreadyLinked` | Email already belongs to another active user |
-| 409 | `auth.challenge.phoneAlreadyLinked` | Phone already belongs to another active user |
-| 429 | `common.rateLimited` | Per-identifier verify rate limit exceeded |
-| 503 | `auth.challenge.smsServiceUnavailable` | SMS verification provider failed |
-| 500 | `common.internalError` | Unexpected error |
+| 400 | `common.missingBodyParams` | Missing required identifier or `code` |
+| 400 | `common.invalidBodyParams` | Invalid email, phone, or code format |
+| 400 | `auth.challenge.verificationFailed` | Email verification record missing, expired, consumed, or wrong code |
+| 400 | `auth.challenge.codeIncorrect` | SMS verify status returned `pending` |
+| 400 | `auth.challenge.codeExpired` | SMS verify status returned `expired` or `canceled` |
+| 400 | `auth.challenge.verificationFailed` | SMS verify returned another non-approved status not mapped to a more specific key |
+| 401 | `common.unauthorized` | Linking branch received invalid JWT or current user no longer exists |
+| 409 | `auth.challenge.emailAlreadyLinked` | Email already belongs to another user during linking |
+| 409 | `auth.challenge.phoneAlreadyLinked` | Phone already belongs to another user during linking |
+| 429 | `common.rateLimited` | Rate limit or failure cooldown exceeded |
+| 503 | `auth.challenge.smsServiceUnavailable` | SMS verify provider unavailable |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### POST /auth/registrations/user
 
-Create a normal user account after recent verification proof exists. The backend accepts either recent email proof, recent phone proof, or both. Verification proof must have been consumed within the previous 10 minutes.
+Create a normal user after a successful recent email or phone verification.
 
-**Lambda:** `auth`  
-**Auth:** `x-api-key` required; no Bearer JWT required  
-**Rate limit:** `12 / 10 minutes` per caller
+**Lambda owner:** `auth`  
+**Auth:** `x-api-key` only  
+**Precondition:** a matching email or phone verification must have been consumed within the last 10 minutes
 
-Deployment note:
+Current implementation caveat: the source schema for this route is currently miswired and fails request validation before the registration logic runs. The field list and downstream behavior below describe the intended request shape and business logic that the handler is written to apply once that validator defect is corrected.
 
-- This route has an API Gateway request model (`type: object`) in SAM
-- On deployed API Gateway, malformed JSON or non-object JSON can be rejected before Lambda with an API Gateway-generated `400`
+#### Request Body
 
-**Body**
+At least one of `email` or `phoneNumber` must be present.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `firstName` | string | Yes | Non-empty |
-| `lastName` | string | Yes | Non-empty |
-| `email` | string | Conditionally | Optional, but at least one of `email` or `phoneNumber` must be present |
-| `phoneNumber` | string | Conditionally | Optional, but at least one of `email` or `phoneNumber` must be present |
-| `subscribe` | boolean or string | No | `1`, `true`, `yes`, `on` become `true`; other non-empty values become `false` |
-| `promotion` | boolean | No | Defaults to `false` if omitted |
-| `district` | string, `null`, or `""` | No | Empty string normalizes to falsy input |
-| `image` | string, `null`, or `""` | No | Must be `http` or `https` URL when present |
-| `birthday` | string, `null`, or `""` | No | Any JavaScript-parseable date string accepted; stored as `Date` |
-| `gender` | string, `null`, or `""` | No | Stored as provided or empty string |
+| `firstName` | string | Yes | 1-100 chars |
+| `lastName` | string | Yes | 1-100 chars |
+| `email` | string | Conditional | Valid email; one of `email` or `phoneNumber` is required |
+| `phoneNumber` | string | Conditional | E.164 format; one of `email` or `phoneNumber` is required |
+| `subscribe` | boolean or string | No | Passed through boolean-ish parsing on create |
+| `promotion` | boolean | No | Defaults to `false` when omitted |
+| `district` | string | No | Max 100 chars |
+| `image` | string | No | Must be `http` or `https` URL |
+| `birthday` | string | No | Must parse as a valid date |
+| `gender` | string | No | Business logic writes empty string when omitted |
 
-**Example**
+#### User Registration Example Request
 
 ```json
 {
   "firstName": "Jane",
-  "lastName": "Doe",
+  "lastName": "Ng",
   "email": "jane@example.com",
   "phoneNumber": "+85291234567",
   "subscribe": true,
   "promotion": false,
-  "district": "Kowloon",
+  "district": "Wan Chai",
   "image": "https://cdn.example.com/avatar.jpg",
-  "birthday": "1995-08-17",
+  "birthday": "1995-06-15T00:00:00.000Z",
   "gender": "female"
 }
 ```
 
-**Success (201)**
+#### User Registration Rate Limits
+
+IP 12 / 10 min, identifier 3 / 60 min, IP+identifier 5 / 10 min.
+
+#### Success (201)
 
 ```json
 {
   "success": true,
   "message": "Registration successful",
-  "userId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "role": "user",
-  "isVerified": true,
-  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "data": {
+    "userId": "665f1a2b3c4d5e6f7a8b9c0d",
+    "role": "user",
+    "isVerified": true,
+    "token": "eyJhbGciOiJIUzI1NiIs..."
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
 Also sets `Set-Cookie: refreshToken=...`.
 
-**Side effects**
+#### User Registration Errors
 
-- Creates a `User` with role `user`
-- Sets `verified: true`
-- Seeds default credits: `credit`, `vetCredit`, `eyeAnalysisCredit`, `bloodAnalysisCredit` all start at `300`
-- Deletes the consumed verification proof records for provided email / phone
-
-**Errors**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing request body |
-| 400 | `common.missingBodyParams` | Missing required name fields or both identifier fields absent |
-| 400 | `common.invalidBodyParams` | Invalid email, phone, image URL, or birthday |
-| 403 | `auth.registration.user.verificationRequired` | No recent consumed verification proof found |
-| 409 | `auth.registration.user.emailAlreadyRegistered` | Active user with same email already exists |
-| 409 | `auth.registration.user.phoneAlreadyRegistered` | Active user with same phone already exists |
+| 400 | `common.missingBodyParams` | Missing required fields or both `email` and `phoneNumber` absent |
+| 400 | `common.invalidBodyParams` | Invalid email, phone, birthday, image URL, or other schema mismatch |
+| 403 | `auth.registration.user.verificationRequired` | No recent verification proof within the 10-minute window |
+| 409 | `auth.registration.user.emailAlreadyRegistered` | Active user already owns the email |
+| 409 | `auth.registration.user.phoneAlreadyRegistered` | Active user already owns the phone number |
 | 429 | `common.rateLimited` | Registration rate limit exceeded |
-| 500 | `common.internalError` | Unexpected error |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### POST /auth/registrations/ngo
 
-Create the NGO admin user, NGO profile, NGO access record, and NGO counter in one MongoDB transaction. This route does not depend on email/SMS verification proof.
+Create an NGO account bundle: user, NGO profile, NGO access row, and NGO counter.
 
-**Lambda:** `auth`  
-**Auth:** `x-api-key` required; no Bearer JWT required  
-**Rate limit:** `8 / 10 minutes` per caller
+**Lambda owner:** `auth`  
+**Auth:** `x-api-key` only
 
-Deployment note:
-
-- This route has an API Gateway request model (`type: object`) in SAM
-- On deployed API Gateway, malformed JSON or non-object JSON can be rejected before Lambda with an API Gateway-generated `400`
-
-**Body**
+#### NGO Registration Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `firstName` | string | Yes | Non-empty |
-| `lastName` | string | Yes | Non-empty |
-| `email` | string | Yes | Valid email |
+| `firstName` | string | Yes | 1-100 chars |
+| `lastName` | string | Yes | 1-100 chars |
+| `email` | string | Yes | Valid email, max 254 chars |
 | `phoneNumber` | string | Yes | E.164 format |
-| `password` | string | Yes | Minimum 8 chars |
-| `confirmPassword` | string | Yes | Must exactly match `password` |
-| `ngoName` | string | Yes | Non-empty |
-| `ngoPrefix` | string | Yes | Non-empty, max 5 chars; stored uppercased in `NgoCounters` |
-| `businessRegistrationNumber` | string | Yes | Unique per NGO |
-| `address.street` | string | No | Defaults to empty string when omitted |
-| `address.city` | string | No | Defaults to empty string when omitted |
-| `address.state` | string | No | Defaults to empty string when omitted |
-| `address.zipCode` | string | No | Defaults to empty string when omitted |
-| `address.country` | string | No | Defaults to empty string when omitted |
-| `description` | string, `null`, or `""` | No | |
-| `website` | string, `null`, or `""` | No | |
-| `subscribe` | boolean or string | No | `1`, `true`, `yes`, `on` become `true`; other non-empty values become `false` |
+| `password` | string | Yes | 8-128 chars |
+| `confirmPassword` | string | Yes | Must match `password` |
+| `ngoName` | string | Yes | 1-200 chars |
+| `ngoPrefix` | string | Yes | 1-5 chars; stored uppercased in NGO counter |
+| `businessRegistrationNumber` | string | Yes | 1-64 chars |
+| `address.street` | string | No | Max 200 chars |
+| `address.city` | string | No | Max 100 chars |
+| `address.state` | string | No | Max 100 chars |
+| `address.zipCode` | string | No | Max 20 chars |
+| `address.country` | string | No | Max 100 chars |
+| `description` | string | No | Max 2000 chars |
+| `website` | string | No | Max 2048 chars |
+| `subscribe` | boolean or string | No | Boolean-ish input accepted |
 
-**Example**
+Important integration rule: `address` must be a structured object. The legacy string-only address payload is rejected.
+
+#### NGO Registration Example Request
 
 ```json
 {
-  "firstName": "Ada",
-  "lastName": "Wong",
+  "firstName": "Ngo",
+  "lastName": "Admin",
   "email": "admin@helpingpaws.org",
-  "phoneNumber": "+85291234567",
-  "password": "strongpassword",
-  "confirmPassword": "strongpassword",
+  "phoneNumber": "+85261234567",
+  "password": "Password123!",
+  "confirmPassword": "Password123!",
   "ngoName": "Helping Paws",
   "ngoPrefix": "HP",
-  "businessRegistrationNumber": "BR-12345",
+  "businessRegistrationNumber": "BR-HELPING-PAWS-001",
   "address": {
-    "street": "1 Example Street",
+    "street": "1 Test Street",
     "city": "Hong Kong",
-    "state": "",
-    "zipCode": "",
-    "country": "HK"
+    "state": "HK",
+    "zipCode": "00000",
+    "country": "Hong Kong"
   },
   "description": "Animal rescue NGO",
   "website": "https://helpingpaws.org",
-  "subscribe": true
+  "subscribe": false
 }
 ```
 
-**Success (201)**
+#### NGO Registration Rate Limits
+
+IP 8 / 10 min, identifier 3 / 60 min, IP+identifier 5 / 10 min.
+
+#### NGO Registration Success (201)
 
 ```json
 {
   "success": true,
   "message": "NGO registration successful",
-  "userId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "role": "ngo",
-  "isVerified": true,
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "ngoId": "665f1a2b3c4d5e6f7a8b9c0e",
-  "ngoUserAccessId": "665f1a2b3c4d5e6f7a8b9c0f",
-  "ngoCounterId": "665f1a2b3c4d5e6f7a8b9c10",
+  "data": {
+    "userId": "665f1a2b3c4d5e6f7a8b9c0d",
+    "role": "ngo",
+    "isVerified": true,
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "ngoId": "665f1a2b3c4d5e6f7a8b9c0e",
+    "ngoUserAccessId": "665f1a2b3c4d5e6f7a8b9c0f",
+    "ngoCounterId": "665f1a2b3c4d5e6f7a8b9c10"
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
 Also sets `Set-Cookie: refreshToken=...`.
 
-**Transactional side effects**
+#### NGO Registration Errors
 
-- Creates `User` with role `ngo`
-- Creates `NGO` with `isVerified: true` and `isActive: true`
-- Creates `NgoUserAccess` with `roleInNgo: "admin"` and `isActive: true`
-- Creates `NgoCounters` with `counterType: "ngopet"`
-
-**Errors**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing request body |
-| 400 | `common.missingBodyParams` | Missing required fields |
-| 400 | `common.invalidBodyParams` | Invalid email, phone, password confirmation, or malformed body |
-| 409 | `auth.registration.user.emailAlreadyRegistered` | Email already belongs to an active user |
-| 409 | `auth.registration.user.phoneAlreadyRegistered` | Phone already belongs to an active user |
-| 409 | `auth.registration.ngo.businessRegistrationAlreadyRegistered` | NGO registration number already exists |
+| 400 | `common.missingBodyParams` | Missing required registration field |
+| 400 | `common.invalidBodyParams` | Invalid email, phone, password mismatch, invalid address object, or other schema mismatch |
+| 409 | `auth.registration.user.emailAlreadyRegistered` | Existing active user already owns the email |
+| 409 | `auth.registration.user.phoneAlreadyRegistered` | Existing active user already owns the phone number |
+| 409 | `auth.registration.ngo.businessRegistrationAlreadyRegistered` | NGO already exists with this registration number |
 | 429 | `common.rateLimited` | Registration rate limit exceeded |
-| 500 | `common.internalError` | Unexpected error or transaction failure |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### POST /auth/login/ngo
 
-Password login for an existing NGO admin/staff user.
+NGO email/password login.
 
-**Lambda:** `auth`  
-**Auth:** `x-api-key` required; no Bearer JWT required  
-**Rate limit:** `10 / 15 minutes` per normalized email
+**Lambda owner:** `auth`  
+**Auth:** `x-api-key` only
 
-Deployment note:
-
-- This route has an API Gateway request model (`type: object`) in SAM
-- On deployed API Gateway, malformed JSON or non-object JSON can be rejected before Lambda with an API Gateway-generated `400`
-
-**Body**
+#### NGO Login Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `email` | string | Yes | Valid email |
-| `password` | string | Yes | Non-empty |
+| `email` | string | Yes | Valid email format |
+| `password` | string | Yes | 1-128 chars |
 
-**Example**
+#### NGO Login Example Request
 
 ```json
 {
   "email": "admin@helpingpaws.org",
-  "password": "strongpassword"
+  "password": "Password123!"
 }
 ```
 
-**Success (200)**
+#### Rate Limits And Cooldown
+
+- IP 60 / 15 min
+- Identifier 10 / 15 min
+- Failure cooldown: 15 min after 5 failed credential attempts for the same email
+
+#### Success (200)
 
 ```json
 {
   "success": true,
   "message": "Login successful",
-  "userId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "role": "ngo",
-  "isVerified": true,
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "ngoId": "665f1a2b3c4d5e6f7a8b9c0e",
+  "data": {
+    "userId": "665f1a2b3c4d5e6f7a8b9c0d",
+    "role": "ngo",
+    "isVerified": true,
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "ngoId": "665f1a2b3c4d5e6f7a8b9c0e"
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
 Also sets `Set-Cookie: refreshToken=...`.
 
-**Requirements and branch rules**
+#### NGO Login Errors
 
-- User lookup requires `role: "ngo"` and `deleted: false`
-- Password is checked with bcrypt
-- The user must have an active `NgoUserAccess`
-- The linked NGO must exist and must be both `isActive: true` and `isVerified: true`
-
-**Errors**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing request body |
 | 400 | `auth.login.ngo.invalidEmailFormat` | Invalid email format |
 | 400 | `auth.login.ngo.paramsMissing` | Missing password |
-| 401 | `auth.login.ngo.invalidUserCredential` | User not found or password mismatch |
-| 403 | `auth.login.ngo.userNGONotFound` | User has no active NGO access record |
-| 403 | `auth.login.ngo.ngoApprovalRequired` | Linked NGO exists but is inactive or unverified |
-| 429 | `common.rateLimited` | Login rate limit exceeded |
-| 500 | `auth.login.ngo.NGONotFound` | Active access exists but NGO record missing |
-| 500 | `common.internalError` | Unexpected error |
+| 401 | `auth.login.ngo.invalidUserCredential` | Wrong email/password combination |
+| 403 | `auth.login.ngo.userNGONotFound` | User exists but has no active NGO access row |
+| 403 | `auth.login.ngo.ngoApprovalRequired` | NGO exists but is inactive or unverified |
+| 429 | `common.rateLimited` | Login rate limit or cooldown exceeded |
+| 500 | `auth.login.ngo.NGONotFound` | Active NGO access references a missing NGO record |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### POST /auth/tokens/refresh
 
-Exchange a refresh-token cookie for a new access token and a rotated refresh cookie.
+Rotate the refresh-token cookie and issue a new access token.
 
-**Lambda:** `auth`  
-**Auth:** `x-api-key` + refresh token cookie  
-**Rate limit:** configurable, default template values are `20 / 300s`
+**Lambda owner:** `auth`  
+**Auth:** `x-api-key` + refresh cookie  
+**Request body:** none
 
-**Request**
-
-No JSON body is required.
-
-Header example:
+#### Request Requirements
 
 ```http
 Cookie: refreshToken=<token>
 ```
 
-**Success (200)**
+#### Refresh Rate Limits And Cooldown
+
+- IP 60 / 5 min
+- Identifier limit is environment-driven through `REFRESH_RATE_LIMIT_LIMIT` and `REFRESH_RATE_LIMIT_WINDOW_SEC`
+- Failure cooldown: 30 min after 10 failed refresh attempts from the same IP-scoped identifier bucket
+
+#### Refresh Success (200)
 
 ```json
 {
   "success": true,
-  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-  "id": "665f1a2b3c4d5e6f7a8b9c0d",
+  "message": "Completed successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+    "id": "665f1a2b3c4d5e6f7a8b9c0d"
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-Also sets a new `Set-Cookie: refreshToken=...`.
+Also sets a new `refreshToken` cookie.
 
-**Behavior notes**
+#### Refresh Errors
 
-- Missing cookie is rejected before DB lookup
-- Refresh token record is deleted on use
-- Expired or unknown refresh token returns `401`
-- NGO refresh rebuilds an NGO-scoped access token only if active NGO access and an active+verified NGO still exist
-
-**Errors**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 | `auth.refresh.missingRefreshToken` | No cookie header or cookie array provided |
-| 401 | `auth.refresh.invalidRefreshTokenCookie` | Cookie header exists but `refreshToken` is missing / malformed |
-| 401 | `auth.refresh.invalidSession` | Refresh token expired, missing, spent, user deleted, or NGO access missing |
-| 403 | `auth.refresh.ngoApprovalRequired` | NGO user exists but linked NGO is inactive or unverified |
-| 429 | `common.rateLimited` | Refresh rate limit exceeded |
-| 500 | `common.internalError` | Unexpected error |
+| 401 | `auth.refresh.missingRefreshToken` | No `refreshToken` cookie/header value was present |
+| 401 | `auth.refresh.invalidRefreshTokenCookie` | Cookie header existed but did not contain a parseable `refreshToken` |
+| 401 | `auth.refresh.invalidSession` | Token record missing, token expired, token already used, or user no longer exists |
+| 403 | `auth.refresh.ngoApprovalRequired` | Refresh belongs to NGO user whose NGO is inactive or unverified |
+| 429 | `common.rateLimited` | Refresh rate limit or cooldown exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
+
+---
 
 ## Frontend Integration Guide
 
-### Normal User Login / Register
+### New User Login / Registration
+
+1. Call `POST /auth/challenges`
+2. Prompt for verification code
+3. Call `POST /auth/challenges/verify`
+4. If `data.isNewUser === true`, collect first name / last name plus email or phone and call `POST /auth/registrations/user`
+5. Save the returned access token from `data.token`
+6. Allow credentials so the refresh cookie is stored
+
+### Returning User Login
 
 1. Call `POST /auth/challenges`
 2. Call `POST /auth/challenges/verify`
-3. If response includes `token`, treat as logged in
-4. If response returns `isNewUser: true`, collect profile fields and call `POST /auth/registrations/user`
-5. Store access token client-side and allow browser to retain refresh cookie
+3. Read `data.token` and persist it client-side
+4. Ensure the browser accepts the refresh cookie
 
-### Identifier Linking
+### Linking Flow
 
-1. User is already logged in with Bearer token
-2. Call `POST /auth/challenges`
-3. Call `POST /auth/challenges/verify` with the same Bearer token
-4. Check `linked.email` or `linked.phoneNumber`
+1. Send the current access token in `Authorization`
+2. Re-run challenge + verify using the new email or phone
+3. On success, update the local account view from `data.linked`
 
-### NGO Login
+### Refresh Handling
 
-1. First-time onboarding uses `POST /auth/registrations/ngo`
-2. Later sign-ins use `POST /auth/login/ngo`
-3. If refresh later returns `auth.refresh.ngoApprovalRequired`, force logout and show NGO approval state
+1. When access token expires, call `POST /auth/tokens/refresh`
+2. On `200`, replace the stored access token with `data.accessToken`
+3. On `401 auth.refresh.missingRefreshToken`, `auth.refresh.invalidRefreshTokenCookie`, or `auth.refresh.invalidSession`, clear local auth state and redirect to login
+4. On `403 auth.refresh.ngoApprovalRequired`, log out and show approval-required UI for NGO users
 
-Do not rely on challenge verification as the NGO login path. The implemented verify branch does not attach NGO-specific JWT claims.
+---
 
-## Testing Notes
+## Verification Snapshot
 
-- Challenge generation and verification have different email and SMS rate-limit windows
-- `POST /auth/challenges/verify` is the most branch-heavy route; test new-user, existing-user, and linking flows separately
-- Refresh is single-use by design, so replaying the same cookie should fail with `401 auth.refresh.invalidSession`
+Auth behavior is currently evidenced by:
 
-## Known Contract Edges
+- `template.yaml` route wiring for all `/auth/*` routes
+- `functions/auth/src/services/*.ts` and matching Zod schemas
+- `__tests__/ngo.test.js` for NGO registration/login happy paths, validation failures, duplicate handling, and approval gating
+- `__tests__/user.test.js` for the delete-then-refresh invalidation path on `/auth/tokens/refresh`
 
-- Invalid JSON bodies are first passed through the shared handler as raw strings, then through the shared `parseBody` helper. Auth routes use the helper's defaults, so malformed JSON consistently surfaces as `400 common.invalidBodyParams` rather than a dedicated `common.invalidJSON` key
-- In non-production deployments where `ALLOWED_ORIGINS='*'`, the shared CORS helper returns `Access-Control-Allow-Origin: *` without `Access-Control-Allow-Credentials`; browser cookie-based refresh flows can therefore require explicit allowed origins instead of wildcard CORS
+There is no single dedicated auth challenge / normal-user registration suite yet. Challenge creation, challenge verification, and user-registration details are currently grounded primarily in the wired DDD implementation and schemas rather than a dedicated end-to-end auth test file.

@@ -189,10 +189,16 @@ Parameters:
     Type: String
     Default: ''
     NoEcho: true
+  LambdaReservedConcurrency:
+    Type: Number
+    Default: 50
+    Description: Reserved concurrent execution limit per Lambda function. Set to a value appropriate for your account concurrency quota.
 
 Globals: # shared default settings applied to all resources of a given type, unless a resource overrides them.
   Function:
     Runtime: nodejs22.x
+    Architectures:
+      - arm64 # Graviton2: ~20% cheaper compute, faster cold start vs x86_64
     Timeout: 10
     MemorySize: 256
     VpcConfig:
@@ -209,15 +215,24 @@ Globals: # shared default settings applied to all resources of a given type, unl
         MONGODB_URI: !Ref MongoDbUri
         AUTH_BYPASS: !Ref AuthBypass
         JWT_SECRET: !Ref JwtSecret
+    ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
 
 Resources:
   RestApi:
     Type: AWS::Serverless::Api
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_120
+            comment: "API Gateway stage caching adds per-request cost; not required for this project"
+          - id: CKV_AWS_173
+            comment: "Lambda env vars encrypted with AWS-managed key; custom KMS adds cost"
     Properties:
       Name: !Sub '${ProjectName}-${StageName}'
       StageName: !Ref StageName
       EndpointConfiguration: REGIONAL
       ApiKeySourceType: HEADER
+      TracingEnabled: true
       BinaryMediaTypes:
         - 'multipart/form-data' # causes API GW to base64-encode multipart bodies (consistent 33% overhead) instead of UTF-8-encoding binary content (variable up to ~1.5x overhead), making the Lambda 6 MB invocation limit predictable
       Models: # request/response schemas, validates the request body before Lambda runs
@@ -281,6 +296,7 @@ Resources:
   SharedFunctionRole: # default app Lambda permissions, 
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-shared'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -297,6 +313,7 @@ Resources:
   PetProfileFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-pet-profile'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -317,12 +334,12 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
                 Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
 
   PetRecoveryFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-pet-recovery'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -343,12 +360,12 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
                 Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
 
   PetAnalysisFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-pet-analysis'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -369,12 +386,16 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
-                Resource: !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/*'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/breed_analysis/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/eye/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/profile/*'
 
   AuthorizerFunctionRole: # the IAM role for the authorizer Lambda only - RequestAuthorizerFunction
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-authorizer'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -487,6 +508,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-auth'
       CodeUri: dist/functions/auth/
       Handler: index.handler
+      MemorySize: 512 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -732,6 +754,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
       CodeUri: dist/functions/pet-profile/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetProfileFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -749,10 +772,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/profile
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetProfileCreateOPTIONS:
           Type: Api
           Properties:
@@ -774,10 +793,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/profile/{petId}
             Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetProfileByIdDELETE:
           Type: Api
           Properties:
@@ -1245,6 +1260,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-analysis'
       CodeUri: dist/functions/pet-analysis/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetAnalysisFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -1275,10 +1291,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/eye/{identifier}
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetAnalysisEyePATCH:
           Type: Api
           Properties:
@@ -1305,20 +1317,12 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/uploads/image
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetAnalysisUploadBreedImagePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/uploads/breed-image
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetAnalysisEyeOPTIONS:
           Type: Api
           Properties:
@@ -1362,6 +1366,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-recovery'
       CodeUri: dist/functions/pet-recovery/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetRecoveryFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -1385,10 +1390,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/recovery/lost
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetRecoveryLostListOPTIONS:
           Type: Api
           Properties:
@@ -1425,10 +1426,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/recovery/found
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         PetRecoveryFoundListOPTIONS:
           Type: Api
           Properties:
@@ -1709,6 +1706,7 @@ Resources:
   CommerceOrdersFunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub '${ProjectName}-${StageName}-commerce-orders'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1729,7 +1727,6 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:PutObjectAcl
                 Resource:
                   - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/orders/*'
                   - !Sub 'arn:aws:s3:::${S3BucketName}/qr-codes/*'
@@ -1740,6 +1737,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-commerce-orders'
       CodeUri: dist/functions/commerce-orders/
       Handler: index.handler
+      MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt CommerceOrdersFunctionRole.Arn
       Layers:
         - !Ref SharedRuntimeLayer
@@ -1771,10 +1769,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/orders
             Method: POST
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
         CommerceOrdersOperationsGET:
           Type: Api
           Properties:
@@ -1828,9 +1822,6 @@ Resources:
       AutoPublishAliasAllProperties: true
       Environment:
         Variables:
-          AWS_BUCKET_NAME: !Ref S3BucketName
-          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
-          AWS_BUCKET_REGION: !Ref S3BucketRegion
           SMTP_HOST: !Ref CommerceSmtpHost
           SMTP_PORT: !Ref CommerceSmtpPort
           SMTP_USER: !Ref CommerceSmtpUser
@@ -1984,6 +1975,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /logistics/token
             Method: POST
+            Auth:
+              Authorizer: NONE
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false

@@ -1,55 +1,55 @@
-<!-- markdownlint-disable MD024 -->
 # Pet Medical API
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-Clinical record management for a pet across four sub-domains: general medical visits, medications, deworming, and blood tests. All endpoints are protected. Callers must be the pet owner or the NGO associated with the pet.
+**Lambda:** `aws-ddd-api-{stage}-pet-medical`
 
-> Conventions: [README.md](../../api_docs/development/../../../AWS_API/dev_docs/api_docs/README.md)
+Medical record management for pets across four sub-domains:
+
+- general medical records
+- medication records
+- deworming records
+- blood test records
+
+All routes in this document require `x-api-key` and a Bearer JWT. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe `form.medical`, `form.medication`, or delete responses with record ids are stale.
 
 ---
 
 ## Overview
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/pet/medical/{petId}/general` | List general medical records |
-| POST | `/pet/medical/{petId}/general` | Create a general medical record |
-| PATCH | `/pet/medical/{petId}/general/{medicalId}` | Update a general medical record |
-| DELETE | `/pet/medical/{petId}/general/{medicalId}` | Delete a general medical record |
-| GET | `/pet/medical/{petId}/medication` | List medication records |
-| POST | `/pet/medical/{petId}/medication` | Create a medication record |
-| PATCH | `/pet/medical/{petId}/medication/{medicationId}` | Update a medication record |
-| DELETE | `/pet/medical/{petId}/medication/{medicationId}` | Delete a medication record |
-| GET | `/pet/medical/{petId}/deworming` | List deworming records |
-| POST | `/pet/medical/{petId}/deworming` | Create a deworming record |
-| PATCH | `/pet/medical/{petId}/deworming/{dewormId}` | Update a deworming record |
-| DELETE | `/pet/medical/{petId}/deworming/{dewormId}` | Delete a deworming record |
-| GET | `/pet/medical/{petId}/blood-test` | List blood test records |
-| POST | `/pet/medical/{petId}/blood-test` | Create a blood test record |
-| PATCH | `/pet/medical/{petId}/blood-test/{bloodTestId}` | Update a blood test record |
-| DELETE | `/pet/medical/{petId}/blood-test/{bloodTestId}` | Delete a blood test record |
+### Route Summary
 
-**Lambda:** `pet-medical`
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/pet/medical/{petId}/general` | `x-api-key` + Bearer JWT | List general medical records |
+| POST | `/pet/medical/{petId}/general` | `x-api-key` + Bearer JWT | Create general medical record |
+| PATCH | `/pet/medical/{petId}/general/{medicalId}` | `x-api-key` + Bearer JWT | Update general medical record |
+| DELETE | `/pet/medical/{petId}/general/{medicalId}` | `x-api-key` + Bearer JWT | Delete general medical record |
+| GET | `/pet/medical/{petId}/medication` | `x-api-key` + Bearer JWT | List medication records |
+| POST | `/pet/medical/{petId}/medication` | `x-api-key` + Bearer JWT | Create medication record |
+| PATCH | `/pet/medical/{petId}/medication/{medicationId}` | `x-api-key` + Bearer JWT | Update medication record |
+| DELETE | `/pet/medical/{petId}/medication/{medicationId}` | `x-api-key` + Bearer JWT | Delete medication record |
+| GET | `/pet/medical/{petId}/deworming` | `x-api-key` + Bearer JWT | List deworming records |
+| POST | `/pet/medical/{petId}/deworming` | `x-api-key` + Bearer JWT | Create deworming record |
+| PATCH | `/pet/medical/{petId}/deworming/{dewormId}` | `x-api-key` + Bearer JWT | Update deworming record |
+| DELETE | `/pet/medical/{petId}/deworming/{dewormId}` | `x-api-key` + Bearer JWT | Delete deworming record |
+| GET | `/pet/medical/{petId}/blood-test` | `x-api-key` + Bearer JWT | List blood test records |
+| POST | `/pet/medical/{petId}/blood-test` | `x-api-key` + Bearer JWT | Create blood test record |
+| PATCH | `/pet/medical/{petId}/blood-test/{bloodTestId}` | `x-api-key` + Bearer JWT | Update blood test record |
+| DELETE | `/pet/medical/{petId}/blood-test/{bloodTestId}` | `x-api-key` + Bearer JWT | Delete blood test record |
 
----
-
-## Integration-Critical Contract Notes
+### Integration-Critical Behavior
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Route paths | Paths use `/pet/medical/{petId}/{sub-domain}`, not the legacy `/pets/{petID}/medical-record` etc. |
-| HTTP methods | PATCH is used for updates. PUT is not wired. `PUT` requests will receive `403` or `405`. |
-| All routes protected | Every route requires `x-api-key` + Bearer JWT. There are no public routes in this Lambda. |
-| Pet sync counters | The DDD implementation does **not** increment `Pet.medicationRecordsCount`, `dewormRecordsCount`, `bloodTestRecordsCount`, or related fields on the Pet document. This is a deliberate delta from legacy behavior. |
-| Strict body schema | All POST and PATCH bodies are validated with strict Zod schemas. Unknown fields cause `400`. |
-| Date input | Accepts `DD/MM/YYYY`, `YYYY-MM-DD`, or full ISO 8601. Both date formats produce an ISO `Date` in the DB. |
-| Date output | Stored dates are returned as ISO 8601 strings from MongoDB. |
-| List response envelope | GET list responses wrap records inside `form.medical`, `form.medication`, `form.deworm`, or `form.blood_test` depending on sub-domain. |
-| Create response | Returns `201` with `medicalRecordId` / `medicationRecordId` / `dewormRecordId` / `bloodTestRecordId` and a `form` object with the newly created record. |
-| Update response | Returns `200` with the updated record in `form`. |
-| Delete response | Returns `200`. No record body is returned — only `petId` and the record ID. |
-| Sanitization | `__v`, `createdAt`, and `updatedAt` are stripped from all returned records. |
+| Shared CRUD pattern | All four sub-domains use the same list/create/update/delete contract shape |
+| List response | Every GET list route returns `data: Record[]` plus `pagination` |
+| Create response | Every POST route returns the created record in `data` |
+| Update response | Every PATCH route returns the updated record in `data` |
+| Delete response | Every DELETE route returns success metadata only, with no `data` |
+| Record sanitization | `__v`, `createdAt`, and `updatedAt` are stripped before records are returned |
+| Strict schemas | All POST and PATCH bodies are strict; extra fields are rejected with `common.invalidBodyParams` |
+| Date validation | Date strings are validated separately after body parsing; invalid values return sub-domain-specific `invalidDateFormat` keys |
 
 ---
 
@@ -57,167 +57,246 @@ Clinical record management for a pet across four sub-domains: general medical vi
 
 ### API Gateway Requirements
 
-All routes require a valid API Gateway API key.
+All `pet-medical` routes inherit the API-key requirement and token authorizer.
 
-| Route group | API key required | Authorizer |
+| Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| All `GET`, `POST`, `PATCH`, `DELETE` routes | Yes | `DddTokenAuthorizer` |
-| `OPTIONS` preflight routes | No | None |
+| All GET / POST / PATCH / DELETE `pet-medical` routes | Yes | `DddTokenAuthorizer` |
+| All `OPTIONS` `pet-medical` routes | No | None |
 
-Protected deployed requests must include:
+Protected deployed requests must send:
 
 ```http
 x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
+```
+
+POST and PATCH requests must also send:
+
+```http
 Content-Type: application/json
 ```
 
-`OPTIONS` preflight requests return `204` with CORS headers and do not require `x-api-key`.
+### Authorization Rules
 
-### Authorization and Ownership
-
-All routes require a valid Bearer JWT. The Lambda authorizes access when either condition is met:
+The handler loads the target pet and authorizes the caller when either condition is true:
 
 - `pet.userId === jwt.userId`
 - `pet.ngoId === jwt.ngoId`
 
-`admin` and `developer` roles are privileged and bypass ownership checks.
+If `{petId}` is missing or invalid, the route returns `400 common.invalidObjectId`.
 
-Auth failure behavior:
+If the pet does not exist or is soft-deleted, the route returns `404 petMedical.errors.petNotFound`.
 
-- Missing or invalid JWT: `401 common.unauthorized` (or `403` depending on API Gateway authorizer flow)
-- JWT valid but caller does not own the pet: `403 common.forbidden`
-- Pet not found or soft-deleted: `404 petMedicalRecord.errors.petNotFound`
-
-### Localization
-
-- Locale priority: `?lang` / `?locale` query param → `language` / `lang` cookie → `Accept-Language` header → default `en`
-- `errorKey` is always stable and language-independent — use it for integration logic
+If the pet exists but the caller does not own it, the route returns `403 common.forbidden`.
 
 ### Rate Limits
 
-Limits are per `userId`.
+| Action | Policy |
+| --- | --- |
+| Create any medical record | IP 60 / 300s, identifier 30 / 300s, IP+identifier 20 / 300s |
+| Update any medical record | IP 90 / 300s, identifier 45 / 300s, IP+identifier 30 / 300s |
+| Delete any medical record | IP 30 / 60s, identifier 15 / 60s, IP+identifier 10 / 60s |
 
-| Action | Limit | Window |
-| --- | --- | --- |
-| Create (any sub-domain) | 20 requests | 300 s |
-| Update (any sub-domain) | 30 requests | 300 s |
-| Delete (any sub-domain) | 10 requests | 60 s |
+Rate-limit failures return `429 common.rateLimited`.
 
-Exceeded limits return `429 common.rateLimited`.
+### Localization
+
+- Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
+- Default locale is `en`
+- Use `errorKey` for integration logic
+
+### Request Body Validation
+
+All POST and PATCH routes use the shared `parseBody` helper with strict Zod schemas.
+
+Current shared behavior:
+
+| Condition | `errorKey` |
+| --- | --- |
+| Malformed JSON body | `common.invalidBodyParams` |
+| Missing body, `null`, or empty object `{}` | `common.missingBodyParams` |
+| Unknown field supplied | `common.invalidBodyParams` |
+| Wrong field type or schema violation without a more specific field key | `common.invalidBodyParams` |
+
+After body parsing succeeds, each sub-domain validates its date fields separately and returns the corresponding sub-domain-specific `invalidDateFormat` key when needed.
 
 ---
 
-## Shared Error Behavior
+## Success And Error Conventions
 
-These apply to every endpoint in this Lambda.
+### Success Response Shape
 
-| Status | `errorKey` | Cause |
-| --- | --- | --- |
-| 400 | `petMedicalRecord.errors.invalidPetIdFormat` | `{petId}` path param is empty or not a valid MongoDB ObjectId |
-| 401 / 403 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.forbidden` | Valid token but caller is not the pet owner or NGO |
-| 404 | `petMedicalRecord.errors.petNotFound` | Pet not found or has `deleted: true` |
-| 429 | `common.rateLimited` | Rate limit exceeded |
-| 500 | `common.internalError` | Unhandled server error — inspect CloudWatch by `requestId` |
+List success:
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 0,
+    "totalPages": 0
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Create success:
+
+```json
+{
+  "success": true,
+  "message": "Created successfully",
+  "data": {
+    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
+    "petId": "665f0000000000000000abcd"
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Update success:
+
+```json
+{
+  "success": true,
+  "message": "Updated successfully",
+  "data": {
+    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
+    "petId": "665f0000000000000000abcd"
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Delete success:
+
+```json
+{
+  "success": true,
+  "message": "Deleted successfully",
+  "requestId": "aws-lambda-request-id"
+}
+```
 
 ### Error Response Shape
 
 ```json
 {
   "success": false,
-  "errorKey": "petMedicalRecord.errors.petNotFound",
-  "error": "Pet not found",
-  "requestId": "abc123"
+  "errorKey": "petMedical.errors.medicalRecord.notFound",
+  "error": "localized message",
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-### Success Response Shape
+### Shared Query Parameters
 
-```json
-{
-  "success": true,
-  "message": "Pet medical record retrieved successfully",
-  "form": { "...": "endpoint-specific" },
-  "petId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
+All list routes use shared pagination query validation.
+
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | No | Shared pagination schema |
+| `limit` | integer | No | Shared pagination schema |
+
+Invalid pagination values return `400 common.invalidQueryParams`.
+
+---
+
+## Record Shapes
+
+### General Medical Record Shape
+
+- `_id`
+- `medicalDate`
+- `medicalPlace`
+- `medicalDoctor`
+- `medicalResult`
+- `medicalSolution`
+- `petId`
+
+### Medication Record Shape
+
+- `_id`
+- `medicationDate`
+- `drugName`
+- `drugPurpose`
+- `drugMethod`
+- `drugRemark`
+- `allergy`
+- `petId`
+
+### Deworm Record Shape
+
+- `_id`
+- `date`
+- `vaccineBrand`
+- `vaccineType`
+- `typesOfInternalParasites`
+- `typesOfExternalParasites`
+- `frequency`
+- `nextDewormDate`
+- `notification`
+- `petId`
+
+### Blood Test Record Shape
+
+- `_id`
+- `bloodTestDate`
+- `heartworm`
+- `lymeDisease`
+- `ehrlichiosis`
+- `anaplasmosis`
+- `babesiosis`
+- `petId`
 
 ---
 
 ## General Medical Records
 
-**Sub-resource:** `general` — MongoDB collection: `Medical_Records`
+### GET /pet/medical/{petId}/general
 
-### GET `/pet/medical/{petId}/general`
+List general medical records.
 
-List all general medical records for the specified pet.
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Auth:** Bearer JWT + pet ownership
+#### General List Errors
 
-**Path params:**
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 400 | `common.invalidQueryParams` | Invalid pagination query |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 500 | `common.internalError` | Unexpected internal error |
 
-| Param | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `petId` | MongoDB ObjectId string | Yes | |
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Pet medical record retrieved successfully",
-  "form": {
-    "medical": [
-      {
-        "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-        "medicalDate": "2024-06-15T00:00:00.000Z",
-        "medicalPlace": "PetCare Hospital",
-        "medicalDoctor": "Dr. Wong",
-        "medicalResult": "Healthy",
-        "medicalSolution": "Vitamins",
-        "petId": "665f0000000000000000abcd"
-      }
-    ]
-  },
-  "petId": "665f0000000000000000abcd",
-  "requestId": "abc123"
-}
-```
-
-Empty list returns `200` with `form.medical: []`.
-
-**Errors:** See [Shared Error Behavior](#shared-error-behavior).
-
----
-
-### POST `/pet/medical/{petId}/general`
+### POST /pet/medical/{petId}/general
 
 Create a general medical record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 20 / 300 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Path params:**
+#### General Create Request Body
 
-| Param | Type | Required |
-| --- | --- | --- |
-| `petId` | MongoDB ObjectId string | Yes |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `medicalDate` | string | No | Flexible date string |
+| `medicalPlace` | string | No | Max 200 chars |
+| `medicalDoctor` | string | No | Max 100 chars |
+| `medicalResult` | string | No | Max 2000 chars |
+| `medicalSolution` | string | No | Max 2000 chars |
 
-**Request body** (`application/json`, all fields optional, strict — unknown fields rejected):
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `medicalDate` | string | `DD/MM/YYYY` or ISO date |
-| `medicalPlace` | string | |
-| `medicalDoctor` | string | |
-| `medicalResult` | string | |
-| `medicalSolution` | string | |
+#### General Create Example Request
 
 ```json
 {
-  "medicalDate": "15/06/2024",
+  "medicalDate": "2024-06-15",
   "medicalPlace": "PetCare Hospital",
   "medicalDoctor": "Dr. Wong",
   "medicalResult": "Healthy",
@@ -225,600 +304,326 @@ Create a general medical record.
 }
 ```
 
-**Success (201):**
-
-```json
-{
-  "success": true,
-  "message": "Pet medical record created successfully",
-  "form": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "medicalDate": "2024-06-15T00:00:00.000Z",
-    "medicalPlace": "PetCare Hospital",
-    "medicalDoctor": "Dr. Wong",
-    "medicalResult": "Healthy",
-    "medicalSolution": "Vitamins",
-    "petId": "665f0000000000000000abcd"
-  },
-  "petId": "665f0000000000000000abcd",
-  "medicalRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### General Create Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.medicalRecord.invalidDateFormat` | `medicalDate` is not a valid date string |
-| 400 | `common.invalidBodyParams` | Malformed JSON body, or unknown/extra fields (strict schema) |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.medicalRecord.invalidDateFormat` | Invalid `medicalDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 429 | `common.rateLimited` | Create rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
+### PATCH /pet/medical/{petId}/general/{medicalId}
 
-### PATCH `/pet/medical/{petId}/general/{medicalId}`
+Update a general medical record.
 
-Update an existing general medical record. Only provided fields are updated (partial update).
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 30 / 300 s per `userId`
+#### General Update Request Body
 
-**Path params:**
+Any subset of the general medical create fields may be supplied.
 
-| Param | Type | Required |
-| --- | --- | --- |
-| `petId` | MongoDB ObjectId string | Yes |
-| `medicalId` | MongoDB ObjectId string | Yes |
-
-**Request body** (`application/json`, all fields optional, strict):
-
-Same fields as POST.
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Pet medical record updated successfully",
-  "petId": "665f0000000000000000abcd",
-  "medicalRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "form": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "medicalDate": "2024-06-15T00:00:00.000Z",
-    "medicalPlace": "Updated Clinic",
-    "medicalDoctor": "Dr. Wong",
-    "medicalResult": "Healthy",
-    "medicalSolution": "Vitamins",
-    "petId": "665f0000000000000000abcd"
-  },
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### General Update Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat` | `{medicalId}` is not a valid ObjectId |
-| 400 | `petMedicalRecord.errors.medicalRecord.invalidDateFormat` | `medicalDate` is not a valid date string |
-| 404 | `petMedicalRecord.errors.medicalRecord.notFound` | Record not found (wrong `medicalId` or wrong `petId`) |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{medicalId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.medicalRecord.invalidDateFormat` | Invalid `medicalDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.medicalRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Update rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
-
-### DELETE `/pet/medical/{petId}/general/{medicalId}`
+### DELETE /pet/medical/{petId}/general/{medicalId}
 
 Delete a general medical record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 10 / 60 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Path params:**
-
-| Param | Type | Required |
-| --- | --- | --- |
-| `petId` | MongoDB ObjectId string | Yes |
-| `medicalId` | MongoDB ObjectId string | Yes |
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Medical record deleted successfully",
-  "petId": "665f0000000000000000abcd",
-  "medicalRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### General Delete Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat` | `{medicalId}` is not a valid ObjectId |
-| 404 | `petMedicalRecord.errors.medicalRecord.notFound` | Record not found |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{medicalId}` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.medicalRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Delete rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ---
 
 ## Medication Records
 
-**Sub-resource:** `medication` — MongoDB collection: `Medication_Records`
+### GET /pet/medical/{petId}/medication
 
-### GET `/pet/medical/{petId}/medication`
+List medication records.
 
-List all medication records for the specified pet.
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Auth:** Bearer JWT + pet ownership
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Pet medication record retrieved successfully",
-  "form": {
-    "medication": [
-      {
-        "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-        "medicationDate": "2024-06-01T00:00:00.000Z",
-        "drugName": "Apoquel",
-        "drugPurpose": "Allergy relief",
-        "drugMethod": "Oral",
-        "drugRemark": "Once daily",
-        "allergy": false,
-        "petId": "665f0000000000000000abcd"
-      }
-    ]
-  },
-  "petId": "665f0000000000000000abcd",
-  "requestId": "abc123"
-}
-```
-
----
-
-### POST `/pet/medical/{petId}/medication`
+### POST /pet/medical/{petId}/medication
 
 Create a medication record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 20 / 300 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Request body** (`application/json`, all fields optional, strict):
+#### Medication Create Request Body
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `medicationDate` | string | `DD/MM/YYYY` or ISO date |
-| `drugName` | string | |
-| `drugPurpose` | string | |
-| `drugMethod` | string | |
-| `drugRemark` | string | |
-| `allergy` | boolean | Defaults `false` if omitted |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `medicationDate` | string | No | Flexible date string |
+| `drugName` | string | No | Max 200 chars |
+| `drugPurpose` | string | No | Max 500 chars |
+| `drugMethod` | string | No | Max 500 chars |
+| `drugRemark` | string | No | Max 2000 chars |
+| `allergy` | boolean | No | Defaults to `false` on create when omitted |
 
-**Success (201):**
-
-```json
-{
-  "success": true,
-  "message": "Pet medication record created successfully",
-  "form": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "medicationDate": "2024-06-01T00:00:00.000Z",
-    "drugName": "Apoquel",
-    "drugPurpose": "Allergy relief",
-    "drugMethod": "Oral",
-    "drugRemark": "Once daily",
-    "allergy": false,
-    "petId": "665f0000000000000000abcd"
-  },
-  "petId": "665f0000000000000000abcd",
-  "medicationRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Medication Create Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.medicationRecord.invalidDateFormat` | `medicationDate` is not a valid date string |
-| 400 | `common.invalidBodyParams` | Unknown or extra fields (strict schema) |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.medicationRecord.invalidDateFormat` | Invalid `medicationDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 429 | `common.rateLimited` | Create rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
+### PATCH /pet/medical/{petId}/medication/{medicationId}
 
-### PATCH `/pet/medical/{petId}/medication/{medicationId}`
+Update a medication record.
 
-Update a medication record. Partial update — only provided fields are changed.
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 30 / 300 s per `userId`
-
-**Request body:** Same fields as POST.
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Pet medication record updated successfully",
-  "petId": "665f0000000000000000abcd",
-  "medicationRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "form": { "...": "updated medication record" },
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Medication Update Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.medicationRecord.invalidMedicationIdFormat` | `{medicationId}` is not a valid ObjectId |
-| 400 | `petMedicalRecord.errors.medicationRecord.invalidDateFormat` | `medicationDate` is not a valid date string |
-| 404 | `petMedicalRecord.errors.medicationRecord.notFound` | Record not found |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{medicationId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.medicationRecord.invalidDateFormat` | Invalid `medicationDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.medicationRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Update rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
-
-### DELETE `/pet/medical/{petId}/medication/{medicationId}`
+### DELETE /pet/medical/{petId}/medication/{medicationId}
 
 Delete a medication record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 10 / 60 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Medication record deleted successfully",
-  "petId": "665f0000000000000000abcd",
-  "medicationRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Medication Delete Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.medicationRecord.invalidMedicationIdFormat` | `{medicationId}` is not a valid ObjectId |
-| 404 | `petMedicalRecord.errors.medicationRecord.notFound` | Record not found |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{medicationId}` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.medicationRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Delete rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ---
 
 ## Deworming Records
 
-**Sub-resource:** `deworming` — MongoDB collection: `Deworm_Records`
+### GET /pet/medical/{petId}/deworming
 
-### GET `/pet/medical/{petId}/deworming`
+List deworming records.
 
-List all deworming records for the specified pet.
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Auth:** Bearer JWT + pet ownership
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Pet deworm record retrieved successfully",
-  "form": {
-    "deworm": [
-      {
-        "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-        "date": "2024-03-01T00:00:00.000Z",
-        "vaccineBrand": "NexGard",
-        "vaccineType": "External",
-        "typesOfInternalParasites": [],
-        "typesOfExternalParasites": ["Fleas", "Ticks"],
-        "frequency": 30,
-        "nextDewormDate": "2024-04-01T00:00:00.000Z",
-        "notification": true,
-        "petId": "665f0000000000000000abcd"
-      }
-    ]
-  },
-  "petId": "665f0000000000000000abcd",
-  "requestId": "abc123"
-}
-```
-
----
-
-### POST `/pet/medical/{petId}/deworming`
+### POST /pet/medical/{petId}/deworming
 
 Create a deworming record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 20 / 300 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Request body** (`application/json`, all fields optional, strict):
+#### Deworming Create Request Body
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `date` | string | `DD/MM/YYYY` or ISO date |
-| `vaccineBrand` | string | |
-| `vaccineType` | string | |
-| `typesOfInternalParasites` | string[] | |
-| `typesOfExternalParasites` | string[] | |
-| `frequency` | number | Interval in days |
-| `nextDewormDate` | string | `DD/MM/YYYY` or ISO date |
-| `notification` | boolean | Defaults `false` if omitted |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `date` | string | No | Flexible date string |
+| `vaccineBrand` | string | No | Max 100 chars |
+| `vaccineType` | string | No | Max 100 chars |
+| `typesOfInternalParasites` | string[] | No | Max 50 items |
+| `typesOfExternalParasites` | string[] | No | Max 50 items |
+| `frequency` | integer | No | 0 to 3650 |
+| `nextDewormDate` | string | No | Flexible date string |
+| `notification` | boolean | No | Defaults to `false` on create when omitted |
 
-**Success (201):**
-
-```json
-{
-  "success": true,
-  "message": "Pet deworm record created successfully",
-  "form": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "date": "2024-03-01T00:00:00.000Z",
-    "vaccineBrand": "NexGard",
-    "vaccineType": "External",
-    "typesOfInternalParasites": [],
-    "typesOfExternalParasites": ["Fleas", "Ticks"],
-    "frequency": 30,
-    "nextDewormDate": "2024-04-01T00:00:00.000Z",
-    "notification": true,
-    "petId": "665f0000000000000000abcd"
-  },
-  "petId": "665f0000000000000000abcd",
-  "dewormRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Deworming Create Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.dewormRecord.invalidDateFormat` | `date` or `nextDewormDate` is not a valid date string |
-| 400 | `common.invalidBodyParams` | Unknown or extra fields (strict schema) |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.dewormRecord.invalidDateFormat` | Invalid `date` or `nextDewormDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 429 | `common.rateLimited` | Create rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
+### PATCH /pet/medical/{petId}/deworming/{dewormId}
 
-### PATCH `/pet/medical/{petId}/deworming/{dewormId}`
+Update a deworming record.
 
-Update a deworming record. Partial update.
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 30 / 300 s per `userId`
-
-**Request body:** Same fields as POST.
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Pet deworm record updated successfully",
-  "petId": "665f0000000000000000abcd",
-  "dewormRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "form": { "...": "updated deworming record" },
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Deworming Update Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.dewormRecord.invalidDewormIdFormat` | `{dewormId}` is not a valid ObjectId |
-| 400 | `petMedicalRecord.errors.dewormRecord.invalidDateFormat` | `date` or `nextDewormDate` invalid |
-| 404 | `petMedicalRecord.errors.dewormRecord.notFound` | Record not found |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{dewormId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.dewormRecord.invalidDateFormat` | Invalid `date` or `nextDewormDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.dewormRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Update rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
-
-### DELETE `/pet/medical/{petId}/deworming/{dewormId}`
+### DELETE /pet/medical/{petId}/deworming/{dewormId}
 
 Delete a deworming record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 10 / 60 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Deworm record deleted successfully",
-  "petId": "665f0000000000000000abcd",
-  "dewormRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Deworming Delete Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.dewormRecord.invalidDewormIdFormat` | `{dewormId}` is not a valid ObjectId |
-| 404 | `petMedicalRecord.errors.dewormRecord.notFound` | Record not found |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{dewormId}` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.dewormRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Delete rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ---
 
 ## Blood Test Records
 
-**Sub-resource:** `blood-test` — MongoDB collection: `blood_tests`
+### GET /pet/medical/{petId}/blood-test
 
-### GET `/pet/medical/{petId}/blood-test`
+List blood test records.
 
-List all blood test records for the specified pet.
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Auth:** Bearer JWT + pet ownership
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Pet blood test records retrieved successfully",
-  "form": {
-    "blood_test": [
-      {
-        "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-        "bloodTestDate": "2024-05-10T00:00:00.000Z",
-        "heartworm": "Negative",
-        "lymeDisease": "Negative",
-        "ehrlichiosis": "Negative",
-        "anaplasmosis": "Negative",
-        "babesiosis": "Negative",
-        "petId": "665f0000000000000000abcd"
-      }
-    ]
-  },
-  "petId": "665f0000000000000000abcd",
-  "requestId": "abc123"
-}
-```
-
----
-
-### POST `/pet/medical/{petId}/blood-test`
+### POST /pet/medical/{petId}/blood-test
 
 Create a blood test record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 20 / 300 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Request body** (`application/json`, all fields optional, strict):
+#### Blood Test Create Request Body
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `bloodTestDate` | string | `DD/MM/YYYY` or ISO date |
-| `heartworm` | string | Free-form result text |
-| `lymeDisease` | string | |
-| `ehrlichiosis` | string | |
-| `anaplasmosis` | string | |
-| `babesiosis` | string | |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `bloodTestDate` | string | No | Flexible date string |
+| `heartworm` | string | No | Max 50 chars |
+| `lymeDisease` | string | No | Max 50 chars |
+| `ehrlichiosis` | string | No | Max 50 chars |
+| `anaplasmosis` | string | No | Max 50 chars |
+| `babesiosis` | string | No | Max 50 chars |
 
-**Success (201):**
-
-```json
-{
-  "success": true,
-  "message": "Blood test record created successfully",
-  "form": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "bloodTestDate": "2024-05-10T00:00:00.000Z",
-    "heartworm": "Negative",
-    "lymeDisease": "Negative",
-    "ehrlichiosis": "Negative",
-    "anaplasmosis": "Negative",
-    "babesiosis": "Negative",
-    "petId": "665f0000000000000000abcd"
-  },
-  "petId": "665f0000000000000000abcd",
-  "bloodTestRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Blood Test Create Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.bloodTest.invalidDateFormat` | `bloodTestDate` is not a valid date string |
-| 400 | `common.invalidBodyParams` | Unknown or extra fields (strict schema) |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.bloodTest.invalidDateFormat` | Invalid `bloodTestDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 429 | `common.rateLimited` | Create rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
+### PATCH /pet/medical/{petId}/blood-test/{bloodTestId}
 
-### PATCH `/pet/medical/{petId}/blood-test/{bloodTestId}`
+Update a blood test record.
 
-Update a blood test record. Partial update.
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 30 / 300 s per `userId`
-
-**Request body:** Same fields as POST.
-
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Blood test record updated successfully",
-  "petId": "665f0000000000000000abcd",
-  "bloodTestRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "form": { "...": "updated blood test record" },
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Blood Test Update Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.bloodTest.invalidBloodTestIdFormat` | `{bloodTestId}` is not a valid ObjectId |
-| 400 | `petMedicalRecord.errors.bloodTest.invalidDateFormat` | `bloodTestDate` invalid |
-| 404 | `petMedicalRecord.errors.bloodTest.notFound` | Record not found |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{bloodTestId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.bloodTest.invalidDateFormat` | Invalid `bloodTestDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.bloodTest.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Update rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
----
-
-### DELETE `/pet/medical/{petId}/blood-test/{bloodTestId}`
+### DELETE /pet/medical/{petId}/blood-test/{bloodTestId}
 
 Delete a blood test record.
 
-**Auth:** Bearer JWT + pet ownership  
-**Rate limit:** 10 / 60 s per `userId`
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Success (200):**
-
-```json
-{
-  "success": true,
-  "message": "Blood test record deleted successfully",
-  "petId": "665f0000000000000000abcd",
-  "bloodTestRecordId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "requestId": "abc123"
-}
-```
-
-**Domain errors:**
+#### Blood Test Delete Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petMedicalRecord.errors.bloodTest.invalidBloodTestIdFormat` | `{bloodTestId}` is not a valid ObjectId |
-| 404 | `petMedicalRecord.errors.bloodTest.notFound` | Record not found |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{bloodTestId}` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.bloodTest.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Delete rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ---
 
 ## Frontend Integration Guide
 
-### Standard CRUD Pattern
-
-All four sub-domains follow the same pattern:
-
-1. **GET** the list — use `form.medical` / `form.medication` / `form.deworm` / `form.blood_test` from the response
-2. **POST** to create — save `medicalRecordId` / `medicationRecordId` / `dewormRecordId` / `bloodTestRecordId` from the response
-3. **PATCH** to update — pass the saved record ID in the path, send only changed fields
-4. **DELETE** to remove — pass the saved record ID in the path
-
-### Ownership Enforcement
-
-The frontend must always pass both `petId` and the Bearer JWT. The backend enforces ownership — sending a `petId` the caller does not own returns `403 common.forbidden`.
-
-### Date Fields
-
-- Send dates as `DD/MM/YYYY` (e.g., `"15/06/2024"`) or ISO format (e.g., `"2024-06-15"`)
-- Received dates are ISO strings — parse them with `new Date(value)` or your preferred library
-
-### Handling Partial Records
-
-All body fields are optional. You can POST with only one field (e.g., `{ "medicalPlace": "Clinic A" }`) and it will create a record with only that field populated and others as `null`.
-
-### Rate Limit Handling
-
-If you receive `429 common.rateLimited`, back off and retry after the window. Display a user-facing message — do not silently retry in a tight loop.
+1. Treat all four medical sub-domains as separate resource lists under the same authorization model.
+2. Read lists from `data` and paginator state from `pagination`; do not rely on old `form.medical` or `form.medication` wrappers.
+3. After create or update, replace the edited row with the returned `data` record because the backend already returns the sanitized document.
+4. After delete, remove the row locally; the backend returns no `data` payload.
+5. Validate date fields client-side when possible, but still branch on the sub-domain-specific `invalidDateFormat` keys.
 
 ---
 
-## Contract Deltas from Legacy (`AWS_API`)
+## Verification Snapshot
 
-| Topic | Legacy (`PetMedicalRecord` Lambda) | DDD (`pet-medical` Lambda) |
-| --- | --- | --- |
-| Base path | `/pets/{petID}/medical-record` | `/pet/medical/{petId}/general` |
-| Update method | `PUT` | `PATCH` |
-| Pet stat sync | POST updates `Pet.medicationRecordsCount`, `dewormRecordsCount`, `bloodTestRecordsCount`, `latestDewormDate`, `latestBloodTestDate` | **Not implemented.** These fields are not updated by this Lambda. |
-| Blood test path | `/v2/pets/{petID}/blood-test-record` | `/pet/medical/{petId}/blood-test` |
-| Unknown field behavior | Varies | Strict Zod — `400 common.invalidBodyParams` |
+This document is grounded in the current handlers in `functions/pet-medical/src/services/medical.ts`, `medication.ts`, `deworming.ts`, and `bloodTest.ts`, the shared auth/sanitize helpers, and the current Zod schemas under `functions/pet-medical/src/zodSchema`. The active Tier 2 suite also evidences current keys such as `petMedical.errors.petNotFound` and `petMedical.errors.medicalRecord.invalidDateFormat`.

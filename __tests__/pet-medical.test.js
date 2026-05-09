@@ -78,6 +78,7 @@ function createLeanResult(value) {
   return {
     select: jest.fn().mockReturnThis(),
     sort: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(value),
     exec: jest.fn().mockResolvedValue(value),
@@ -130,6 +131,9 @@ function loadHandlerWithMocks({
   const dewormModel = makeRecordModel();
   const bloodTestModel = makeRecordModel();
   const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
     findOneAndUpdate: jest.fn().mockResolvedValue(rateLimitEntry),
   };
 
@@ -255,7 +259,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petMedicalRecord.errors.invalidPetIdFormat');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 404 when pet does not exist', async () => {
@@ -273,7 +277,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(404);
-      expect(parsed.body.errorKey).toBe('petMedicalRecord.errors.petNotFound');
+      expect(parsed.body.errorKey).toBe('petMedical.errors.petNotFound');
     });
 
     test('returns 403 when caller is not pet owner and not NGO owner', async () => {
@@ -330,8 +334,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.message).toBe('Pet medical record retrieved successfully');
-      expect(parsed.body.form.medical).toHaveLength(1);
+      expect(parsed.body.message).toBe('Retrieved successfully');
+      expect(parsed.body.data).toHaveLength(1);
     });
   });
 
@@ -358,8 +362,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.form.medical).toEqual([]);
-      expect(parsed.body.petId).toBe(petId);
+      expect(parsed.body.data).toEqual([]);
+      expect(parsed.body.pagination.total).toBe(0);
     });
 
     test('POST create with valid date returns 201 without touching Pet summary counters', async () => {
@@ -393,7 +397,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
-      expect(parsed.body.message).toBe('Pet medical record created successfully');
+      expect(parsed.body.message).toBe('Created successfully');
       // Summary counters are dropped from pet-medical; Pet.findOneAndUpdate is
       // never called on POST.
       expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
@@ -417,7 +421,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.errorKey).toBe(
-        'petMedicalRecord.errors.medicalRecord.invalidDateFormat'
+        'petMedical.errors.medicalRecord.invalidDateFormat'
       );
     });
 
@@ -460,6 +464,92 @@ describe('pet-medical handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(400);
     });
 
+    test('POST create rejects NoSQL operator injection in medicalPlace', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/general`,
+          resource: '/pet/medical/{petId}/general',
+          pathParameters: { petId },
+          body: JSON.stringify({ medicalPlace: { $gt: '' } }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(medicalModel.create).not.toHaveBeenCalled();
+    });
+
+    test('POST create sanitizes HTML in free-text fields before persistence', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const createdId = new mongoose.Types.ObjectId();
+
+      medicalModel.create.mockResolvedValueOnce({
+        _id: createdId,
+        toObject: () => ({
+          _id: createdId,
+          petId,
+          medicalPlace: 'alert(1)Clinic A',
+          medicalDoctor: 'Dr. Lee',
+        }),
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/general`,
+          resource: '/pet/medical/{petId}/general',
+          pathParameters: { petId },
+          body: JSON.stringify({
+            medicalPlace: '<script>alert(1)</script>Clinic A',
+            medicalDoctor: '<b>Dr. Lee</b>',
+          }),
+          authorizer,
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(201);
+      expect(medicalModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          petId,
+          medicalPlace: 'alert(1)Clinic A',
+          medicalDoctor: 'Dr. Lee',
+        })
+      );
+      expect(parsed.body.data.medicalPlace).toBe('alert(1)Clinic A');
+      expect(parsed.body.data.medicalDoctor).toBe('Dr. Lee');
+    });
+
+    test('POST create rejects oversized medicalDoctor values', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/general`,
+          resource: '/pet/medical/{petId}/general',
+          pathParameters: { petId },
+          body: JSON.stringify({ medicalDoctor: 'D'.repeat(101) }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(medicalModel.create).not.toHaveBeenCalled();
+    });
+
     test('PATCH update with invalid medicalId returns 400', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const { petId, petDoc } = ownPet(authUserId);
@@ -478,7 +568,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.errorKey).toBe(
-        'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat'
+        'common.invalidObjectId'
       );
     });
 
@@ -501,6 +591,28 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.errorKey).toBe('common.missingBodyParams');
+    });
+
+    test('PATCH update rejects NoSQL operator injection in medicalPlace', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const medicalId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/medical/${petId}/general/${medicalId}`,
+          resource: '/pet/medical/{petId}/general/{medicalId}',
+          pathParameters: { petId, medicalId },
+          body: JSON.stringify({ medicalPlace: { $set: 'Injected' } }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(medicalModel.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
     test('PATCH update returns 404 when record not found', async () => {
@@ -527,7 +639,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(404);
-      expect(parsed.body.errorKey).toBe('petMedicalRecord.errors.medicalRecord.notFound');
+      expect(parsed.body.errorKey).toBe('petMedical.errors.medicalRecord.notFound');
     });
 
     test('PATCH update happy path returns 200', async () => {
@@ -558,8 +670,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.message).toBe('Pet medical record updated successfully');
-      expect(parsed.body.medicalRecordId).toBe(medicalId);
+      expect(parsed.body.message).toBe('Updated successfully');
+      expect(parsed.body.data._id).toBe(medicalId);
     });
 
     test('DELETE returns 404 when nothing deleted', async () => {
@@ -717,8 +829,8 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.message).toBe('Pet blood test records retrieved successfully');
-      expect(parsed.body.form.blood_test).toEqual([]);
+      expect(parsed.body.message).toBe('Retrieved successfully');
+      expect(parsed.body.data).toEqual([]);
     });
   });
 

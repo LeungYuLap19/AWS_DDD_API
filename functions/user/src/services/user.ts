@@ -5,6 +5,7 @@ import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { userPatchBodySchema } from '../zodSchema/userPatchBodySchema';
 import { normalizeEmail, normalizePhone } from '../utils/normalize';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import { sanitizeUser } from '../utils/sanitize';
 
@@ -27,6 +28,9 @@ async function findActiveUserById(userId: string): Promise<UserDocument | null> 
   return (await User.findOne({ _id: userId, deleted: false }).lean()) as UserDocument | null;
 }
 
+/**
+ * Returns the authenticated user's own profile after sanitization.
+ */
 export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -38,10 +42,14 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    user: sanitizeUser(user),
+    data: sanitizeUser(user),
   });
 }
 
+/**
+ * Partially updates the authenticated user's own profile, preserving duplicate
+ * email/phone conflict handling and returning the sanitized post-update view.
+ */
 export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const parsed = parseBody(ctx.body, userPatchBodySchema);
@@ -50,6 +58,17 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   }
 
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'user.patchMe',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 30, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   const User = mongoose.model('User');
   const {
@@ -129,13 +148,30 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    user: sanitizeUser(updatedUser),
+    data: sanitizeUser(updatedUser),
   });
 }
 
+/**
+ * Soft-deletes the authenticated user's account and clears all refresh-token
+ * sessions for that user in the same request.
+ */
 export async function handleDeleteMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
+
+  // Destructive endpoint: tighter cap to bound abuse from a compromised
+  // session token before manual remediation.
+  const rateLimitResponse = await applyRateLimit({
+    action: 'user.deleteMe',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 20, windowSeconds: 60 * 60 },
+      { scope: 'identifier', limit: 5, windowSeconds: 60 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   const User = mongoose.model('User');
   const RefreshToken = mongoose.model('RefreshToken');
@@ -152,6 +188,5 @@ export async function handleDeleteMe(ctx: RouteContext): Promise<APIGatewayProxy
 
   return response.successResponse(200, ctx.event, {
     message: 'success.deleted',
-    userId: user._id,
   });
 }

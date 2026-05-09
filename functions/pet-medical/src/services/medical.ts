@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody } from '@aws-ddd-api/shared';
+import { parseBody, paginationQuerySchema } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -8,7 +8,6 @@ import { loadAuthorizedPet, requireAuthContext } from '../utils/auth';
 import { applyRateLimit } from '../utils/rateLimit';
 import { sanitizeRecord } from '../utils/sanitize';
 import { isValidDateFormat, parseDDMMYYYY } from '../utils/date';
-import { HttpError } from '../utils/httpError';
 import {
   createMedicalRecordSchema,
   updateMedicalRecordSchema,
@@ -17,16 +16,10 @@ import {
 const PROJECTION =
   'medicalDate medicalPlace medicalDoctor medicalResult medicalSolution petId';
 
-function handleKnownError(
-  error: unknown,
-  event: RouteContext['event']
-): APIGatewayProxyResult | null {
-  if (error instanceof HttpError) {
-    return response.errorResponse(error.statusCode, error.errorKey, event);
-  }
-  return null;
-}
-
+/**
+ * Returns paginated medical records for one owned pet after ownership
+ * validation.
+ */
 export async function handleListMedicalRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -35,86 +28,92 @@ export async function handleListMedicalRecords(
   requireAuthContext(ctx.event);
   await connectToMongoDB();
 
-  try {
-    await loadAuthorizedPet(ctx.event, petId);
+  await loadAuthorizedPet(ctx.event, petId);
 
-    const MedicalRecords = mongoose.model('Medical_Records');
-    const records = await MedicalRecords.find({ petId })
-      .select(PROJECTION)
-      .lean();
-
-    return response.successResponse(200, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.getSuccess',
-      form: { medical: records.map((r) => sanitizeRecord(r as Record<string, unknown>)) },
-      petId,
-    });
-  } catch (error) {
-    const known = handleKnownError(error, ctx.event);
-    if (known) return known;
-    throw error;
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
   }
+  const { page, limit } = pagination.data;
+  const skip = (page - 1) * limit;
+
+  const MedicalRecords = mongoose.model('Medical_Records');
+  const [records, total] = await Promise.all([
+    MedicalRecords.find({ petId }).select(PROJECTION).skip(skip).limit(limit).lean(),
+    MedicalRecords.countDocuments({ petId }),
+  ]);
+
+  return response.successResponse(200, ctx.event, {
+    message: 'success.retrieved',
+    data: records.map((r) => sanitizeRecord(r as Record<string, unknown>)),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  });
 }
 
+/**
+ * Creates one medical record for an owned pet after validating the legacy date
+ * format accepted by this domain.
+ */
 export async function handleCreateMedicalRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const petId = String(ctx.event.pathParameters?.petId || '');
 
   const authContext = requireAuthContext(ctx.event);
+
+  const parsed = parseBody(ctx.body, createMedicalRecordSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+  const data = parsed.data;
+
+  if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
+    return response.errorResponse(
+      400,
+      'petMedical.errors.medicalRecord.invalidDateFormat',
+      ctx.event
+    );
+  }
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.create',
+    action: 'petMedical.create',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 20,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+      { scope: 'identifier', limit: 30, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
   }
 
-  try {
-    await loadAuthorizedPet(ctx.event, petId);
+  await loadAuthorizedPet(ctx.event, petId);
 
-    const parsed = parseBody(ctx.body, createMedicalRecordSchema);
-    if (!parsed.ok) {
-      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-    }
-    const data = parsed.data;
+  const MedicalRecords = mongoose.model('Medical_Records');
 
-    if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
-      return response.errorResponse(
-        400,
-        'petMedicalRecord.errors.medicalRecord.invalidDateFormat',
-        ctx.event
-      );
-    }
+  const newRecord = await MedicalRecords.create({
+    medicalDate: data.medicalDate ? parseDDMMYYYY(data.medicalDate) : null,
+    medicalPlace: data.medicalPlace,
+    medicalDoctor: data.medicalDoctor,
+    medicalResult: data.medicalResult,
+    medicalSolution: data.medicalSolution,
+    petId,
+  });
 
-    const MedicalRecords = mongoose.model('Medical_Records');
-
-    const newRecord = await MedicalRecords.create({
-      medicalDate: data.medicalDate ? parseDDMMYYYY(data.medicalDate) : null,
-      medicalPlace: data.medicalPlace,
-      medicalDoctor: data.medicalDoctor,
-      medicalResult: data.medicalResult,
-      medicalSolution: data.medicalSolution,
-      petId,
-    });
-
-    return response.successResponse(201, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.created',
-      form: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
-      petId,
-      medicalRecordId: newRecord._id,
-    });
-  } catch (error) {
-    const known = handleKnownError(error, ctx.event);
-    if (known) return known;
-    throw error;
-  }
+  return response.successResponse(201, ctx.event, {
+    message: 'success.created',
+    data: sanitizeRecord(newRecord as unknown as Record<string, unknown>),
+  });
 }
 
+/**
+ * Updates one medical record for an owned pet, mapping omitted fields to
+ * partial-update semantics rather than full replacement.
+ */
 export async function handleUpdateMedicalRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -126,7 +125,21 @@ export async function handleUpdateMedicalRecord(
   if (!mongoose.isValidObjectId(medicalId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat',
+      'common.invalidObjectId',
+      ctx.event
+    );
+  }
+
+  const parsed = parseBody(ctx.body, updateMedicalRecordSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+  const data = parsed.data;
+
+  if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
+    return response.errorResponse(
+      400,
+      'petMedical.errors.medicalRecord.invalidDateFormat',
       ctx.event
     );
   }
@@ -134,70 +147,54 @@ export async function handleUpdateMedicalRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.update',
+    action: 'petMedical.update',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 30,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 90, windowSeconds: 300 },
+      { scope: 'identifier', limit: 45, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 30, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
   }
 
-  try {
-    await loadAuthorizedPet(ctx.event, petId);
+  await loadAuthorizedPet(ctx.event, petId);
 
-    const parsed = parseBody(ctx.body, updateMedicalRecordSchema);
-    if (!parsed.ok) {
-      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-    }
-    const data = parsed.data;
-
-    if (data.medicalDate && !isValidDateFormat(data.medicalDate)) {
-      return response.errorResponse(
-        400,
-        'petMedicalRecord.errors.medicalRecord.invalidDateFormat',
-        ctx.event
-      );
-    }
-
-    const updateFields: Record<string, unknown> = {};
-    if (data.medicalDate !== undefined) {
-      updateFields.medicalDate = data.medicalDate ? parseDDMMYYYY(data.medicalDate) : null;
-    }
-    if (data.medicalPlace !== undefined) updateFields.medicalPlace = data.medicalPlace;
-    if (data.medicalDoctor !== undefined) updateFields.medicalDoctor = data.medicalDoctor;
-    if (data.medicalResult !== undefined) updateFields.medicalResult = data.medicalResult;
-    if (data.medicalSolution !== undefined) updateFields.medicalSolution = data.medicalSolution;
-
-    const MedicalRecords = mongoose.model('Medical_Records');
-    const updated = await MedicalRecords.findOneAndUpdate(
-      { _id: medicalId, petId },
-      { $set: updateFields },
-      { new: true, projection: PROJECTION }
-    ).lean();
-
-    if (!updated) {
-      return response.errorResponse(
-        404,
-        'petMedicalRecord.errors.medicalRecord.notFound',
-        ctx.event
-      );
-    }
-
-    return response.successResponse(200, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.updated',
-      petId,
-      medicalRecordId: medicalId,
-      form: sanitizeRecord(updated as Record<string, unknown>),
-    });
-  } catch (error) {
-    const known = handleKnownError(error, ctx.event);
-    if (known) return known;
-    throw error;
+  const updateFields: Record<string, unknown> = {};
+  if (data.medicalDate !== undefined) {
+    updateFields.medicalDate = data.medicalDate ? parseDDMMYYYY(data.medicalDate) : null;
   }
+  if (data.medicalPlace !== undefined) updateFields.medicalPlace = data.medicalPlace;
+  if (data.medicalDoctor !== undefined) updateFields.medicalDoctor = data.medicalDoctor;
+  if (data.medicalResult !== undefined) updateFields.medicalResult = data.medicalResult;
+  if (data.medicalSolution !== undefined) updateFields.medicalSolution = data.medicalSolution;
+
+  const MedicalRecords = mongoose.model('Medical_Records');
+  const updated = await MedicalRecords.findOneAndUpdate(
+    { _id: medicalId, petId },
+    { $set: updateFields },
+    { new: true, projection: PROJECTION }
+  ).lean();
+
+  if (!updated) {
+    return response.errorResponse(
+      404,
+      'petMedical.errors.medicalRecord.notFound',
+      ctx.event
+    );
+  }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'success.updated',
+    data: sanitizeRecord(updated as Record<string, unknown>),
+  });
 }
 
+/**
+ * Deletes one medical record belonging to an owned pet.
+ */
 export async function handleDeleteMedicalRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -209,7 +206,7 @@ export async function handleDeleteMedicalRecord(
   if (!mongoose.isValidObjectId(medicalId)) {
     return response.errorResponse(
       400,
-      'petMedicalRecord.errors.medicalRecord.invalidMedicalIdFormat',
+      'common.invalidObjectId',
       ctx.event
     );
   }
@@ -217,38 +214,33 @@ export async function handleDeleteMedicalRecord(
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
-    action: 'petMedicalRecord.delete',
+    action: 'petMedical.delete',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 60 },
+      { scope: 'identifier', limit: 15, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
   }
 
-  try {
-    await loadAuthorizedPet(ctx.event, petId);
+  await loadAuthorizedPet(ctx.event, petId);
 
-    const MedicalRecords = mongoose.model('Medical_Records');
+  const MedicalRecords = mongoose.model('Medical_Records');
 
-    const deleted = await MedicalRecords.deleteOne({ _id: medicalId, petId });
-    if (deleted.deletedCount === 0) {
-      return response.errorResponse(
-        404,
-        'petMedicalRecord.errors.medicalRecord.notFound',
-        ctx.event
-      );
-    }
-
-    return response.successResponse(200, ctx.event, {
-      message: 'petMedicalRecord.success.medicalRecord.deleted',
-      petId,
-      medicalRecordId: medicalId,
-    });
-  } catch (error) {
-    const known = handleKnownError(error, ctx.event);
-    if (known) return known;
-    throw error;
+  const deleted = await MedicalRecords.deleteOne({ _id: medicalId, petId });
+  if (deleted.deletedCount === 0) {
+    return response.errorResponse(
+      404,
+      'petMedical.errors.medicalRecord.notFound',
+      ctx.event
+    );
   }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'success.deleted',
+  });
 }

@@ -11,6 +11,7 @@
 
 'use strict';
 
+const { EventEmitter } = require('events');
 const path = require('path');
 const mongoose = require('mongoose');
 
@@ -95,6 +96,133 @@ function resetEnv(overrides = {}) {
   delete process.env.AWS_SAM_LOCAL;
 
   Object.assign(process.env, overrides);
+}
+
+function mockLogisticsExternalClients({
+  fetchAddressTokenResult = 'sf-address-bearer-token',
+  fetchAddressTokenError = null,
+  fetchAreaListResult = [{ id: 1, name: 'HK Island' }],
+  fetchAreaListError = null,
+  fetchNetCodeListResult = [{ netCode: 'HKG01' }],
+  fetchNetCodeListError = null,
+  fetchPickupAddressesResult = [[{ address: '123 Test St' }]],
+  fetchPickupAddressesError = null,
+  getAccessTokenResult = 'sf-access-token',
+  getAccessTokenError = null,
+  callSfServiceResult = {
+    msgData: { waybillNoInfoList: [{ waybillNo: 'SF1234567890' }] },
+  },
+  callSfServiceError = null,
+  downloadPdfResult = Buffer.from('fake-pdf'),
+  downloadPdfError = null,
+  sendWaybillEmailError = null,
+} = {}) {
+  let pickupCallIndex = 0;
+
+  const axiosPost = fetchAddressTokenError
+    ? jest.fn().mockRejectedValue(fetchAddressTokenError)
+    : jest.fn().mockResolvedValue({ data: { data: fetchAddressTokenResult } });
+
+  const axiosGet = jest.fn().mockImplementation((url) => {
+    if (url.includes('/api/address_api/area')) {
+      if (fetchAreaListError) return Promise.reject(fetchAreaListError);
+      return Promise.resolve({ data: { data: fetchAreaListResult } });
+    }
+
+    if (url.includes('/api/address_api/netCode')) {
+      if (fetchNetCodeListError) return Promise.reject(fetchNetCodeListError);
+      return Promise.resolve({ data: { data: fetchNetCodeListResult } });
+    }
+
+    if (url.includes('/api/address_api/address')) {
+      if (fetchPickupAddressesError) return Promise.reject(fetchPickupAddressesError);
+
+      const nextPickupResult = Array.isArray(fetchPickupAddressesResult)
+        ? fetchPickupAddressesResult[Math.min(pickupCallIndex++, fetchPickupAddressesResult.length - 1)]
+        : fetchPickupAddressesResult;
+
+      return Promise.resolve({ data: { data: nextPickupResult } });
+    }
+
+    throw new Error(`Unexpected axios.get URL: ${url}`);
+  });
+
+  jest.doMock('axios', () => ({
+    __esModule: true,
+    default: { post: axiosPost, get: axiosGet },
+    post: axiosPost,
+    get: axiosGet,
+  }));
+
+  const mockSendMail = sendWaybillEmailError
+    ? jest.fn().mockRejectedValue(sendWaybillEmailError)
+    : jest.fn().mockResolvedValue(undefined);
+  const createTransport = jest.fn().mockReturnValue({ sendMail: mockSendMail });
+
+  jest.doMock('nodemailer', () => ({
+    __esModule: true,
+    default: { createTransport },
+    createTransport,
+  }));
+
+  const httpsRequest = jest.fn().mockImplementation((options, callback) => {
+    const request = new EventEmitter();
+
+    request.write = jest.fn();
+    request.end = jest.fn(() => {
+      const response = new EventEmitter();
+      const requestPath = String(options.path || '');
+      const requestMethod = String(options.method || 'GET').toUpperCase();
+
+      const isAccessTokenRequest = requestMethod === 'POST' && requestPath.includes('/oauth2/accessToken');
+      const isSfServiceRequest = requestMethod === 'POST' && requestPath.includes('/std/service');
+      const isDownloadRequest = requestMethod === 'GET';
+
+      if (isAccessTokenRequest && getAccessTokenError) {
+        process.nextTick(() => request.emit('error', getAccessTokenError));
+        return;
+      }
+
+      if (isSfServiceRequest && callSfServiceError) {
+        process.nextTick(() => request.emit('error', callSfServiceError));
+        return;
+      }
+
+      if (isDownloadRequest && downloadPdfError) {
+        process.nextTick(() => request.emit('error', downloadPdfError));
+        return;
+      }
+
+      if (!isAccessTokenRequest && !isSfServiceRequest && !isDownloadRequest) {
+        process.nextTick(() => request.emit('error', new Error(`Unexpected https.request ${requestMethod} ${requestPath}`)));
+        return;
+      }
+
+      response.statusCode = 200;
+      callback(response);
+
+      process.nextTick(() => {
+        if (isAccessTokenRequest) {
+          response.emit('data', JSON.stringify({ accessToken: getAccessTokenResult }));
+        } else if (isSfServiceRequest) {
+          response.emit('data', JSON.stringify({ apiResultCode: 'A1000', apiResultData: JSON.stringify(callSfServiceResult) }));
+        } else {
+          response.emit('data', downloadPdfResult);
+        }
+        response.emit('end');
+      });
+    });
+
+    return request;
+  });
+
+  jest.doMock('https', () => ({
+    __esModule: true,
+    default: { request: httpsRequest },
+    request: httpsRequest,
+  }));
+
+  return { axiosPost, axiosGet, httpsRequest, mockSendMail };
 }
 
 /**
@@ -182,51 +310,23 @@ function loadHandlerWithMocks({
 
   jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
 
-  // SF address client
-  jest.doMock(
-    path.resolve(__dirname, '../dist/functions/logistics/src/config/sfAddressClient.js'),
-    () => ({
-      fetchAddressToken: fetchAddressTokenError
-        ? jest.fn().mockRejectedValue(fetchAddressTokenError)
-        : jest.fn().mockResolvedValue(fetchAddressTokenResult),
-      fetchAreaList: fetchAreaListError
-        ? jest.fn().mockRejectedValue(fetchAreaListError)
-        : jest.fn().mockResolvedValue(fetchAreaListResult),
-      fetchNetCodeList: fetchNetCodeListError
-        ? jest.fn().mockRejectedValue(fetchNetCodeListError)
-        : jest.fn().mockResolvedValue(fetchNetCodeListResult),
-      fetchPickupAddresses: fetchPickupAddressesError
-        ? jest.fn().mockRejectedValue(fetchPickupAddressesError)
-        : jest.fn().mockResolvedValue(fetchPickupAddressesResult),
-    })
-  );
-
-  // SF express client
-  jest.doMock(
-    path.resolve(__dirname, '../dist/functions/logistics/src/config/sfExpressClient.js'),
-    () => ({
-      SF_CLOUD_PRINT_URL: 'https://bspgw.sf-express.com/std/service',
-      getAccessToken: getAccessTokenError
-        ? jest.fn().mockRejectedValue(getAccessTokenError)
-        : jest.fn().mockResolvedValue(getAccessTokenResult),
-      callSfService: callSfServiceError
-        ? jest.fn().mockRejectedValue(callSfServiceError)
-        : jest.fn().mockResolvedValue(callSfServiceResult),
-      downloadPdf: downloadPdfError
-        ? jest.fn().mockRejectedValue(downloadPdfError)
-        : jest.fn().mockResolvedValue(downloadPdfResult),
-    })
-  );
-
-  // Mail
-  jest.doMock(
-    path.resolve(__dirname, '../dist/functions/logistics/src/config/mail.js'),
-    () => ({
-      sendWaybillEmail: sendWaybillEmailError
-        ? jest.fn().mockRejectedValue(sendWaybillEmailError)
-        : jest.fn().mockResolvedValue(undefined),
-    })
-  );
+  mockLogisticsExternalClients({
+    fetchAddressTokenResult,
+    fetchAddressTokenError,
+    fetchAreaListResult,
+    fetchAreaListError,
+    fetchNetCodeListResult,
+    fetchNetCodeListError,
+    fetchPickupAddressesResult,
+    fetchPickupAddressesError,
+    getAccessTokenResult,
+    getAccessTokenError,
+    callSfServiceResult,
+    callSfServiceError,
+    downloadPdfResult,
+    downloadPdfError,
+    sendWaybillEmailError,
+  });
 
   const { handler } = require(handlerModulePath);
   return { handler, orderModel, rateLimitModel };
@@ -294,10 +394,10 @@ describe('POST /logistics/token', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.bearer_token).toBe('my-bearer-token');
+    expect(parsed.body.data.bearerToken).toBe('my-bearer-token');
   });
 
-  test('returns 401 when no auth context', async () => {
+  test('does not require auth context', async () => {
     const { handler } = loadHandlerWithMocks();
 
     const result = await handler(
@@ -309,7 +409,7 @@ describe('POST /logistics/token', () => {
       createContext()
     );
 
-    expect(parseResponse(result).statusCode).toBe(401);
+    expect(parseResponse(result).statusCode).toBe(200);
   });
 
   test('returns 429 when rate limit is exceeded', async () => {
@@ -342,18 +442,7 @@ describe('POST /logistics/token', () => {
 
     jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
 
-    jest.doMock(
-      path.resolve(__dirname, '../dist/functions/logistics/src/config/sfAddressClient.js'),
-      () => ({ fetchAddressToken: jest.fn() })
-    );
-    jest.doMock(
-      path.resolve(__dirname, '../dist/functions/logistics/src/config/sfExpressClient.js'),
-      () => ({ getAccessToken: jest.fn(), callSfService: jest.fn(), downloadPdf: jest.fn(), SF_CLOUD_PRINT_URL: '' })
-    );
-    jest.doMock(
-      path.resolve(__dirname, '../dist/functions/logistics/src/config/mail.js'),
-      () => ({ sendWaybillEmail: jest.fn() })
-    );
+    mockLogisticsExternalClients();
 
     const { handler: rateLimitedHandler } = require(handlerModulePath);
 
@@ -365,7 +454,7 @@ describe('POST /logistics/token', () => {
     expect(parseResponse(result).statusCode).toBe(429);
   });
 
-  test('returns 500 when SF address service throws', async () => {
+  test('returns 502 when SF address service throws', async () => {
     const { handler } = loadHandlerWithMocks({
       fetchAddressTokenError: new Error('network error'),
     });
@@ -376,8 +465,8 @@ describe('POST /logistics/token', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(500);
-    expect(parsed.body.errorKey).toBe('common.internalError');
+    expect(parsed.statusCode).toBe(502);
+    expect(parsed.body.errorKey).toBe('logistics.sfApiError');
   });
 });
 
@@ -400,7 +489,7 @@ describe('POST /logistics/lookups/areas', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.area_list)).toBe(true);
+    expect(Array.isArray(parsed.body.data.areaList)).toBe(true);
   });
 
   test('returns 400 when token is missing', async () => {
@@ -418,6 +507,25 @@ describe('POST /logistics/lookups/areas', () => {
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
     expect(parsed.body.errorKey).toBe('logistics.validation.tokenRequired');
+  });
+
+  test('returns 400 when token is a NoSQL-style operator object', async () => {
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/lookups/areas',
+        body: { token: { $gt: '' } },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(['logistics.validation.tokenRequired', 'common.invalidBodyParams']).toContain(
+      parsed.body.errorKey
+    );
   });
 
   test('returns 400 when body is missing entirely', async () => {
@@ -445,7 +553,7 @@ describe('POST /logistics/lookups/areas', () => {
     expect(parseResponse(result).statusCode).toBe(400);
   });
 
-  test('returns 500 when SF address API throws', async () => {
+  test('returns 502 when SF address API throws', async () => {
     const { handler } = loadHandlerWithMocks({
       fetchAreaListError: new Error('network error'),
     });
@@ -459,7 +567,7 @@ describe('POST /logistics/lookups/areas', () => {
       createContext()
     );
 
-    expect(parseResponse(result).statusCode).toBe(500);
+    expect(parseResponse(result).statusCode).toBe(502);
   });
 });
 
@@ -482,7 +590,7 @@ describe('POST /logistics/lookups/net-codes', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.netCode).toBeDefined();
+    expect(parsed.body.data.netCode).toBeDefined();
   });
 
   test('returns 400 when token is missing', async () => {
@@ -539,7 +647,7 @@ describe('POST /logistics/lookups/pickup-locations', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.addresses)).toBe(true);
+    expect(Array.isArray(parsed.body.data.addresses)).toBe(true);
   });
 
   test('returns 400 when netCode is empty array', async () => {
@@ -602,7 +710,7 @@ describe('POST /logistics/shipments', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.trackingNumber).toBe('SF9999999999');
+    expect(parsed.body.data.trackingNumber).toBe('SF9999999999');
     expect(orderModel.updateMany).not.toHaveBeenCalled(); // no tempIds matched
   });
 
@@ -688,7 +796,7 @@ describe('POST /logistics/shipments', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(403);
-    expect(parsed.body.errorKey).toBe('common.unauthorized');
+    expect(parsed.body.errorKey).toBe('common.forbidden');
   });
 
   test('returns 400 when lastName is missing', async () => {
@@ -742,6 +850,49 @@ describe('POST /logistics/shipments', () => {
     expect(parsed.body.errorKey).toBe('logistics.validation.addressRequired');
   });
 
+  test('returns 400 when shipment lastName is a NoSQL-style operator object', async () => {
+    const { handler, orderModel } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/shipments',
+        body: {
+          lastName: { $ne: null },
+          phoneNumber: '+85291234567',
+          address: '1 Test Road',
+        },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(orderModel.updateMany).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 when shipment address exceeds the max length', async () => {
+    const { handler, orderModel } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/shipments',
+        body: {
+          lastName: 'Chan',
+          phoneNumber: '+85291234567',
+          address: 'X'.repeat(501),
+        },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('logistics.validation.addressRequired');
+    expect(orderModel.updateMany).not.toHaveBeenCalled();
+  });
+
   test('returns 500 when SF API returns no waybill', async () => {
     const { handler } = loadHandlerWithMocks({
       callSfServiceResult: { msgData: { waybillNoInfoList: [] } },
@@ -761,7 +912,7 @@ describe('POST /logistics/shipments', () => {
     expect(parsed.body.errorKey).toBe('logistics.missingWaybill');
   });
 
-  test('returns 500 when SF access token call fails', async () => {
+  test('returns 502 when SF access token call fails', async () => {
     const { handler } = loadHandlerWithMocks({
       getAccessTokenError: new Error('SF auth failed'),
     });
@@ -775,7 +926,7 @@ describe('POST /logistics/shipments', () => {
       createContext()
     );
 
-    expect(parseResponse(result).statusCode).toBe(500);
+    expect(parseResponse(result).statusCode).toBe(502);
   });
 
   test('returns 401 when no auth context (unauthenticated request)', async () => {
@@ -818,7 +969,7 @@ describe('POST /logistics/cloud-waybill', () => {
 
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.waybillNo).toBe('SF1234567890');
+    expect(parsed.body.data.waybillNo).toBe('SF1234567890');
   });
 
   test('returns 400 when waybillNo is missing', async () => {
@@ -836,6 +987,25 @@ describe('POST /logistics/cloud-waybill', () => {
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
     expect(parsed.body.errorKey).toBe('logistics.validation.waybillNoRequired');
+  });
+
+  test('returns 400 when waybillNo is a NoSQL-style operator object', async () => {
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/cloud-waybill',
+        body: { waybillNo: { $gt: '' } },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(['logistics.validation.waybillNoRequired', 'common.invalidBodyParams']).toContain(
+      parsed.body.errorKey
+    );
   });
 
   test('returns 400 when body is null', async () => {
@@ -891,7 +1061,7 @@ describe('POST /logistics/cloud-waybill', () => {
     expect(parsed.body.errorKey).toBe('logistics.missingPrintFile');
   });
 
-  test('returns 500 when PDF download fails', async () => {
+  test('returns 502 when PDF download fails', async () => {
     const { handler } = loadHandlerWithMocks({
       callSfServiceResult: {
         success: true,
@@ -910,7 +1080,7 @@ describe('POST /logistics/cloud-waybill', () => {
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(500);
+    expect(parsed.statusCode).toBe(502);
     expect(parsed.body.errorKey).toBe('logistics.sfApiError');
   });
 

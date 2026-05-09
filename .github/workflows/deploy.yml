@@ -5,6 +5,7 @@ on:
     branches:
       - main
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7: input gates an optional manual production deploy; removing it would break the production conditional
     inputs:
       deploy_production:
         description: Deploy production after development succeeds

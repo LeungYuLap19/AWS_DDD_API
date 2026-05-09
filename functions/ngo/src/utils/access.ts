@@ -1,14 +1,15 @@
-import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
+import { HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
-import { response } from './response';
 
+/** Minimal auth context required by NGO-only service helpers. */
 export type NgoAuthContext = {
   userId: string;
   userRole?: string;
   ngoId?: string;
 };
 
+/** NGO document shape consumed by access checks and sanitized profile responses. */
 export type NgoDocument = {
   _id: string | { toString(): string };
   isActive?: boolean;
@@ -16,6 +17,7 @@ export type NgoDocument = {
   [key: string]: unknown;
 };
 
+/** Active NGO membership record for one user within one NGO. */
 export type NgoUserAccessDocument = {
   _id?: string | { toString(): string };
   ngoId?: string | { toString(): string };
@@ -25,18 +27,17 @@ export type NgoUserAccessDocument = {
   [key: string]: unknown;
 };
 
+/**
+ * Loads the NGO and the caller's active NGO membership record, then enforces
+ * that the NGO exists, is active/verified, and still grants the caller access.
+ */
 export async function requireAuthorizedNgoAccess(
   ctx: RouteContext,
   authContext: NgoAuthContext
-): Promise<
-  | {
-      ngo: NgoDocument;
-      ngoUserAccess: NgoUserAccessDocument;
-    }
-  | {
-      errorResponse: APIGatewayProxyResult;
-    }
-> {
+): Promise<{
+  ngo: NgoDocument;
+  ngoUserAccess: NgoUserAccessDocument;
+}> {
   const NGO = mongoose.model('NGO');
   const NgoUserAccess = mongoose.model('NgoUserAccess');
 
@@ -50,26 +51,21 @@ export async function requireAuthorizedNgoAccess(
   ]);
 
   if (!ngo) {
-    return {
-      errorResponse: response.errorResponse(404, 'ngo.errors.notFound', ctx.event),
-    };
+    throw new HttpError('ngo.errors.notFound', 404);
   }
 
   if (!ngo.isActive || !ngo.isVerified) {
-    return {
-      errorResponse: response.errorResponse(403, 'common.unauthorized', ctx.event),
-    };
+    throw new HttpError('common.forbidden', 403);
   }
 
   if (!ngoUserAccess) {
-    return {
-      errorResponse: response.errorResponse(403, 'common.unauthorized', ctx.event),
-    };
+    throw new HttpError('common.forbidden', 403);
   }
 
   return { ngo, ngoUserAccess };
 }
 
+/** Returns whether the caller's NGO membership grants admin-level mutation rights. */
 export function hasNgoAdminAccess(ngoUserAccess: NgoUserAccessDocument): boolean {
   return ngoUserAccess.roleInNgo === 'admin';
 }

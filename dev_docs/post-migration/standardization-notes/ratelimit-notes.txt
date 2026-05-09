@@ -1,0 +1,163 @@
+# Rate Limiting — Audit & Comparison Notes
+Date: 2026-05-08
+
+---
+
+## Old System (AWS_API)
+
+Implementation: per-Lambda copy of rateLimit.js (duplicated in AuthRoute, EmailVerification, PetBasicInfo, EyeUpload, etc.)
+Core function: `enforceRateLimit({ event, action, identifier, limit, windowSec })`
+Storage key: raw plaintext `${ip}:${identifier || "anonymous"}` — email addresses, phone numbers, refresh token hashes stored unencrypted in MongoDB
+
+Weaknesses:
+- Single composite bucket only (ip+identifier). An attacker rotating IPs while targeting one victim (email-bombing, credential stuffing) was completely uncapped — the identifier alone had no quota.
+- No per-IP cap across targets. A single origin flooding many different accounts was only bounded by the wide ip+identifier composite.
+- No account-level or global cap.
+- PII stored in plaintext in rate_limits collection. Any collection dump exposed raw email/phone/IP data.
+- No failure cooldown. Bad credentials could be retried slowly and indefinitely as long as each attempt respected the time-window rate. A 5 req/5 min limit could still allow 5 × (24 × 12) = 1 440 bad-password guesses per day per IP.
+- No Retry-After header on 429 responses. Clients had no backoff signal.
+- No failOpen option. A transient MongoDB error in the rate-limit write would propagate as an unhandled exception rather than allowing the request to proceed or failing cleanly.
+- No duplicate-key race handling. Concurrent cold-start upserts could throw and surface as 500s.
+- Config inconsistency: some limits came from env vars (REFRESH_RATE_LIMIT_LIMIT, REFRESH_RATE_LIMIT_WINDOW_SEC), others were hardcoded literals.
+- Each Lambda owned its own copy — updates required changes in N places.
+
+---
+
+## New System (AWS_DDD_API)
+
+Implementation: single shared layer `@aws-ddd-api/shared` → `rate-limit/mongo.ts`
+Exported to Lambda wrappers via `functions/<domain>/src/utils/rateLimit.ts` (thin adapter)
+Core function: `requireMongoRateLimit({ ..., policies: RateLimitPolicy[] })` — throws RateLimitError on first exceeded lane
+
+### Layered Scopes
+
+| Scope          | Key material          | What it stops                                                        |
+|----------------|-----------------------|----------------------------------------------------------------------|
+| ip             | IP only               | Single host flooding many targets                                    |
+| identifier     | identifier only       | Distributed-IP flooding against one victim (email-bombing, stuffing) |
+| ip+identifier  | IP + identifier       | Narrow per-caller-per-target cap (replaces old single bucket)        |
+| account        | accountId only        | Per-authenticated-account abuse after login                          |
+| global         | none (one per action) | Nuclear last-resort cap for any action                               |
+
+Each lane is an independent MongoDB document. First lane over limit short-circuits; subsequent lanes are not consumed. Anonymous traffic (null identifier) silently skips identifier/account lanes.
+
+### Failure Cooldown (auth flows only)
+
+`requireMongoRateLimitNotInCooldown` — read-only peek; rejects if failure count >= threshold.
+`recordMongoRateLimitFailure` — increments failure counter only on actual credential failure.
+Failure counter lives in a separate action namespace (e.g. `auth.login.ngo.fail:identifier`) so:
+- Legitimate traffic never consumes the failure quota.
+- An attacker getting close to the cooldown threshold cannot "self-lockout" a real user by flooding with correct credentials.
+- Threshold + cooldown combination (e.g. 5 failures / 15 min) is enforced independently of the throughput policy.
+
+Applied to: login (user + ngo), OTP verify (email + SMS), token refresh.
+
+### Other Improvements vs Old System
+
+- Key hashing: all storage keys are SHA-256 hashed before persistence (salted via keySalt option). Raw emails, phones, IPs are never stored in MongoDB.
+- Retry-After header: 429 responses include `retry-after: <seconds>` computed from window reset time.
+- Race condition safety: duplicate-key (11000) errors on concurrent upsert are caught and retried with a plain $inc, preventing 500 bleed-through.
+- failOpen flag: DB errors in non-critical flows can be configured to pass through rather than throw.
+- Legacy shim: `{ limit, windowSeconds }` shorthand still works for non-auth Lambdas not yet migrated to layered policies.
+- TypeScript: `RateLimitPolicy` and `RateLimitScope` types enforced at compile time.
+- Single source of truth: one implementation used by all 7 Lambda functions; previously 8+ independent copies.
+
+---
+
+## Auth Flow Policy Summary (as implemented)
+
+| Flow                        | Throughput policies                          | Failure cooldown         |
+|-----------------------------|----------------------------------------------|--------------------------|
+| NGO login                   | ip: 60/15m, identifier: 10/15m               | 5 fails / 15 min         |
+| User login (OTP verify)     | see Email/SMS OTP verify                     | 5 fails / 15 min         |
+| Email OTP send              | ip: 20/5m, identifier: 3/5m                  | —                        |
+| SMS OTP send                | ip: 20/10m, identifier: 3/10m                | —                        |
+| Email OTP verify            | ip: 30/5m, identifier: 5/5m                  | 5 fails / 15 min         |
+| SMS OTP verify              | ip: 30/10m, identifier: 5/10m                | 5 fails / 15 min         |
+| Token refresh               | ip: 60/5m, identifier (token): env-driven    | 10 fails / 30 min (ip)   |
+| User registration           | ip: 10/60m, ip+identifier: 5/60m             | —                        |
+| NGO registration            | ip: 10/60m, ip+identifier: 5/60m             | —                        |
+
+The redundant ip+identifier lane was removed from login, OTP send/verify and
+token refresh on 2026-05-08 — the identifier (or ip) lane was always strictly
+stricter so the composite lane could never trip first.
+
+---
+
+---
+
+## Endpoint Coverage Audit (2026-05-08)
+
+### Auth model
+Most routes are protected at the API Gateway level by the default Lambda Authorizer. Routes with `Auth: Authorizer: NONE` in the SAM template are truly public (no JWT required).
+
+### Confirmed: rate limiting present and correct
+
+| Lambda           | Endpoint(s)                                      | Notes                                      |
+|------------------|--------------------------------------------------|--------------------------------------------|
+| auth             | POST /auth/challenges, /verify, /login/ngo, /registrations/*, /tokens/refresh | layered + failure cooldown |
+| commerce-orders  | POST /commerce/orders                            | layered; GET/ops are admin-only            |
+| logistics        | POST /logistics/token, /lookups/*, /shipments, /cloud-waybill | layered per-endpoint |
+| pet-analysis     | POST /pet/analysis/eye, /breed, /uploads/*       | layered; consistent 60/30/20 pattern       |
+| pet-medical      | POST/PATCH/DELETE on all 4 sub-types (general, medication, deworming, blood-test) | layered |
+| pet-profile      | POST /pet/profile, PATCH/{petId}, DELETE/{petId} | layered; GET endpoints are read-only, no RL |
+| pet-recovery     | POST /pet/recovery/lost, /found                  | layered; tight 15/8/5 per 60s             |
+
+### CRITICAL gap: public write endpoint with no rate limit
+
+**POST /commerce/catalog/events** — frontend analytics tracker (fire-and-forget product-view logging). `Authorizer: NONE` (no JWT) but `x-api-key` IS enforced by API Gateway via the global `ApiKeyRequired: true` + usage plan. Lambda never runs without a valid API key.
+
+Risk is therefore lower than initially noted: an attacker needs the API key first. However the key is embedded in the frontend bundle and should be treated as semi-public. A key-holder (or anyone who extracts it) can still flood and fill the `ProductLog` collection without a rate limit.
+
+Fix: add a `global`-scoped or `ip`-scoped rate limit (no identifier context available on this endpoint). E.g.:
+```
+policies: [
+  { scope: 'ip', limit: 120, windowSeconds: 60 },
+  { scope: 'global', limit: 5000, windowSeconds: 60 },
+]
+```
+
+Priority: **P1** (not critical — API key gate reduces blast radius, but still worth fixing before production load).
+
+### Missing rate limiting on authenticated write endpoints
+
+These routes are JWT-protected (default authorizer) so the barrier is higher than the catalog/events case. Still worth adding basic per-identifier limits to prevent a compromised or abusive account from hammering writes.
+
+| Lambda         | Endpoint(s)                                                  | Risk                              |
+|----------------|--------------------------------------------------------------|-----------------------------------|
+| user           | PATCH /user/me, DELETE /user/me                              | free-text write; destructive delete |
+| ngo            | PATCH /ngo/me                                                | free-text write                   |
+| pet-transfer   | POST /pet/transfer/{petId}, POST …/ngo-reassignment, PATCH, DELETE | ownership changes           |
+| pet-adoption   | POST /pet/adoption/{id} (managed record create)              | creates adoption application      |
+| pet-source     | POST /pet/source/{petId}, PATCH /pet/source/{petId}          | write operations                  |
+
+Note: commerce-fulfillment routes (`requireRole(['admin', 'developer'])`) and `POST /notifications/dispatch` (`requireRole('admin')`) are intentionally not rate-limited — hard role gate is sufficient.
+
+### Policy correctness issue: redundant ip+identifier lane in auth flows
+
+In all auth endpoints, `ip+identifier` limit ≥ `identifier` limit:
+- Login: identifier 10/15m, ip+identifier 10/15m → identical limits; ip+identifier never trips before identifier does.
+- OTP send: identifier 3/5m, ip+identifier 5/5m → identifier always trips first.
+- OTP verify: identifier 5/5m, ip+identifier 10/5m → same.
+- Token refresh: identifier 20/15m, ip+identifier 20/15m → identical.
+
+Result: ip+identifier lane is dead weight on every auth request — one extra `findOneAndUpdate` per call for zero additional protection. The `identifier` lane already catches distributed-IP attacks against one victim. The `ip` lane catches single-origin attacks across many victims. `ip+identifier` in this direction only adds noise.
+
+Non-auth flows (medical, profile, recovery, analysis) are correct: ip+identifier < identifier, making all 3 lanes independently meaningful.
+
+Fix: remove ip+identifier from auth flow policies, or (if you want belt-and-suspenders) make ip+identifier ≤ identifier.
+
+### Minor: shared action names in pet-medical sub-types
+
+All 4 medical record types (general, medication, deworming, blood-test) use identical action strings: `petMedical.create`, `petMedical.update`, `petMedical.delete`. Their rate limit counters are therefore shared — creating a general record and a medication record both increment the same bucket. This is probably intentional (aggregate limit per user across all medical writes) but worth confirming. If per-sub-type isolation is desired, actions should be `petMedical.general.create`, `petMedical.medication.create`, etc.
+
+---
+
+## Outstanding / Not Yet Done
+
+- [DONE 2026-05-08] POST /commerce/catalog/events — added ip 120/60s + global 5000/60s policy.
+- [DONE 2026-05-08] Authenticated write endpoints — user PATCH/DELETE, ngo PATCH, pet-transfer (4), pet-adoption (3), pet-source (2) now have layered ip + identifier policies. DELETE /user/me uses tighter destructive-action limit (5/60m identifier). NGO reassignment uses 15/60m identifier.
+- [DONE 2026-05-08] Removed redundant ip+identifier lane from login, OTP send/verify, token refresh.
+- P3 integration tests (rate-limit bypass scenarios): deferred. Testing distributed-IP or failure-cooldown edge cases properly requires real concurrent infrastructure; not practical in Jest. Revisit if load/chaos testing infrastructure is added.
+- WAF rate-based rules: not required at current scale. Revisit only if volumetric abuse is observed or compliance mandates a WAF layer.
+- Minor (deferred): pet-medical sub-types share action namespace `petMedical.{create,update,delete}`. Confirmed intentional aggregate-per-user across all medical writes; if per-sub-type isolation becomes desirable, split actions later.

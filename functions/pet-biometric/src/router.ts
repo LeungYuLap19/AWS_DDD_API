@@ -1,11 +1,9 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { handleProxyAny, handleProxyRoot } from './services/biometric';
 
-const routes: Record<string, RouteHandler> = {
-  '/pet/biometric': handleProxyRoot,
-  '/pet/biometric/{proxy+}': handleProxyAny,
+const routes = {
+  '/pet/biometric': () => import('./services/biometric').then(m => m.handleProxyRoot),
+  '/pet/biometric/{proxy+}': () => import('./services/biometric').then(m => m.handleProxyAny),
 };
 
 export const routeRequest = createRouter(routes, { response });

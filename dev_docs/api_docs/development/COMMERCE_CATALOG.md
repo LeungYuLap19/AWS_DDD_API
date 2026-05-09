@@ -2,11 +2,9 @@
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-**Lambda name:** `aws-ddd-api-{stage}-commerce-catalog`
+**Lambda:** `aws-ddd-api-{stage}-commerce-catalog`
 
-Product browsing and storefront metadata. All three routes require `x-api-key` but no JWT.
-
-> See also: [COMMERCE_ORDERS.md](COMMERCE_ORDERS.md), [COMMERCE_FULFILLMENT.md](COMMERCE_FULFILLMENT.md)
+Public commerce browsing endpoints for product catalog, storefront metadata, and product-view event logging. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `items`, `shops`, or `id` payloads are stale.
 
 ---
 
@@ -14,37 +12,90 @@ Product browsing and storefront metadata. All three routes require `x-api-key` b
 
 ### Route Summary
 
-| Method | Path | Auth | Purpose |
-| --- | --- | --- | --- |
-| GET | `/commerce/catalog` | `x-api-key`; no JWT required | List all products |
-| POST | `/commerce/catalog/events` | `x-api-key`; no JWT required | Record a product-view event |
-| GET | `/commerce/storefront` | `x-api-key`; no JWT required | List shop metadata |
+| Method | Path | Auth | Content-Type | Purpose |
+| --- | --- | --- | --- | --- |
+| GET | `/commerce/catalog` | `x-api-key` only | — | Paginated product list |
+| POST | `/commerce/catalog/events` | `x-api-key` only | `application/json` | Record a product-view event |
+| GET | `/commerce/storefront` | `x-api-key` only | — | Paginated storefront list |
+
+### Integration-Critical Behavior
+
+| Topic | Current DDD behavior |
+| --- | --- |
+| Auth | All three routes are public at the Lambda level, but still require API Gateway `x-api-key` |
+| Pagination | Both GET endpoints use the shared pagination schema with default `page=1`, `limit=30`, max `limit=100` |
+| Catalog response | `GET /commerce/catalog` returns product records inside `data`, not top-level `items` |
+| Storefront response | `GET /commerce/storefront` returns storefront rows inside `data`, not top-level `shops` |
+| Event response | `POST /commerce/catalog/events` returns `201` with `data: { id }` |
+| Event validation | Event body is strict JSON; extra keys are rejected |
+| `accessAt` handling | `accessAt` is only string-length checked by the current schema; when present, the handler passes it to `new Date(...)` without separate date-format validation |
+| Event rate limit | Event logging is capped by IP and global ceilings even though the route is public |
 
 ---
 
-## API Gateway and Auth Rules
+## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
-| Route group | API key required | API Gateway authorizer |
+| Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| All catalog and storefront routes | Yes | None (no JWT authorizer) |
-| `OPTIONS` preflight routes | No | None |
+| `GET /commerce/catalog` | Yes | None |
+| `POST /commerce/catalog/events` | Yes | None |
+| `GET /commerce/storefront` | Yes | None |
+| `OPTIONS` for the above routes | No | None |
 
-### Authentication
+Required deployed header:
 
-All three routes require `x-api-key` at API Gateway. No `Authorization` header is needed.
+```http
+x-api-key: <api-gateway-api-key>
+```
+
+`Authorization` is not required for any route in this Lambda.
+
+### API Gateway Body Validation
+
+`POST /commerce/catalog/events` is wired to the `GenericJsonObjectRequest` API Gateway model.
+
+- malformed non-object JSON can be rejected by API Gateway before Lambda runs
+- Lambda-level body validation still enforces the strict schema and field formats
+
+### Localization
+
+- Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
+- Use `errorKey` for branching logic instead of `error`
 
 ---
 
-## Shared Conventions
+## Success And Error Conventions
 
 ### Success Response Shape
+
+List success:
 
 ```json
 {
   "success": true,
-  "<endpoint-specific fields>": "...",
+  "message": "Retrieved successfully",
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 0,
+    "totalPages": 0
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Create success:
+
+```json
+{
+  "success": true,
+  "message": "Created successfully",
+  "data": {
+    "id": "665f1a2b3c4d5e6f7a8b9c0d"
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
@@ -54,17 +105,11 @@ All three routes require `x-api-key` at API Gateway. No `Authorization` header i
 ```json
 {
   "success": false,
-  "errorKey": "common.internalError",
-  "error": "Localized message (zh default)",
+  "errorKey": "common.invalidBodyParams",
+  "error": "localized message",
   "requestId": "aws-lambda-request-id"
 }
 ```
-
-Use `errorKey` for programmatic branching. `error` is localized and not stable.
-
-### Localization
-
-Append `?lang=en` for English messages. Default is `zh` (Traditional Chinese).
 
 ---
 
@@ -72,138 +117,187 @@ Append `?lang=en` for English messages. Default is `zh` (Traditional Chinese).
 
 ### GET /commerce/catalog
 
-Returns the full product list.
+Return paginated product catalog records.
 
-**Auth:** `x-api-key` required; no JWT required
-**Rate limit:** None configured
+**Lambda owner:** `commerce-catalog`  
+**Auth:** `x-api-key` only
 
-**Query params:** None
+#### Catalog Query Parameters
 
-**Success (200):**
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | No | Default `1` |
+| `limit` | integer | No | Default `30`, max `100` |
+
+#### Returned Record Shape
+
+This handler returns the stored `ProductList` documents as-is. No response sanitizer or field projection is applied in the current implementation.
+
+Frontend consumers should therefore treat the record shape as model-defined and avoid assuming undocumented legacy wrapper keys.
+
+#### Catalog Success (200)
 
 ```json
 {
   "success": true,
-  "items": [
+  "message": "Retrieved successfully",
+  "data": [
     {
-      "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-      "..."
+      "_id": "665f1a2b3c4d5e6f7a8b9c01"
     }
   ],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 1,
+    "totalPages": 1
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-`items` contains all documents from the `ProductList` collection. Fields are model-defined and returned as-is (no sanitization projection beyond what the model stores).
-
-**Errors:**
+#### Catalog Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 500 | `common.internalError` | DB connection failure or unexpected error |
-
----
+| 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
+| 500 | `common.internalError` | Unexpected database or server error |
 
 ### POST /commerce/catalog/events
 
-Records a product-view event (analytics tracking).
+Record a product-view event.
 
-**Auth:** `x-api-key` required; no JWT required
-**Rate limit:** None configured
+**Lambda owner:** `commerce-catalog`  
+**Auth:** `x-api-key` only  
 **Content-Type:** `application/json`
 
-**Body:**
+#### Rate Limits
+
+| Scope | Policy |
+| --- | --- |
+| IP | 120 requests / 60s |
+| Global | 5000 requests / 60s |
+
+Rate-limit failures return `429 common.rateLimited` and may include `Retry-After`.
+
+#### Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `petId` | string | Yes | Pet whose profile triggered the product view |
-| `userId` | string | Yes | User who viewed the product |
-| `userEmail` | string | Yes | Email of the viewing user |
-| `productUrl` | string | Yes | URL of the product that was viewed |
-| `accessAt` | string | No | ISO timestamp of the access event; server-stored as Date; defaults to `null` if omitted |
+| `petId` | string | Yes | MongoDB ObjectId |
+| `userId` | string | Yes | MongoDB ObjectId |
+| `userEmail` | string | Yes | Valid email, max 254 chars |
+| `productUrl` | string | Yes | Absolute URL, max 2048 chars |
+| `accessAt` | string | No | Optional string up to 64 chars; when present, the handler passes it to `new Date(...)` and does not currently reject semantically invalid date strings |
 
-**Example:**
+The body schema is strict. Extra keys are rejected.
 
-```json
-{
-  "petId": "665f1a2b3c4d5e6f7a8b9c0d",
-  "userId": "665f1a2b3c4d5e6f7a8b9c0e",
-  "userEmail": "user@example.com",
-  "productUrl": "https://example.com/product/ptag-standard",
-  "accessAt": "2025-01-15T10:30:00Z"
-}
-```
-
-**Success (201):**
+#### Event Example Request
 
 ```json
 {
-  "success": true,
-  "id": "665f1a2b3c4d5e6f7a8b9c0f",
-  "requestId": "aws-lambda-request-id"
+  "petId": "665f1a2b3c4d5e6f7a8b9c10",
+  "userId": "665f1a2b3c4d5e6f7a8b9c11",
+  "userEmail": "owner@example.com",
+  "productUrl": "https://shop.example.com/products/ptag-classic",
+  "accessAt": "2026-05-10T12:34:56.000Z"
 }
 ```
 
-`id` is the `_id` of the newly created `ProductLog` document.
-
-**Errors:**
-
-| Status | `errorKey` | Cause | Source |
-| --- | --- | --- | --- |
-| 400 | *(none — API GW shape: `{"message":"Invalid request body"}`)* | Malformed / non-object JSON body | API Gateway (`ValidateBody: true` on `GenericJsonObjectRequest` model — Lambda never runs) |
-| 400 | `common.missingBodyParams` | Body is missing or empty | Lambda |
-| 400 | `common.invalidBodyParams` | Valid JSON object but missing or invalid required fields | Lambda |
-| 500 | `common.internalError` | DB write failure or unexpected error | Lambda |
-
----
-
-### GET /commerce/storefront
-
-Returns shop metadata for all configured shops.
-
-**Auth:** `x-api-key` required; no JWT required
-**Rate limit:** None configured
-
-**Query params:** None
-
-**Success (200):**
+#### Event Success (201)
 
 ```json
 {
   "success": true,
-  "shops": [
-    {
-      "_id": "665f1a2b3c4d5e6f7a8b9c10",
-      "shopCode": "HK001",
-      "shopName": "PetPetClub Mong Kok",
-      "shopAddress": "123 Nathan Road, Mong Kok",
-      "shopContact": "+85291234567",
-      "shopContactPerson": "Ms. Chan",
-      "price": 298
-    }
-  ],
+  "message": "Created successfully",
+  "data": {
+    "id": "665f1a2b3c4d5e6f7a8b9c12"
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-Fields returned per shop: `shopCode`, `shopName`, `shopAddress`, `shopContact`, `shopContactPerson`, `price`. These are an explicit projection — no other `ShopInfo` fields are returned.
-
-`price` is the server-authoritative canonical price used during order creation.
-
-**Errors:**
+#### Event Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 500 | `common.internalError` | DB connection failure or unexpected error |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Invalid ObjectId, invalid email, invalid URL, malformed JSON, or strict-schema violation |
+| 429 | `common.rateLimited` | Event rate limit exceeded |
+| 500 | `common.internalError` | Unexpected database or server error |
+
+### GET /commerce/storefront
+
+Return paginated storefront records.
+
+**Lambda owner:** `commerce-catalog`  
+**Auth:** `x-api-key` only
+
+#### Storefront Query Parameters
+
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | No | Default `1` |
+| `limit` | integer | No | Default `30`, max `100` |
+
+#### Returned Storefront Shape
+
+Each returned row is projected to:
+
+- `_id`
+- `shopCode`
+- `shopName`
+- `shopAddress`
+- `shopContact`
+- `shopContactPerson`
+- `price`
+
+`price` is the canonical storefront price later used by order creation.
+
+#### Storefront Success (200)
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": [
+    {
+      "_id": "665f1a2b3c4d5e6f7a8b9c13",
+      "shopCode": "HK001",
+      "shopName": "PetPet Club Mong Kok",
+      "shopAddress": "123 Nathan Road, Mong Kok",
+      "shopContact": "+85291234567",
+      "shopContactPerson": "Ms Chan",
+      "price": 298
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 1,
+    "totalPages": 1
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+#### Storefront Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
+| 500 | `common.internalError` | Unexpected database or server error |
 
 ---
 
-## Frontend Integration Note
+## Frontend Integration Guide
 
-Typical browsing flow:
+1. Use `GET /commerce/storefront` to fetch server-authoritative `shopCode` and `price` values before checkout.
+2. Use `GET /commerce/catalog` for paginated browsing and read records from `data`, not old top-level `items`.
+3. Treat `POST /commerce/catalog/events` as fire-and-forget analytics. It is public but rate-limited, so the client should not retry aggressively on `429`.
 
-1. `GET /commerce/storefront` — fetch available shops, their `shopCode` values and prices
-2. `GET /commerce/catalog` — fetch product list
-3. `POST /commerce/catalog/events` — log product view events (fire-and-forget; no JWT needed)
+---
 
-**Price is always server-authoritative.** Do not use a client-stored price when building an order. Always source price from `ShopInfo.price` via `GET /commerce/storefront`.
+## Verification Snapshot
+
+This document is grounded in `functions/commerce-catalog/src/services/catalog.ts`, `storefront.ts`, `catalogEventBodySchema.ts`, and the route wiring in `template.yaml`.

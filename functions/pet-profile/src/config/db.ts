@@ -14,6 +14,11 @@ function registerModels() {
   mongoose.models.ImageCollection || mongoose.model('ImageCollection', ImageCollectionSchema, 'image_collections');
 }
 
+/**
+ * Reuses the warm-container Mongoose connection, registers this Lambda's model
+ * set after the connection is ready, and clears the cached promise if the
+ * initial connect attempt fails.
+ */
 export async function connectToMongoDB() {
   if (mongoose.connection.readyState === 1) {
     registerModels();

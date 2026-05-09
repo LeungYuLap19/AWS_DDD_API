@@ -441,8 +441,8 @@ describe('GET /commerce/fulfillment — admin list', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.orderVerification)).toBe(true);
-    expect(parsed.body.orderVerification).toHaveLength(2);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.body.data).toHaveLength(2);
     expect(parsed.body.pagination.total).toBe(2);
     expect(parsed.body.pagination.page).toBe(1);
   });
@@ -526,7 +526,7 @@ describe('GET /commerce/fulfillment — admin list', () => {
       createContext()
     );
     const parsed = parseResponse(result);
-    const item = parsed.body.orderVerification[0];
+    const item = parsed.body.data[0];
     expect(item).not.toHaveProperty('discountProof');
     expect(item).not.toHaveProperty('cancelled');
   });
@@ -554,7 +554,7 @@ describe('DELETE /commerce/fulfillment/{orderVerificationId} — soft-cancel', (
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.message).toBe('Cancelled successfully.');
+    expect(parsed.body.success).toBe(true);
   });
 
   test('returns 404 when order verification not found', async () => {
@@ -662,8 +662,8 @@ describe('GET /commerce/fulfillment/tags/{tagId}', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.form.tagId).toBe(TEST_TAG_ID);
-    expect(parsed.body.sf).toBe(order.sfWayBillNumber);
+    expect(parsed.body.data.tagId).toBe(TEST_TAG_ID);
+    expect(parsed.body.data.sf).toBe(order.sfWayBillNumber);
   });
 
   test('returns 404 when tag not found', async () => {
@@ -716,7 +716,7 @@ describe('GET /commerce/fulfillment/tags/{tagId}', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.sf).toBeUndefined();
+    expect(parsed.body.data.sf).toBeUndefined();
   });
 });
 
@@ -750,8 +750,7 @@ describe('PATCH /commerce/fulfillment/tags/{tagId}', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.message).toBe('Tag info updated successfully');
-    expect(typeof parsed.body.notificationDispatched).toBe('boolean');
+    expect(parsed.body.success).toBe(true);
   });
 
   test('returns 404 when tag not found', async () => {
@@ -854,7 +853,7 @@ describe('PATCH /commerce/fulfillment/tags/{tagId}', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.notificationDispatched).toBe(false);
+    expect(parsed.body.success).toBe(true);
   });
 
   test('rejects unauthenticated request with 401', async () => {
@@ -914,7 +913,7 @@ describe('GET /commerce/fulfillment/suppliers/{orderId}', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.form.tagId).toBe(TEST_TAG_ID);
+    expect(parsed.body.data.tagId).toBe(TEST_TAG_ID);
   });
 
   test('happy path — owner user can access their own record', async () => {
@@ -1017,7 +1016,7 @@ describe('PATCH /commerce/fulfillment/suppliers/{orderId}', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.message).toBe('Tag info updated successfully');
+    expect(parsed.body.success).toBe(true);
   });
 
   test('returns 404 when order verification not found', async () => {
@@ -1115,7 +1114,7 @@ describe('GET /commerce/fulfillment/share-links/whatsapp/{_id}', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.form.tagId).toBe(TEST_TAG_ID);
+    expect(parsed.body.data.tagId).toBe(TEST_TAG_ID);
   });
 
   test('happy path — owner user (matched by order email) can access', async () => {
@@ -1261,7 +1260,7 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.message).toBe('Email sent successfully.');
+    expect(parsed.body.success).toBe(true);
     expect(mocks.mockSendMail).toHaveBeenCalledTimes(1);
   });
 
@@ -1333,7 +1332,7 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
     expect(parseResponse(result).statusCode).toBe(400);
   });
 
-  test('returns 500 when sendMail throws', async () => {
+  test('returns 503 when sendMail throws', async () => {
     const { handler } = loadHandlerWithMocks({
       sendMailError: new Error('SMTP connection refused'),
     });
@@ -1348,7 +1347,7 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
       }),
       createContext()
     );
-    expect(parseResponse(result).statusCode).toBe(500);
+    expect(parseResponse(result).statusCode).toBe(503);
   });
 
   test('rejects non-admin role with 403', async () => {

@@ -7,24 +7,32 @@ import { applyRateLimit } from '../utils/rateLimit';
 import { breedAnalysisSchema } from '../zodSchema/breedAnalysisSchema';
 import env from '../config/env';
 
+/**
+ * Forwards a validated breed-analysis request to the external VM-backed ML
+ * service after authenticated per-user throttling.
+ */
 export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
+
+  const parsed = parseBody(ctx.body, breedAnalysisSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
     action: 'breedAnalysis',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 20,
-    windowSeconds: 300,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+      { scope: 'identifier', limit: 30, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
-  }
-
-  const parsed = parseBody(ctx.body, breedAnalysisSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   const endpoint = `${env.VM_BREED_PUBLIC_IP}${env.BREED_DOCKER_IMAGE}`;
@@ -32,16 +40,20 @@ export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGateway
   params.append('species', parsed.data.species);
   params.append('url', parsed.data.url);
 
-  const analysisResponse = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
-  });
-
-  const result = await analysisResponse.json();
+  let result: unknown;
+  try {
+    const analysisResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    result = await analysisResponse.json();
+  } catch {
+    return response.errorResponse(502, 'petAnalysis.errors.analysisError', ctx.event);
+  }
 
   return response.successResponse(200, ctx.event, {
-    message: 'petAnalysis.success.breedAnalysisCompleted',
-    result,
+    message: 'success.completed',
+    data: result,
   });
 }

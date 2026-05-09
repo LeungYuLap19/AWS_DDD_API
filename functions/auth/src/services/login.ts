@@ -1,12 +1,12 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { parseBody } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { ngoLoginBodySchema } from '../zodSchema/ngoLoginBodySchema';
 import { normalizeEmail } from '../utils/normalize';
-import { applyRateLimit } from '../utils/rateLimit';
+import { applyRateLimit, recordFailure, requireFailureCooldown } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import {
   buildRefreshCookie,
@@ -22,6 +22,11 @@ type NgoLoginUser = {
   verified?: boolean;
 };
 
+/**
+ * Authenticates an NGO user with email/password, applies both request and
+ * failure-cooldown limits, then issues a fresh access token plus refresh
+ * cookie when the NGO membership is active and verified.
+ */
 export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, ngoLoginBodySchema);
   if (!parsed.ok) {
@@ -39,10 +44,25 @@ export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxy
     action: 'auth.login.ngo',
     event: ctx.event,
     identifier: email,
-    limit: 10,
-    windowSeconds: 15 * 60,
+    // ip+identifier omitted: with identifier limit ≤ ip+identifier limit, the
+    // composite lane is dead weight (it can never trip first).
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 15 * 60 },
+      { scope: 'identifier', limit: 10, windowSeconds: 15 * 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
+
+  // Reject early if too many bad-credential failures have already accumulated
+  // for this email regardless of IP. Genuine logins do not consume this quota.
+  const cooldownResponse = await requireFailureCooldown({
+    action: 'auth.login.ngo.fail',
+    cooldownSeconds: 15 * 60,
+    event: ctx.event,
+    identifier: email,
+    threshold: 5,
+  });
+  if (cooldownResponse) return cooldownResponse;
 
   const User = mongoose.model('User');
   const user = await User.findOne({
@@ -52,6 +72,13 @@ export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxy
   }).lean() as NgoLoginUser | null;
 
   if (!user || !user.password || !(await bcrypt.compare(parsed.data.password, user.password))) {
+    await recordFailure({
+      action: 'auth.login.ngo.fail',
+      cooldownSeconds: 15 * 60,
+      event: ctx.event,
+      identifier: email,
+      threshold: 5,
+    });
     return response.errorResponse(401, 'auth.login.ngo.invalidUserCredential', ctx.event);
   }
 
@@ -88,11 +115,7 @@ export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxy
 
   return response.successResponse(200, ctx.event, {
     message: 'auth.login.ngo.successful',
-    userId: user._id,
-    role: user.role,
-    isVerified: user.verified,
-    token,
-    ngoId: ngo._id,
+    data: { userId: user._id, role: user.role, isVerified: user.verified, token, ngoId: ngo._id },
   }, {
     'Set-Cookie': buildRefreshCookie(refreshToken, ctx.event),
   });

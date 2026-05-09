@@ -1,19 +1,10 @@
 {
   "petProfile": {
-    "success": {
-      "created": "Pet profile created successfully",
-      "retrieved": "Pet profile retrieved successfully",
-      "updated": "Pet profile updated successfully",
-      "deleted": "Pet profile deleted successfully",
-      "listRetrieved": "Pet profiles retrieved successfully",
-      "tagLookupProcessed": "Pet tag lookup processed successfully"
-    },
     "errors": {
       "petNotFound": "Pet not found",
       "petAlreadyDeleted": "Pet is already deleted",
-      "invalidPetId": "Invalid pet id",
-      "missingTagId": "Missing tag id",
       "noPetsFound": "No pets found",
+      "invalidView": "Invalid view parameter",
       "userNotFound": "User not found",
       "duplicatePetTag": "Pet tag is already assigned to another pet",
       "duplicateNgoPetId": "NGO pet ID is already assigned to another pet",
@@ -25,7 +16,6 @@
       "animalRequired": "Pet type is required",
       "invalidDateFormat": "Invalid date format",
       "invalidImageUrl": "Invalid image URL format",
-      "invalidBodyParams": "Invalid request body parameters",
       "invalidBirthdayFormat": "Invalid birthday format",
       "invalidWeightType": "Invalid weight type",
       "invalidSterilizationType": "Invalid sterilization type",
@@ -38,7 +28,9 @@
       "invalidParentDateFormat": "Invalid parent date format",
       "invalidMotherParity": "Invalid mother parity value",
       "invalidRemovedIndices": "Invalid removed image indices",
-      "fieldTooLong": "One or more fields exceed the maximum allowed length"
+      "fieldTooLong": "One or more fields exceed the maximum allowed length",
+      "invalidFileType": "Unsupported file type. Only JPEG, PNG, GIF, and WebP are allowed",
+      "fileTooLarge": "File exceeds the maximum allowed size (4 MB)"
     }
   }
 }

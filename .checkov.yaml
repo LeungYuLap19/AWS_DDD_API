@@ -1,0 +1,23 @@
+# Checkov configuration
+# https://www.checkov.io/2.Runners/configuration.html
+
+# Suppress secrets scan for local-only env files (listed in .gitignore; never committed)
+skip-path:
+  - env.json
+  - env.development.json
+  - env.production.json
+
+# Global check suppressions with justification
+skip-check:
+  # Lambda env vars are encrypted at rest using the AWS-managed Lambda service key.
+  # A customer-managed KMS key adds per-API-call cost and operational overhead that
+  # is not warranted for this project. Revisit if compliance requirements change.
+  - CKV_AWS_173
+  # API Gateway access logging requires a new CloudWatch Logs resource + the deploy role
+  # to have logs:CreateLogGroup/PutRetentionPolicy. Deferred until deploy-role permissions
+  # are confirmed with the team (requires manager approval).
+  - CKV_AWS_76
+  # Lambda DLQ requires new SQS + IAM ManagedPolicy resources and matching deploy-role
+  # permissions (sqs:CreateQueue, iam:CreatePolicy). Deferred until deploy-role permissions
+  # are confirmed with the team (requires manager approval).
+  - CKV_AWS_116

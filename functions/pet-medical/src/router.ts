@@ -1,55 +1,30 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import {
-  handleCreateMedicalRecord,
-  handleDeleteMedicalRecord,
-  handleListMedicalRecords,
-  handleUpdateMedicalRecord,
-} from './services/medical';
-import {
-  handleCreateMedicationRecord,
-  handleDeleteMedicationRecord,
-  handleListMedicationRecords,
-  handleUpdateMedicationRecord,
-} from './services/medication';
-import {
-  handleCreateDewormRecord,
-  handleDeleteDewormRecord,
-  handleListDewormRecords,
-  handleUpdateDewormRecord,
-} from './services/deworming';
-import {
-  handleCreateBloodTestRecord,
-  handleDeleteBloodTestRecord,
-  handleListBloodTestRecords,
-  handleUpdateBloodTestRecord,
-} from './services/bloodTest';
 
-const routes: Record<string, RouteHandler> = {
+const routes = {
   // General medical records
-  'GET /pet/medical/{petId}/general': handleListMedicalRecords,
-  'POST /pet/medical/{petId}/general': handleCreateMedicalRecord,
-  'PATCH /pet/medical/{petId}/general/{medicalId}': handleUpdateMedicalRecord,
-  'DELETE /pet/medical/{petId}/general/{medicalId}': handleDeleteMedicalRecord,
+  'GET /pet/medical/{petId}/general': () => import('./services/medical').then(m => m.handleListMedicalRecords),
+  'POST /pet/medical/{petId}/general': () => import('./services/medical').then(m => m.handleCreateMedicalRecord),
+  'PATCH /pet/medical/{petId}/general/{medicalId}': () => import('./services/medical').then(m => m.handleUpdateMedicalRecord),
+  'DELETE /pet/medical/{petId}/general/{medicalId}': () => import('./services/medical').then(m => m.handleDeleteMedicalRecord),
 
   // Medication records
-  'GET /pet/medical/{petId}/medication': handleListMedicationRecords,
-  'POST /pet/medical/{petId}/medication': handleCreateMedicationRecord,
-  'PATCH /pet/medical/{petId}/medication/{medicationId}': handleUpdateMedicationRecord,
-  'DELETE /pet/medical/{petId}/medication/{medicationId}': handleDeleteMedicationRecord,
+  'GET /pet/medical/{petId}/medication': () => import('./services/medication').then(m => m.handleListMedicationRecords),
+  'POST /pet/medical/{petId}/medication': () => import('./services/medication').then(m => m.handleCreateMedicationRecord),
+  'PATCH /pet/medical/{petId}/medication/{medicationId}': () => import('./services/medication').then(m => m.handleUpdateMedicationRecord),
+  'DELETE /pet/medical/{petId}/medication/{medicationId}': () => import('./services/medication').then(m => m.handleDeleteMedicationRecord),
 
   // Deworming records
-  'GET /pet/medical/{petId}/deworming': handleListDewormRecords,
-  'POST /pet/medical/{petId}/deworming': handleCreateDewormRecord,
-  'PATCH /pet/medical/{petId}/deworming/{dewormId}': handleUpdateDewormRecord,
-  'DELETE /pet/medical/{petId}/deworming/{dewormId}': handleDeleteDewormRecord,
+  'GET /pet/medical/{petId}/deworming': () => import('./services/deworming').then(m => m.handleListDewormRecords),
+  'POST /pet/medical/{petId}/deworming': () => import('./services/deworming').then(m => m.handleCreateDewormRecord),
+  'PATCH /pet/medical/{petId}/deworming/{dewormId}': () => import('./services/deworming').then(m => m.handleUpdateDewormRecord),
+  'DELETE /pet/medical/{petId}/deworming/{dewormId}': () => import('./services/deworming').then(m => m.handleDeleteDewormRecord),
 
   // Blood-test records
-  'GET /pet/medical/{petId}/blood-test': handleListBloodTestRecords,
-  'POST /pet/medical/{petId}/blood-test': handleCreateBloodTestRecord,
-  'PATCH /pet/medical/{petId}/blood-test/{bloodTestId}': handleUpdateBloodTestRecord,
-  'DELETE /pet/medical/{petId}/blood-test/{bloodTestId}': handleDeleteBloodTestRecord,
+  'GET /pet/medical/{petId}/blood-test': () => import('./services/bloodTest').then(m => m.handleListBloodTestRecords),
+  'POST /pet/medical/{petId}/blood-test': () => import('./services/bloodTest').then(m => m.handleCreateBloodTestRecord),
+  'PATCH /pet/medical/{petId}/blood-test/{bloodTestId}': () => import('./services/bloodTest').then(m => m.handleUpdateBloodTestRecord),
+  'DELETE /pet/medical/{petId}/blood-test/{bloodTestId}': () => import('./services/bloodTest').then(m => m.handleDeleteBloodTestRecord),
 };
 
 export const routeRequest = createRouter(routes, { response });

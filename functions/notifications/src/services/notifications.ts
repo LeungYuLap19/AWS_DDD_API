@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, requireAuthContext, requireRole } from '@aws-ddd-api/shared';
+import { parseBody, paginationQuerySchema, parseObjectIdParam, requireAuthContext, requireRole } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { dispatchNotificationSchema } from '../zodSchema/notificationSchema';
@@ -24,34 +24,50 @@ function parseDateString(dateString: string | null | undefined): Date | null {
   return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
+/**
+ * Returns the authenticated user's notifications in reverse-chronological
+ * order with shared pagination semantics.
+ */
 export async function handleListNotifications(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
 
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
+  const skip = (page - 1) * limit;
+
   const Notifications = mongoose.model('Notifications');
-  const notifications = (await Notifications.find({ userId: authContext.userId })
-    .select('-__v')
-    .sort({ createdAt: -1 })
-    .lean()) as Record<string, unknown>[];
+  const [notifications, total] = (await Promise.all([
+    Notifications.find({ userId: authContext.userId })
+      .select('-__v')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Notifications.countDocuments({ userId: authContext.userId }),
+  ])) as [Record<string, unknown>[], number];
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    count: notifications.length,
-    notifications,
+    data: notifications,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 
+/**
+ * Archives one notification owned by the authenticated user. The update is
+ * ownership-scoped so other users' records cannot be toggled by id alone.
+ */
 export async function handleArchiveNotification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
-  const notificationId = ctx.event.pathParameters?.notificationId;
-
-  if (!notificationId) {
-    return response.errorResponse(400, 'common.missingPathParams', ctx.event);
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.notificationId);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
   }
-
-  if (!mongoose.Types.ObjectId.isValid(notificationId)) {
-    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
-  }
+  const notificationId = idParam.data;
 
   await connectToMongoDB();
 
@@ -67,10 +83,13 @@ export async function handleArchiveNotification(ctx: RouteContext): Promise<APIG
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
-    notificationId,
   });
 }
 
+/**
+ * Admin-only notification dispatch endpoint that materializes a notification
+ * document from a validated domain event payload.
+ */
 export async function handleDispatchNotification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireRole(ctx.event, 'admin');
 
@@ -95,6 +114,6 @@ export async function handleDispatchNotification(ctx: RouteContext): Promise<API
 
   return response.successResponse(200, ctx.event, {
     message: 'success.created',
-    notification: sanitizeNotification(notification),
+    data: sanitizeNotification(notification),
   });
 }

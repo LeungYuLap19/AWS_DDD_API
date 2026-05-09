@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import { requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext, HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
-import { HttpError } from './httpError';
 
 export { requireAuthContext };
 
@@ -28,7 +27,7 @@ export async function loadAuthorizedPet(
   // null `pathParameters` collapses to '' here. `isValidObjectId('')` returns
   // false, producing a 400 instead of a downstream Mongoose CastError.
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new HttpError(400, 'petMedicalRecord.errors.invalidPetIdFormat');
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   const Pet = mongoose.model('Pet');
@@ -37,7 +36,7 @@ export async function loadAuthorizedPet(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new HttpError(404, 'petMedicalRecord.errors.petNotFound');
+    throw new HttpError('petMedical.errors.petNotFound', 404);
   }
 
   const isOwner =
@@ -51,7 +50,7 @@ export async function loadAuthorizedPet(
     String(pet.ngoId) === String(authContext.ngoId);
 
   if (!isOwner && !isNgoOwner) {
-    throw new HttpError(403, 'common.forbidden');
+    throw new HttpError('common.forbidden', 403);
   }
 
   return pet;

@@ -1,14 +1,22 @@
 import { z } from 'zod';
+import { sanitizeText } from '@aws-ddd-api/shared';
 import { parseDDMMYYYY } from '../utils/normalize';
 
-const nullableTextField = z
-  .string({ message: 'fulfillment.errors.invalidField' })
-  .trim()
-  .optional();
+const nullableTextField = (max: number = 500) =>
+  z
+    .string({ message: 'fulfillment.errors.invalidField' })
+    .trim()
+    .max(max, { message: 'fulfillment.errors.invalidField' })
+    .transform(sanitizeText)
+    .optional();
 
 const validDateField = z
   .union([
-    z.string({ message: 'fulfillment.errors.invalidDate' }).trim().min(1, 'fulfillment.errors.invalidDate'),
+    z
+      .string({ message: 'fulfillment.errors.invalidDate' })
+      .trim()
+      .min(1, 'fulfillment.errors.invalidDate')
+      .max(64, 'fulfillment.errors.invalidDate'),
     z.date({ message: 'fulfillment.errors.invalidDate' }),
   ])
   .refine((value) => parseDDMMYYYY(value) !== null, {
@@ -17,31 +25,31 @@ const validDateField = z
 
 export const supplierUpdateSchema = z
   .object({
-    contact: nullableTextField,
-    petName: nullableTextField,
-    shortUrl: nullableTextField,
-    masterEmail: nullableTextField,
-    location: nullableTextField,
-    petHuman: nullableTextField,
+    contact: nullableTextField(50),
+    petName: nullableTextField(100),
+    shortUrl: nullableTextField(2048),
+    masterEmail: nullableTextField(254),
+    location: nullableTextField(200),
+    petHuman: nullableTextField(200),
     pendingStatus: z
       .boolean({ message: 'fulfillment.errors.invalidPendingStatus' })
       .optional(),
-    qrUrl: nullableTextField,
-    petUrl: nullableTextField,
-    petContact: nullableTextField,
+    qrUrl: nullableTextField(2048),
+    petUrl: nullableTextField(2048),
+    petContact: nullableTextField(50),
   })
   .strict();
 
 export const tagUpdateSchema = z
   .object({
-    contact: nullableTextField,
+    contact: nullableTextField(50),
     verifyDate: validDateField.optional(),
-    petName: nullableTextField,
-    shortUrl: nullableTextField,
-    masterEmail: nullableTextField,
-    orderId: nullableTextField,
-    location: nullableTextField,
-    petHuman: nullableTextField,
+    petName: nullableTextField(100),
+    shortUrl: nullableTextField(2048),
+    masterEmail: nullableTextField(254),
+    orderId: nullableTextField(64),
+    location: nullableTextField(200),
+    petHuman: nullableTextField(200),
   })
   .strict();
 

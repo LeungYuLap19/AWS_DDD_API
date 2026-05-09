@@ -201,7 +201,7 @@ Audience:
           PATCH
           DELETE
 
-  /analysis - manual deployment tested
+  /analysis - manual deployment tested (ML server unable to reach)
     /eye
       /{petId}
         GET

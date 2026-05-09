@@ -1,61 +1,74 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseMultipartBody, paginationQuerySchema, parseObjectIdParam, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 import { sanitizePetLost } from '../utils/sanitize';
 import { parseFlexibleDate } from '../utils/date';
 import { uploadImageFile, getNextSerialNumber } from '../utils/upload';
-import { normalizeLostMultipartBody, type ParsedMultipartForm } from '../utils/multipart';
+import { normalizeLostMultipartBody } from '../utils/multipart';
 import { createPetLostSchema } from '../zodSchema/petLostSchema';
 import { connectToMongoDB } from '../config/db';
 
 type PetOwnershipRecord = { _id: unknown; userId?: unknown };
 
+/**
+ * Returns the paginated public lost-pet report feed for authenticated callers.
+ */
 export async function handleListPetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
   await connectToMongoDB();
 
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
+  const skip = (page - 1) * limit;
+
   const PetLost = mongoose.model('PetLost');
-  const records = await PetLost.find({}).select('-__v').sort({ lostDate: -1 }).lean();
+  const [records, total] = await Promise.all([
+    PetLost.find({}).select('-__v').sort({ lostDate: -1 }).skip(skip).limit(limit).lean(),
+    PetLost.countDocuments({}),
+  ]);
 
   return response.successResponse(200, ctx.event, {
-    message: 'petRecovery.success.petLost.listRetrieved',
-    count: records.length,
-    pets: records.map(sanitizePetLost),
+    message: 'success.retrieved',
+    data: records.map(sanitizePetLost),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 
+/**
+ * Creates a lost-pet report, optionally linking it to an owned pet and syncing
+ * that pet's status before uploading any attached images.
+ */
 export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
+
+  const multiResult = await parseMultipartBody(ctx.event, createPetLostSchema, {
+    normalize: normalizeLostMultipartBody,
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
+  }
+  const { data, files } = multiResult;
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
     action: 'petRecovery.petLost.create',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 5,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 15, windowSeconds: 60 },
+      { scope: 'identifier', limit: 8, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 5, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
 
-  let form: ParsedMultipartForm;
-  try {
-    form = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
-  } catch {
-    return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
-  }
-
-  const { files, ...rawFields } = form;
-  const normalized = normalizeLostMultipartBody(rawFields);
-  const parsed = parseBody(normalized, createPetLostSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-  }
-
-  const data = parsed.data;
   const lostDate = parseFlexibleDate(data.lostDate);
   if (!lostDate || isNaN(lostDate.getTime())) {
     return response.errorResponse(400, 'petRecovery.errors.petLost.lostDateRequired', ctx.event);
@@ -82,23 +95,24 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
 
   const PetLost = mongoose.model('PetLost');
   const recordId = new mongoose.Types.ObjectId();
+  const serialNumber = await getNextSerialNumber();
 
   const uploadedUrls: string[] = [];
-  const [serialNumber] = await Promise.all([
-    getNextSerialNumber(),
-    (async () => {
-      if (!Array.isArray(files) || files.length === 0) return;
-      for (const file of files) {
-        if (!file?.content) continue;
-        const url = await uploadImageFile({
-          buffer: file.content,
-          folder: `user-uploads/pets/${recordId}`,
-          originalname: file.filename,
-        });
-        if (url) uploadedUrls.push(url);
-      }
-    })(),
-  ]);
+  for (const file of files ?? []) {
+    if (!file?.content) continue;
+    try {
+      const url = await uploadImageFile(
+        { buffer: file.content, originalname: file.filename ?? '' },
+        `user-uploads/pets/${recordId}`
+      );
+      uploadedUrls.push(url);
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'petRecovery.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'petRecovery.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
+  }
 
   const record = await PetLost.create({
     _id: recordId,
@@ -124,18 +138,21 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
   });
 
   return response.successResponse(201, ctx.event, {
-    message: 'petRecovery.success.petLost.created',
-    id: record._id,
+    message: 'success.created',
+    data: { id: record._id },
   });
 }
 
+/**
+ * Deletes a lost-pet report only when the authenticated user owns the record.
+ */
 export async function handleDeletePetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
-  const petLostID = ctx.event.pathParameters?.petLostID;
-
-  if (!petLostID || !mongoose.Types.ObjectId.isValid(petLostID)) {
-    return response.errorResponse(400, 'petRecovery.errors.petLost.invalidId', ctx.event);
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.petLostID);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
   }
+  const petLostID = idParam.data;
 
   await connectToMongoDB();
 
@@ -155,6 +172,6 @@ export async function handleDeletePetLost(ctx: RouteContext): Promise<APIGateway
   await PetLost.deleteOne({ _id: petLostID });
 
   return response.successResponse(200, ctx.event, {
-    message: 'petRecovery.success.petLost.deleted',
+    message: 'success.deleted',
   });
 }

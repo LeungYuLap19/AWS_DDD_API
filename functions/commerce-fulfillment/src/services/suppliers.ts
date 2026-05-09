@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, parseBody } from '@aws-ddd-api/shared';
+import { requireAuthContext, parseBody, parsePathParam, tempIdString } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -30,11 +30,11 @@ type RawDocument = Record<string, unknown>;
 export async function handleGetSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
 
-  const orderId = ctx.event.pathParameters?.orderId ?? '';
-
-  if (!orderId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
+  const orderParam = parsePathParam(ctx.event.pathParameters?.orderId, tempIdString());
+  if (!orderParam.ok) {
+    return response.errorResponse(orderParam.statusCode, orderParam.errorKey, ctx.event);
   }
+  const orderId = orderParam.data;
 
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification') as mongoose.Model<RawDocument>;
@@ -47,10 +47,6 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
     orderId,
     ORDER_VERIFICATION_READ_PROJECTION
   );
-
-  if (!authorization.isValid) {
-    return authorization.error!;
-  }
 
   const orderVerify = authorization.orderVerification;
   if (!orderVerify) {
@@ -81,9 +77,8 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
   };
 
   return response.successResponse(200, ctx.event, {
-    message: 'Order Verification info retrieved successfully',
-    form,
-    id: safeEntity._id,
+    message: 'success.retrieved',
+    data: { id: safeEntity._id, ...form },
   });
 }
 
@@ -97,10 +92,15 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
 export async function handlePatchSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
 
-  const orderId = ctx.event.pathParameters?.orderId ?? '';
+  const orderParam = parsePathParam(ctx.event.pathParameters?.orderId, tempIdString());
+  if (!orderParam.ok) {
+    return response.errorResponse(orderParam.statusCode, orderParam.errorKey, ctx.event);
+  }
+  const orderId = orderParam.data;
 
-  if (!orderId) {
-    return response.errorResponse(400, 'fulfillment.errors.missingOrderId', ctx.event);
+  const parsed = parseBody(ctx.body, supplierUpdateSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   await connectToMongoDB();
@@ -115,18 +115,9 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
     '_id orderId masterEmail'
   );
 
-  if (!authorization.isValid) {
-    return authorization.error!;
-  }
-
   const existingOrderVerification = authorization.orderVerification;
   if (!existingOrderVerification) {
     return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
-  }
-
-  const parsed = parseBody(ctx.body, supplierUpdateSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
   const payload = parsed.data;
@@ -143,7 +134,7 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
   if (payload.petUrl) setFields['petUrl'] = payload.petUrl;
 
   if (Object.keys(setFields).length === 0 && !payload.petContact) {
-    return response.errorResponse(400, 'common.missingParams', ctx.event);
+    return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
   }
 
   if (payload.petContact && existingOrderVerification.orderId) {
@@ -165,6 +156,6 @@ export async function handlePatchSupplierVerification(ctx: RouteContext): Promis
   }
 
   return response.successResponse(200, ctx.event, {
-    message: 'Tag info updated successfully',
+    message: 'success.updated',
   });
 }

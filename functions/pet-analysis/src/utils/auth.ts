@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import { requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext, HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
-import { HttpError } from './httpError';
 
 export { requireAuthContext };
 
@@ -12,6 +11,11 @@ interface AuthorizedPet {
   deleted?: boolean;
 }
 
+/**
+ * Loads a pet used by analysis routes and enforces either direct ownership or,
+ * when enabled, matching NGO ownership. Throws `HttpError` for invalid ids,
+ * missing pets, or forbidden access.
+ */
 export async function loadAuthorizedPet(
   event: RouteContext['event'],
   petId: string,
@@ -21,7 +25,7 @@ export async function loadAuthorizedPet(
   const allowNgo = options.allowNgo !== false;
 
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new HttpError(400, 'petAnalysis.errors.invalidPetIdFormat');
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   const Pet = mongoose.model('Pet');
@@ -30,7 +34,7 @@ export async function loadAuthorizedPet(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new HttpError(404, 'petAnalysis.errors.petNotFound');
+    throw new HttpError('petAnalysis.errors.petNotFound', 404);
   }
 
   const isOwner =
@@ -45,7 +49,7 @@ export async function loadAuthorizedPet(
     String(pet.ngoId) === String(authContext.ngoId);
 
   if (!isOwner && !isNgoOwner) {
-    throw new HttpError(403, 'common.unauthorized');
+    throw new HttpError('common.forbidden', 403);
   }
 
   return pet;

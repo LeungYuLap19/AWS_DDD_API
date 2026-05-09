@@ -1,7 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseBody, parseMultipartBody, paginationQuerySchema, requireAuthContext, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
@@ -12,16 +11,7 @@ import { sanitizeEyeLog, sanitizePet } from '../utils/sanitize';
 import { uploadImageFile } from '../utils/upload';
 import { isValidDateFormat, isValidImageUrl, toTrimmedString } from '../utils/validators';
 import { updatePetEyeSchema } from '../zodSchema/updatePetEyeSchema';
-import { HttpError } from '../utils/httpError';
-
-const ALLOWED_IMAGE_TYPES = new Set([
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/gif',
-  'image/tiff',
-]);
-const MAX_FILE_SIZE_MB = 30;
+import { eyePostUploadSchema } from '../zodSchema/uploadSchema';
 
 async function postJson(url: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
   const analysisResponse = await fetch(url, {
@@ -32,19 +22,16 @@ async function postJson(url: string, data: Record<string, unknown>): Promise<Rec
   return (await analysisResponse.json()) as Record<string, unknown>;
 }
 
-function normalizeError(error: unknown, event: RouteContext['event']): APIGatewayProxyResult | null {
-  if (error instanceof HttpError) {
-    return response.errorResponse(error.statusCode, error.errorKey, event);
-  }
-
-  return null;
-}
-
 function isAnalysisErrorPayload(payload: Record<string, unknown>): boolean {
   const keys = Object.keys(payload);
   return keys.includes('error') || keys.includes('400') || keys.includes('404');
 }
 
+/**
+ * Multiplexes eye-analysis reads: non-ObjectId identifiers resolve an eye
+ * disease lookup, while ObjectId identifiers return paginated analysis history
+ * for a specific pet.
+ */
 export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
@@ -60,15 +47,15 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
       | null;
 
     if (!eyeDisease && decodeURIComponent(identifier) === 'Normal') {
-      return response.successResponse(201, ctx.event, {
-        result: {
+      return response.successResponse(200, ctx.event, {
+        message: 'success.retrieved',
+        data: {
           id: null,
           eyeDiseaseEng: null,
           eyeDiseaseChi: null,
           eyeDiseaseCause: null,
           eyeDiseaseSolution: null,
         },
-        message: 'petAnalysis.success.eyeDiseaseRetrieved',
       });
     }
 
@@ -76,33 +63,43 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
       return response.errorResponse(404, 'petAnalysis.errors.eyeDiseaseNotFound', ctx.event);
     }
 
-    return response.successResponse(201, ctx.event, {
-      result: eyeDisease,
-      message: 'petAnalysis.success.eyeDiseaseRetrieved',
+    return response.successResponse(200, ctx.event, {
+      message: 'success.retrieved',
+      data: eyeDisease,
     });
   }
 
-  try {
-    const EyeAnalysis = mongoose.model('EyeAnalysisRecord');
-    const eyeAnalysisLogList = (await EyeAnalysis.find({ petId: identifier })
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
+  const skip = (page - 1) * limit;
+
+  const EyeAnalysis = mongoose.model('EyeAnalysisRecord');
+  const [eyeAnalysisLogList, total] = (await Promise.all([
+    EyeAnalysis.find({ petId: identifier })
       .select('_id petId image eyeSide result createdAt updatedAt')
       .sort({ createdAt: -1 })
-      .limit(100)
-      .lean()) as Record<string, unknown>[];
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    EyeAnalysis.countDocuments({ petId: identifier }),
+  ])) as [Record<string, unknown>[], number];
 
-    return response.successResponse(200, ctx.event, {
-      message: 'petAnalysis.success.eyeLogRetrievedSuccessfully',
-      result: eyeAnalysisLogList.map(sanitizeEyeLog),
-    });
-  } catch (error) {
-    const known = normalizeError(error, ctx.event);
-    if (known) return known;
-    throw error;
-  }
+  return response.successResponse(200, ctx.event, {
+    message: 'success.retrieved',
+    data: eyeAnalysisLogList.map(sanitizeEyeLog),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  });
 }
 
+/**
+ * Runs the eye-analysis upload flow for an owned pet, including multipart
+ * parsing, optional S3 upload, VM analysis + heatmap calls, API logging, and
+ * persistence of the resulting analysis record.
+ */
 export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const startTime = performance.now();
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
 
@@ -110,8 +107,12 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
     action: 'eyeUploadAnalysis',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 300,
+    policies: [
+      // Expensive ML endpoint — keep all lanes tight.
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+      { scope: 'identifier', limit: 15, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 300 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
@@ -119,7 +120,7 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
 
   const petId = toTrimmedString(ctx.event.pathParameters?.identifier);
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAnalysis.errors.invalidObjectId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   const ApiLog = mongoose.model('ApiLog');
@@ -140,43 +141,40 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
 
     await loadAuthorizedPet(ctx.event, petId, { allowNgo: true });
 
-    const formData = await multipart.parse(ctx.event);
-    const imageUrl = toTrimmedString(formData.image_url);
-    const file = formData.files?.[0];
+    const eyeMultiResult = await parseMultipartBody(ctx.event, eyePostUploadSchema, {});
+    if (!eyeMultiResult.ok) {
+      return response.errorResponse(eyeMultiResult.statusCode, eyeMultiResult.errorKey, ctx.event);
+    }
+    const imageUrl = toTrimmedString(eyeMultiResult.data.image_url);
+    const file = eyeMultiResult.files[0];
 
-    if (!imageUrl && !file) {
+    if (!imageUrl && !file?.content) {
       activityLog.error = 'MISSING_ARGUMENTS';
       await activityLog.save();
       return response.errorResponse(400, 'petAnalysis.errors.missingArguments', ctx.event);
     }
 
     let downloadURL = imageUrl;
-    if (file) {
-      const fileSizeInMb = file.content.length / (1024 * 1024);
-
-      if (!ALLOWED_IMAGE_TYPES.has(file.contentType || '')) {
-        activityLog.error = 'IMAGE_ERROR_UNSUPPORTED_FORMAT';
-        await activityLog.save();
-        return response.errorResponse(400, 'petAnalysis.errors.unsupportedFormat', ctx.event);
+    if (file?.content) {
+      try {
+        downloadURL = await uploadImageFile(
+          { buffer: file.content, originalname: file.filename ?? '' },
+          `user-uploads/eye/${petId}`
+        );
+      } catch (uploadErr: unknown) {
+        const code = (uploadErr as { code?: string }).code;
+        if (code === 'INVALID_FILE_TYPE') {
+          activityLog.error = 'IMAGE_ERROR_UNSUPPORTED_FORMAT';
+          await activityLog.save();
+          return response.errorResponse(400, 'petAnalysis.errors.unsupportedFormat', ctx.event);
+        }
+        if (code === 'FILE_TOO_LARGE') {
+          activityLog.error = 'IMAGE_FILE_TOO_LARGE';
+          await activityLog.save();
+          return response.errorResponse(413, 'petAnalysis.errors.fileTooLarge', ctx.event);
+        }
+        throw uploadErr;
       }
-
-      if (fileSizeInMb > MAX_FILE_SIZE_MB) {
-        activityLog.error = 'IMAGE_FILE_TOO_LARGE';
-        await activityLog.save();
-        return response.errorResponse(413, 'petAnalysis.errors.fileTooLarge', ctx.event);
-      }
-
-      if (fileSizeInMb === 0) {
-        activityLog.error = 'IMAGE_FILE_TOO_SMALL';
-        await activityLog.save();
-        return response.errorResponse(413, 'petAnalysis.errors.fileTooSmall', ctx.event);
-      }
-
-      downloadURL = await uploadImageFile({
-        buffer: file.content,
-        originalname: file.filename,
-        folder: `user-uploads/eye/${petId}`,
-      });
     }
 
     const endpointURL = `${env.VM_PUBLIC_IP}${env.DOCKER_IMAGE}`;
@@ -213,54 +211,54 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
       heatmap,
     });
 
-    const timeTaken = performance.now() - startTime;
-
     return response.successResponse(200, ctx.event, {
-      result: analysis.value,
-      heatmap,
-      request_id: activityLog._id,
-      time_taken: `${timeTaken} ms`,
-      status: 200,
+      message: 'success.created',
+      data: { result: analysis.value, heatmap, requestId: String(activityLog._id) },
     });
   } catch (error) {
     try {
       activityLog.error = 'INTERNAL_ERROR';
       await activityLog.save();
-    } catch {
-      // ignore activity log failure during error flow
+    } catch (logError) {
+      logWarn('Activity log save failed during error flow', { error: logError, scope: 'pet-analysis.services.eye' });
     }
-
-    const known = normalizeError(error, ctx.event);
-    if (known) return known;
     throw error;
   }
 }
 
+/**
+ * Appends manually supplied eye-image metadata onto an owned pet after
+ * validating the date and image URL fields against the legacy contract.
+ */
 export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
-  await connectToMongoDB();
-
-  const rateLimitResponse = await applyRateLimit({
-    action: 'petEyeUpdate',
-    event: ctx.event,
-    identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 60,
-  });
-  if (rateLimitResponse) {
-    return rateLimitResponse;
-  }
 
   const parsed = parseBody(ctx.body, updatePetEyeSchema);
   if (!parsed.ok) {
     return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
+  await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'petEyeUpdate',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 60 },
+      { scope: 'identifier', limit: 15, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 60 },
+    ],
+  });
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const { petId, date, leftEyeImage1PublicAccessUrl, rightEyeImage1PublicAccessUrl } = parsed.data;
   const routePetId = toTrimmedString(ctx.event.pathParameters?.identifier);
 
   if (!mongoose.isValidObjectId(petId) || routePetId !== petId) {
-    return response.errorResponse(400, 'petAnalysis.errors.updatePetEye.invalidPetIdFormat', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
   if (!isValidDateFormat(date)) {
@@ -285,9 +283,9 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
   )) as Record<string, unknown> | null;
 
   if (updatedPet) {
-    return response.successResponse(201, ctx.event, {
-      message: 'petAnalysis.success.petEyeUpdated',
-      result: sanitizePet(updatedPet),
+    return response.successResponse(200, ctx.event, {
+      message: 'success.updated',
+      data: sanitizePet(updatedPet),
     });
   }
 
@@ -303,5 +301,5 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
     return response.errorResponse(410, 'petAnalysis.errors.updatePetEye.petDeleted', ctx.event);
   }
 
-  return response.errorResponse(403, 'common.unauthorized', ctx.event);
+  return response.errorResponse(403, 'common.forbidden', ctx.event);
 }

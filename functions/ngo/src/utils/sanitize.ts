@@ -18,6 +18,7 @@ function toRawRecord(record: SanitizableRecord) {
   return typeof record.toObject === 'function' ? record.toObject() : record;
 }
 
+/** Removes sensitive/internal fields from the user profile payload returned by NGO routes. */
 export function sanitizeUser(user: SanitizableUser) {
   if (!user) {
     return user;
@@ -39,6 +40,7 @@ export function sanitizeUser(user: SanitizableUser) {
   return safeUser;
 }
 
+/** Removes internal bookkeeping fields from NGO profile payloads. */
 export function sanitizeNgo(ngo: SanitizableRecord) {
   if (!ngo) {
     return ngo;
@@ -55,6 +57,7 @@ export function sanitizeNgo(ngo: SanitizableRecord) {
   return safeNgo;
 }
 
+/** Removes internal bookkeeping fields from NGO membership payloads. */
 export function sanitizeNgoUserAccess(access: SanitizableRecord) {
   if (!access) {
     return access;
@@ -71,6 +74,7 @@ export function sanitizeNgoUserAccess(access: SanitizableRecord) {
   return safeAccess;
 }
 
+/** Removes internal bookkeeping fields from NGO counter payloads. */
 export function sanitizeNgoCounters(counter: SanitizableRecord) {
   if (!counter) {
     return counter;

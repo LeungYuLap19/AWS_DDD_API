@@ -1,15 +1,20 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { requireAuthContext } from '@aws-ddd-api/shared';
+import { paginationQuerySchema, parsePathParam, requireAuthContext, tempIdString } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import mongoose from 'mongoose';
 import { connectToMongoDB } from '../config/db';
 import { loadAuthorizedPet } from '../utils/auth';
 import { response } from '../utils/response';
 import { sanitizePetBasic, sanitizePetFull, sanitizePetLineage, sanitizePetListSummary, sanitizePublicTagLookupPet } from '../utils/sanitize';
-import { PUBLIC_TAG_PROJECTION, handleKnownError } from './profileHelpers';
+import { PUBLIC_TAG_PROJECTION } from './profileHelpers';
 
 const PET_VIEWS = new Set(['basic', 'detail', 'full']);
 
+/**
+ * Returns one owned pet profile using the requested response projection. The
+ * `view` query parameter controls whether the caller receives basic, lineage,
+ * or full detail fields.
+ */
 export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -19,33 +24,30 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
     return response.errorResponse(400, 'petProfile.errors.invalidView', ctx.event);
   }
 
-  try {
-    const pet = await loadAuthorizedPet(ctx.event);
-    const form =
-      view === 'basic' ? sanitizePetBasic(pet) :
-      view === 'detail' ? sanitizePetLineage(pet) :
-      sanitizePetFull(pet);
+  const pet = await loadAuthorizedPet(ctx.event);
+  const form =
+    view === 'basic' ? sanitizePetBasic(pet) :
+    view === 'detail' ? sanitizePetLineage(pet) :
+    sanitizePetFull(pet);
 
-    return response.successResponse(200, ctx.event, {
-      message: 'petProfile.success.retrieved',
-      view,
-      form,
-      id: pet._id,
-    });
-  } catch (error) {
-    const knownError = handleKnownError(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
-  }
+  return response.successResponse(200, ctx.event, {
+    message: 'success.retrieved',
+    data: { id: pet._id, ...(form ?? {}) },
+  });
 }
 
+/**
+ * Resolves a public pet lookup by tag id using the restricted
+ * `PUBLIC_TAG_PROJECTION`, intentionally bypassing private ownership fields.
+ */
 export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
-  const tagId = ctx.event.pathParameters?.tagId;
-  if (!tagId) {
-    return response.errorResponse(400, 'petProfile.errors.missingTagId', ctx.event);
+  const tagParam = parsePathParam(ctx.event.pathParameters?.tagId, tempIdString());
+  if (!tagParam.ok) {
+    return response.errorResponse(tagParam.statusCode, tagParam.errorKey, ctx.event);
   }
+  const tagId = tagParam.data;
 
   const Pet = mongoose.model('Pet');
   const pet = await Pet.findOne(
@@ -57,20 +59,30 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
   ).lean();
 
   return response.successResponse(200, ctx.event, {
-    message: 'petProfile.success.tagLookupProcessed',
-    form: sanitizePublicTagLookupPet(pet),
+    message: 'success.retrieved',
+    data: sanitizePublicTagLookupPet(pet),
   });
 }
 
+/**
+ * Returns the caller's pet list with shared pagination. NGO callers receive
+ * NGO-scoped searching and sorting, while standard users receive only their
+ * own active pets.
+ */
 export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
 
   const Pet = mongoose.model('Pet');
-  const pageNumber = Math.max(1, parseInt(ctx.event.queryStringParameters?.page || '1', 10));
+  const queryParams = ctx.event.queryStringParameters || {};
+  const pagination = paginationQuerySchema().safeParse(queryParams);
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
+  const skip = (page - 1) * limit;
 
   if (authContext.ngoId) {
-    const queryParams = ctx.event.queryStringParameters || {};
     const search = typeof queryParams.search === 'string' ? queryParams.search.trim() : '';
     const sortByAllowlist = new Set([
       'updatedAt',
@@ -104,22 +116,16 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
     const [pets, totalNumber] = await Promise.all([
       Pet.find(query)
         .sort({ [sortBy]: sortOrder, _id: -1 })
-        .skip((pageNumber - 1) * 30)
-        .limit(30)
+        .skip(skip)
+        .limit(limit)
         .lean(),
       Pet.countDocuments(query),
     ]);
 
-    if (!pets.length) {
-      return response.errorResponse(404, 'petProfile.errors.noPetsFound', ctx.event);
-    }
-
     return response.successResponse(200, ctx.event, {
-      message: 'petProfile.success.listRetrieved',
-      pets: sanitizePetListSummary(pets),
-      total: totalNumber,
-      currentPage: pageNumber,
-      perPage: 30,
+      message: 'success.retrieved',
+      data: sanitizePetListSummary(pets),
+      pagination: { page, limit, total: totalNumber, totalPages: Math.ceil(totalNumber / limit) },
     });
   }
 
@@ -127,15 +133,15 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
   const [pets, totalNumber] = await Promise.all([
     Pet.find(query)
       .sort({ updatedAt: -1 })
-      .skip((pageNumber - 1) * 10)
-      .limit(10)
+      .skip(skip)
+      .limit(limit)
       .lean(),
     Pet.countDocuments(query),
   ]);
 
   return response.successResponse(200, ctx.event, {
-    message: 'petProfile.success.listRetrieved',
-    pets: sanitizePetListSummary(pets),
-    total: totalNumber,
+    message: 'success.retrieved',
+    data: sanitizePetListSummary(pets),
+    pagination: { page, limit, total: totalNumber, totalPages: Math.ceil(totalNumber / limit) },
   });
 }

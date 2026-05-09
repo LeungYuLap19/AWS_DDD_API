@@ -1,0 +1,272 @@
+error handling standards
+========================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOW ERRORS FLOW (shared layer mechanics)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Request
+  → createApiGatewayHandler         (all lambdas MUST use this)
+      → router (createRouter)
+          → service handler
+              → throws / returns
+
+createApiGatewayHandler wraps everything in a try/catch.
+Unhandled throws are caught and converted to a response using:
+  - error.statusCode  → HTTP status (defaults to 500 if missing or out of range)
+  - error.errorKey    → used as-is for 4xx only
+  - error.message     → used as locale key for 4xx only IF it contains a dot
+  - ALL 5xx throws    → locale key is ALWAYS discarded → becomes 'common.internalError'
+
+Consequence: for 5xx errors that need a specific locale key to reach the client,
+you MUST return response.errorResponse(...) inline — never throw and rely on the handler.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+THROW vs RETURN response.errorResponse — decision guide
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use this decision tree:
+
+1. Are you in a SERVICE HANDLER (function that returns Promise<APIGatewayProxyResult>)?
+   → ALWAYS use return response.errorResponse(statusCode, 'locale.key', event)
+   → You have the event in scope and full control over status code + key
+   → This is the most explicit and predictable path
+
+2. Are you in a HELPER / UTILITY function (no access to event, returns a non-response type)?
+   → THROW — let the caller (service handler) decide what to do with it
+   → Use throw new HttpError('locale.key', statusCode) for expected 4xx domain errors
+   → For unexpected errors: if you never opened a catch, do nothing — they propagate naturally.
+     Only rethrow (throw error) if you are already inside a catch block and the error
+     didn't match what you were handling (e.g. caught for 11000 check, got something else).
+
+3. Is it a 5XX error that needs a SPECIFIC locale key to reach the client?
+   → MUST return response.errorResponse() inline — NEVER throw
+   → Thrown 5xx errors have their locale key DISCARDED by the global handler → 'common.internalError'
+   → Example: external API failure, missing waybill, SF Express error
+
+4. Is it an AUTH / AUTHORIZATION failure?
+   → THROW new HttpError('common.unauthorized', 401)
+   → THROW new HttpError('common.forbidden', 403)
+   → The global handler reads .statusCode + .errorKey correctly for 4xx
+   → requireAuthContext() already does this for you — just call it
+
+5. Is it an UNEXPECTED / UNHANDLED error (DB connection lost, null ref, unknown crash)?
+   → If you never opened a catch, do nothing — it propagates naturally to the global handler
+   → If you're already inside a catch block, rethrow: throw error
+   → The global handler converts it to 500 'common.internalError'
+   → Do not try to wrap these — you don't know what they are
+
+Summary table:
+
+  Situation                                    | Action
+  ---------------------------------------------|------------------------------------------
+  Service handler — business logic error       | return response.errorResponse(...)
+  Service handler — 5xx with specific key      | return response.errorResponse(...)
+  Service handler — unexpected unknown error   | let it propagate (or rethrow if inside catch)
+  Helper/util — auth guard failure             | throw new HttpError(key, status)
+  Helper/util — domain validation failure      | throw new HttpError(key, status)
+  Helper/util — unexpected error               | let it propagate (or rethrow if inside catch)
+  Non-fatal side-effect (notification, email)  | catch + logWarn, do NOT return
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 1 — validation errors: use parseBody() result pattern
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALWAYS use parseBody() from @aws-ddd-api/shared and check the result inline.
+
+  const parsed = parseBody(ctx.body, schema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
+Never call schema.parse() directly in services — it throws a raw Zod error
+that produces 'common.internalError' 500 instead of a 400 with a proper key.
+
+For multipart: use parseMultipartBody() with the same pattern.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 2 — auth guards: throw HttpError, never return error-union
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use requireAuthContext(event) from @aws-ddd-api/shared to guard routes.
+It throws HttpError (has .statusCode + .errorKey) — the global handler picks it up.
+
+  const authContext = requireAuthContext(ctx.event);  // throws 401 if unauthenticated
+
+For custom role/ownership checks in helper utilities, throw HttpError:
+
+  throw new HttpError('common.forbidden', 403);       // ✓
+  throw new HttpError('common.unauthorized', 401);    // ✓
+
+NEVER return an error-union object from auth helpers:
+
+  return { errorResponse: response.errorResponse(403, ...) };  // ✗
+
+Exception: requireAuthorizedNgoAccess in ngo/utils/access.ts currently uses an
+error-union. This is a known inconsistency to be fixed — migrate to throwing HttpError.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 3 — MongoDB duplicate key (11000): catch-only pattern
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Do NOT add a pre-check findOne + create + catch. Pre-checks are TOCTOU race conditions.
+Use catch-only:
+
+  try {
+    const record = await Model.create({ ... });
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      return response.errorResponse(409, 'domain.errors.duplicateXxx', ctx.event);
+    }
+    throw error;    // re-throw anything else to the global handler
+  }
+
+Always re-throw unrecognised errors. Never swallow.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 4 — MongoDB transactions: abort in catch, re-throw
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  try {
+    await session.startTransaction();
+    // ... ops ...
+    await session.commitTransaction();
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
+    // handle known errors (e.g. 11000) → return response.errorResponse(...)
+    throw error;    // re-throw everything else
+  } finally {
+    session.endSession();
+  }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 5 — external service errors (SF Express, email, SMS, WhatsApp)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+External calls can throw. Because 5xx thrown errors always produce 'common.internalError'
+(the locale key is discarded), wrap external calls locally when a specific error key matters:
+
+  try {
+    await sendMail({ ... });
+  } catch {
+    return response.errorResponse(503, 'auth.challenge.emailServiceUnavailable', event);
+  }
+
+  try {
+    const result = await callSfService({ ... });
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
+  }
+
+For non-fatal side-effects (e.g. WhatsApp notifications after a successful write),
+catch and LOG — do not silently swallow:
+
+  try {
+    await dispatchNotification(...);
+  } catch (error) {
+    logWarn('Notification dispatch failed', { event: ctx.event, error, scope: '...' });
+    // do not return — the primary operation succeeded
+  }
+
+NEVER use an empty catch {} with no log for non-fatal side-effects.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 6 — error response keys must be i18n locale keys
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All errorKey arguments to response.errorResponse() MUST be dotted locale keys.
+
+  return response.errorResponse(404, 'common.notFound', ctx.event);                  // ✓
+  return response.errorResponse(409, 'petSource.errors.duplicateRecord', ctx.event); // ✓
+  return response.errorResponse(500, 'Unable to fetch token', ctx.event);            // ✗ raw English
+
+Common shared keys (defined in @aws-ddd-api/shared):
+  common.unauthorized         401
+  common.forbidden            403
+  common.notFound             404
+  common.methodNotAllowed     405
+  common.rateLimited          429
+  common.internalError        500
+  common.serviceUnavailable   503
+  common.invalidBodyParams    400  (schema validation failure)
+  common.missingBodyParams    400  (empty body)
+  common.missingPathParams    400  (missing path param)
+  common.noFieldsToUpdate     400  (PATCH with no valid fields)
+  common.invalidObjectId      400  (malformed MongoDB ObjectId)
+  common.routeNotFound        404  (router — no matching route)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 7 — no console.log in services
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use logWarn / logError / logInfo from @aws-ddd-api/shared for structured logging.
+console.log produces unstructured output and is not correlated to the request.
+
+  import { logWarn } from '@aws-ddd-api/shared';
+
+  logWarn('message', {
+    event: ctx.event,
+    error,
+    scope: 'domain.services.filename',
+    extra: { context: 'optional details' },
+  });
+
+response.errorResponse() and response.successResponse() already log automatically
+via the shared logger — do not add duplicate logs for normal request/response outcomes.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 8 — all lambdas MUST use createApiGatewayHandler
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Every Lambda handler entry point (index.ts) must use createApiGatewayHandler.
+This provides: CORS preflight handling, body parsing, awsRequestId injection,
+and the global unhandled error catch.
+
+  // index.ts — standard pattern
+  import { createApiGatewayHandler } from '@aws-ddd-api/shared';
+  import { routeRequest } from './src/router';
+  import { response } from './src/utils/response';
+  export const handler = createApiGatewayHandler(routeRequest, { response });
+
+Exception: request-authorizer is an IAM token authorizer (not a proxy integration)
+and does not use this pattern by design.
+pipeline-smoke currently does not use createApiGatewayHandler — this is a known gap.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWN INCONSISTENCIES TO FIX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] ngo/utils/access.ts — requireAuthorizedNgoAccess returns error-union
+    → migrate to throw HttpError, remove 3 manual guard checks in ngo.ts
+
+[x] logistics/config/sfExpressClient.ts — throws plain Error with English messages
+    'Unable to fetch SF access token' and 'Invalid JSON response'
+    → FIXED: all 6 throw/reject converted to HttpError with 502 + proper locale key;
+      getAccessToken()/callSfService()/downloadPdf() callers in sfShipment.ts and
+      sfWaybill.ts also wrapped in try/catch → response.errorResponse(502, 'logistics.sfApiError', event)
+
+[x] commerce-fulfillment/services/tags.ts — handlePatchTagVerification
+    silent catch {} on WhatsApp dispatch; notificationDispatched variable is unused
+    → FIXED: catch now calls logWarn; notificationDispatched removed;
+      HttpError used in dispatchWhatsAppTrackingMessage
+
+[ ] ngo/services/ngo.ts — handleGetMe response has 'warnings' top-level field
+    → decide: either add 'warnings' as an allowed top-level field to the response standard,
+      or move it inside data
+
+[ ] auth/services/challenge.ts — getOptionalVerifyAuthContext manually decodes JWT
+    bypassing the authorizer context; duplicates shared auth logic
+    → assess whether the verify endpoint can use getAuthContext(event) from shared instead
+
+[ ] pipeline-smoke/index.ts — bare async handler, no createApiGatewayHandler
+    → wrap with createApiGatewayHandler for consistent error shape on unexpected throws

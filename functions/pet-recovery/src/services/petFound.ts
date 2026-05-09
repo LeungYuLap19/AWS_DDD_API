@@ -1,59 +1,74 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseMultipartBody, paginationQuerySchema, parseObjectIdParam, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 import { sanitizePetFound } from '../utils/sanitize';
 import { parseFlexibleDate } from '../utils/date';
 import { uploadImageFile, getNextSerialNumber } from '../utils/upload';
-import { normalizeFoundMultipartBody, type ParsedMultipartForm } from '../utils/multipart';
+import { normalizeFoundMultipartBody } from '../utils/multipart';
 import { createPetFoundSchema } from '../zodSchema/petFoundSchema';
 import { connectToMongoDB } from '../config/db';
 
+/**
+ * Returns the paginated public lost-and-found "pet found" feed for
+ * authenticated callers.
+ */
 export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
   await connectToMongoDB();
 
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
+  const skip = (page - 1) * limit;
+
   const PetFound = mongoose.model('PetFound');
-  const records = await PetFound.find({}).select('-__v').sort({ foundDate: -1 }).lean();
+  const [records, total] = await Promise.all([
+    PetFound.find({}).select('-__v').sort({ foundDate: -1 }).skip(skip).limit(limit).lean(),
+    PetFound.countDocuments({}),
+  ]);
 
   return response.successResponse(200, ctx.event, {
-    message: 'petRecovery.success.petFound.listRetrieved',
-    count: records.length,
-    pets: records.map(sanitizePetFound),
+    message: 'success.retrieved',
+    data: records.map(sanitizePetFound),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 
+/**
+ * Creates a pet-found report for the authenticated user, including multipart
+ * normalization, serial-number allocation, optional image uploads, and legacy
+ * date validation.
+ */
 export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
+
+  const multiResult = await parseMultipartBody(ctx.event, createPetFoundSchema, {
+    normalize: normalizeFoundMultipartBody,
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
+  }
+  const { data, files } = multiResult;
+
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
     action: 'petRecovery.petFound.create',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 5,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 15, windowSeconds: 60 },
+      { scope: 'identifier', limit: 8, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 5, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) return rateLimitResponse;
 
-  let form: ParsedMultipartForm;
-  try {
-    form = (await multipart.parse(ctx.event)) as ParsedMultipartForm;
-  } catch {
-    return response.errorResponse(400, 'common.invalidBodyParams', ctx.event);
-  }
-
-  const { files, ...rawFields } = form;
-  const normalized = normalizeFoundMultipartBody(rawFields);
-  const parsed = parseBody(normalized, createPetFoundSchema);
-  if (!parsed.ok) {
-    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-  }
-
-  const data = parsed.data;
   const foundDate = parseFlexibleDate(data.foundDate);
   if (!foundDate || isNaN(foundDate.getTime())) {
     return response.errorResponse(400, 'petRecovery.errors.petFound.foundDateRequired', ctx.event);
@@ -61,23 +76,24 @@ export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewa
 
   const PetFound = mongoose.model('PetFound');
   const recordId = new mongoose.Types.ObjectId();
+  const serialNumber = await getNextSerialNumber();
 
   const uploadedUrls: string[] = [];
-  const [serialNumber] = await Promise.all([
-    getNextSerialNumber(),
-    (async () => {
-      if (!Array.isArray(files) || files.length === 0) return;
-      for (const file of files) {
-        if (!file?.content) continue;
-        const url = await uploadImageFile({
-          buffer: file.content,
-          folder: `user-uploads/pets/${recordId}`,
-          originalname: file.filename,
-        });
-        if (url) uploadedUrls.push(url);
-      }
-    })(),
-  ]);
+  for (const file of files ?? []) {
+    if (!file?.content) continue;
+    try {
+      const url = await uploadImageFile(
+        { buffer: file.content, originalname: file.filename ?? '' },
+        `user-uploads/pets/${recordId}`
+      );
+      uploadedUrls.push(url);
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'petRecovery.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'petRecovery.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
+  }
 
   const record = await PetFound.create({
     _id: recordId,
@@ -97,18 +113,21 @@ export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewa
   });
 
   return response.successResponse(201, ctx.event, {
-    message: 'petRecovery.success.petFound.created',
-    id: record._id,
+    message: 'success.created',
+    data: { id: record._id },
   });
 }
 
+/**
+ * Deletes a pet-found report only when the authenticated user owns the record.
+ */
 export async function handleDeletePetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
-  const petFoundID = ctx.event.pathParameters?.petFoundID;
-
-  if (!petFoundID || !mongoose.Types.ObjectId.isValid(petFoundID)) {
-    return response.errorResponse(400, 'petRecovery.errors.petFound.invalidId', ctx.event);
+  const idParam = parseObjectIdParam(ctx.event.pathParameters?.petFoundID);
+  if (!idParam.ok) {
+    return response.errorResponse(idParam.statusCode, idParam.errorKey, ctx.event);
   }
+  const petFoundID = idParam.data;
 
   await connectToMongoDB();
 
@@ -128,6 +147,6 @@ export async function handleDeletePetFound(ctx: RouteContext): Promise<APIGatewa
   await PetFound.deleteOne({ _id: petFoundID });
 
   return response.successResponse(200, ctx.event, {
-    message: 'petRecovery.success.petFound.deleted',
+    message: 'success.deleted',
   });
 }

@@ -1,26 +1,46 @@
-# Account API
+# User API
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-Self-service user profile endpoints owned by the `user` Lambda. For auth, registration, challenge verification, and refresh, see [AUTH.md](./AUTH.md).
+**Lambda:** `aws-ddd-api-{stage}-user`
+
+Authenticated self-service profile endpoints for the current user. All routes operate on the caller's own account only. There is no path/body override for targeting another user.
+
+---
 
 ## Overview
 
-| Method | Path | Auth | Lambda | Purpose |
-| --- | --- | --- | --- | --- |
-| GET | `/user/me` | `x-api-key` + Bearer JWT | `user` | Return current active user profile |
-| PATCH | `/user/me` | `x-api-key` + Bearer JWT | `user` | Update current user profile |
-| DELETE | `/user/me` | `x-api-key` + Bearer JWT | `user` | Soft-delete current user and revoke refresh tokens |
+### Route Summary
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/user/me` | `x-api-key` + Bearer JWT | Return the current active user profile |
+| PATCH | `/user/me` | `x-api-key` + Bearer JWT | Update the current active user profile |
+| DELETE | `/user/me` | `x-api-key` + Bearer JWT | Soft-delete the current user and revoke refresh tokens |
+
+### Integration-Critical Behavior
+
+| Topic | Current DDD behavior |
+| --- | --- |
+| Success wrapper | GET and PATCH return the profile inside `data` |
+| Sanitization | Returned user objects do not include `password`, `deleted`, credits, `__v`, `createdAt`, or `updatedAt` |
+| PATCH semantics | Partial update only; only provided fields are changed |
+| PATCH unknown fields | Unknown top-level fields like `role`, `credit`, `password`, `deleted`, and `_id` are ignored rather than rejected; allowed fields in the same payload still update successfully |
+| DELETE side effect | Marks the user as deleted and deletes all refresh tokens for that user |
+| Post-delete behavior | Future `/user/me` access returns `404 common.notFound`; future refresh returns `401 auth.refresh.invalidSession` |
+
+---
 
 ## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
-`/user/me` routes inherit the API's default authorizer and API-key requirement.
+All `/user/me` routes inherit the API default authorizer and API-key requirement.
 
 | Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| `/user/*` routes in this doc | Yes | `DddTokenAuthorizer` |
+| `/user/me` GET, PATCH, DELETE | Yes | `DddTokenAuthorizer` |
+| `/user/me` OPTIONS | No | None |
 
 Required deployed headers:
 
@@ -29,60 +49,58 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
-For JSON body requests such as `PATCH /user/me`, also send:
+PATCH requests must also send:
 
 ```http
 Content-Type: application/json
 ```
 
-Missing `x-api-key` is rejected by API Gateway before Lambda runs.
+### Authentication Rules
 
-`OPTIONS` preflight for `/user/me` does not require `x-api-key`.
+- The route identity comes entirely from the Bearer JWT
+- Missing or invalid JWT returns `401` or `403` before or during Lambda authorization
+- There is no admin bypass or alternate path for reading another user through this Lambda
+- The handler does not require `userRole === "user"`; a valid NGO-scoped token can read, update, or delete its own underlying `User` document as long as the JWT `userId` resolves to that record
 
-Browser integration note:
+### Rate Limits
 
-- Current Lambda CORS preflight responses advertise `Content-Type,Authorization,X-Request-Id,x-api-key`
-- Cross-origin browser requests can therefore send `x-api-key`, subject to normal origin allowlisting
-
-Auth failure note:
-
-- In direct Lambda execution and local handler tests, missing auth context becomes `401 common.unauthorized`
-- In deployed API Gateway flows, an authorizer denial may surface as `401` or `403` before Lambda code runs
-
-Implementation note:
-
-- The `user` Lambda does not enforce `userRole === "user"`
-- It resolves the target record strictly from JWT `userId`
-- A valid NGO JWT can therefore read, update, or delete its own underlying `User` document through these endpoints
-
-### Request Body Validation
-
-JSON-body routes in this doc (`PATCH /user/me`) run their decoded body through the shared `parseBody` helper before any business logic.
-
-The helper returns these standardized `400` `errorKey`s:
-
-| Condition | `errorKey` |
+| Route | Policy |
 | --- | --- |
-| Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
-| Body is missing, `null`, non-object, or an empty object `{}` | `common.missingParams` |
-| Zod schema rejected the body and the first issue message is a dotted i18n key (for example `common.invalidBodyParams`, `user.errors.invalidEmailFormat`) | that key |
-| Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
+| `GET /user/me` | No route-level limiter in the current handler |
+| `PATCH /user/me` | IP 60 / 5 min, identifier 30 / 5 min |
+| `DELETE /user/me` | IP 20 / 60 min, identifier 5 / 60 min |
 
-Deployed API Gateway may also reject malformed or non-object JSON before Lambda runs with its own `400`. Routes without a request body (`GET /user/me`, `DELETE /user/me`) are unaffected.
+Rate-limit failures return `429 common.rateLimited` and may include `Retry-After`.
 
 ### Localization
 
 - Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
 - Default locale is `en`
-- `message` values like `success.retrieved` and `success.updated` are translated by the shared response helper before returning JSON
+- Use `errorKey` for integration logic
+
+---
+
+## Success And Error Conventions
 
 ### Success Response Shape
+
+GET and PATCH:
 
 ```json
 {
   "success": true,
-  "message": "Retrieved successfully",
-  "user": {},
+  "message": "localized success message",
+  "data": {},
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+DELETE:
+
+```json
+{
+  "success": true,
+  "message": "localized success message",
   "requestId": "aws-lambda-request-id"
 }
 ```
@@ -93,16 +111,32 @@ Deployed API Gateway may also reject malformed or non-object JSON before Lambda 
 {
   "success": false,
   "errorKey": "user.errors.emailExists",
-  "error": "Email already exists",
+  "error": "localized message",
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-### Sanitized User Shape
+### Returned User Shape
 
-`GET /user/me` and `PATCH /user/me` both return a sanitized `user` object.
+Typical fields returned inside `data`:
 
-Removed from returned `user` objects:
+| Field | Type | Notes |
+| --- | --- | --- |
+| `_id` | string | Current user id |
+| `firstName` | string | |
+| `lastName` | string | |
+| `email` | string | |
+| `phoneNumber` | string | |
+| `role` | string | Usually `user` or `ngo` depending on account |
+| `verified` | boolean | |
+| `subscribe` | boolean | |
+| `promotion` | boolean | |
+| `district` | string or `null` | |
+| `image` | string or `null` | |
+| `birthday` | string or `null` | JSON serialization of stored date |
+| `gender` | string | |
+
+Removed internal fields:
 
 - `password`
 - `deleted`
@@ -114,189 +148,179 @@ Removed from returned `user` objects:
 - `createdAt`
 - `updatedAt`
 
-Typical fields:
+### PATCH Validation Rules
 
-```json
-{
-  "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-  "firstName": "Jane",
-  "lastName": "Doe",
-  "email": "jane@example.com",
-  "phoneNumber": "+85291234567",
-  "role": "user",
-  "verified": true,
-  "subscribe": false,
-  "promotion": false,
-  "district": "Kowloon",
-  "image": "https://cdn.example.com/avatar.jpg",
-  "birthday": "1995-08-17T00:00:00.000Z",
-  "gender": "female"
-}
-```
+`PATCH /user/me` accepts a JSON object and only applies these supported fields:
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `firstName` | string | No | Max 100 chars |
+| `lastName` | string | No | Max 100 chars |
+| `birthday` | string | No | Must parse as a valid date |
+| `email` | string | No | Must be valid email |
+| `district` | string | No | Max 100 chars |
+| `image` | string | No | Must be `http` or `https` URL |
+| `phoneNumber` | string | No | Must be valid E.164 phone number |
+
+Observed validation keys:
+
+| Condition | `errorKey` |
+| --- | --- |
+| Malformed JSON | `common.invalidBodyParams` |
+| Empty object or missing JSON body | `common.missingBodyParams` or generic shared missing-body behavior depending on transport path |
+| Invalid field shape on a supported field | `common.invalidBodyParams` |
+
+Current runtime behavior note: unknown top-level fields are ignored rather than rejected. The live tests prove this for payloads containing fields like `role`, `credit`, `password`, `deleted`, and `_id`.
+
+---
 
 ## Endpoints
 
 ### GET /user/me
 
-Return the current active user profile for the authenticated `userId`.
+Return the current active user profile.
 
-**Lambda:** `user`  
+**Lambda owner:** `user`  
 **Auth:** `x-api-key` + Bearer JWT required
 
-The returned `user` object is sanitized using `functions/user/src/utils/sanitize.ts`.
+#### Get Request Body
 
-**Request body:** none
+None.
 
-**Success (200)**
+#### Get Success (200)
 
 ```json
 {
   "success": true,
   "message": "Retrieved successfully",
-  "user": {
+  "data": {
     "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "firstName": "Jane",
-    "lastName": "Doe",
     "email": "jane@example.com",
-    "phoneNumber": "+85291234567",
-    "role": "user",
+    "firstName": "Jane",
+    "lastName": "Ng",
+    "district": "Wan Chai",
     "verified": true,
-    "district": "Kowloon"
+    "role": "user"
   },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Errors**
+#### Get Errors
 
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 or 403 | `common.unauthorized` | Missing or invalid auth in deployed/API-authorizer contexts; local handler normalization is `401` |
-| 404 | `common.notFound` | Authenticated user does not exist or is already soft-deleted |
-| 500 | `common.internalError` | Unexpected error |
+| 401 / 403 | `common.unauthorized` | Missing, malformed, expired, or invalid JWT |
+| 404 | `common.notFound` | User does not exist or was already deleted |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### PATCH /user/me
 
-Update the current active user profile for the authenticated `userId`. Only supplied fields are updated.
+Partially update the current user profile.
 
-**Lambda:** `user`  
-**Auth:** `x-api-key` + Bearer JWT required
+**Lambda owner:** `user`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-Deployment note:
-
-- This route has an API Gateway request model (`type: object`) in SAM
-- On deployed API Gateway, malformed JSON or non-object JSON can be rejected before Lambda with an API Gateway-generated `400`
-
-**Body**
+#### Patch Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `firstName` | string | No | |
 | `lastName` | string | No | |
-| `birthday` | string | No | Any JavaScript-parseable date string |
-| `email` | string | No | Must match email regex |
+| `birthday` | string | No | Stored as a `Date` when provided; `null` clears it when supported by payload generation |
+| `email` | string | No | Normalized before duplicate checks and storage |
 | `district` | string | No | |
-| `image` | string | No | Must be `http` or `https` URL |
-| `phoneNumber` | string | No | Must be E.164 format |
+| `image` | string | No | Public `http`/`https` URL |
+| `phoneNumber` | string | No | Normalized before duplicate checks and storage |
 
-**Example**
+#### Patch Example Request
 
 ```json
 {
-  "firstName": "Jane",
+  "firstName": "Renamed Jane",
   "district": "Hong Kong Island",
-  "image": "https://cdn.example.com/new-avatar.jpg"
+  "image": "https://cdn.example.com/user.jpg"
 }
 ```
 
-**Behavior notes**
-
-- `email` and `phoneNumber` are normalized before storage
-- Duplicate checks exclude the current user and only consider `deleted: false` users
-- `birthday` is stored as a `Date`
-- This route does not require a verification challenge to change email or phone; it directly updates those fields if unique
-- The patch schema is not `.strict()`, so unknown top-level fields are currently accepted and ignored unless they cause downstream issues
-- The returned `user` object is sanitized using `functions/user/src/utils/sanitize.ts`
-
-**Success (200)**
+#### Patch Success (200)
 
 ```json
 {
   "success": true,
   "message": "Updated successfully",
-  "user": {
+  "data": {
     "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "firstName": "Jane",
-    "lastName": "Doe",
-    "email": "jane@example.com",
-    "phoneNumber": "+85291234567",
+    "firstName": "Renamed Jane",
     "district": "Hong Kong Island",
-    "image": "https://cdn.example.com/new-avatar.jpg"
+    "email": "jane@example.com"
   },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Errors**
+#### Patch Errors
 
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing request body |
-| 400 | `common.invalidBodyParams` | Invalid birthday, email, image URL, or phone format |
-| 401 or 403 | `common.unauthorized` | Missing or invalid auth in deployed/API-authorizer contexts; local handler normalization is `401` |
-| 404 | `common.notFound` | Authenticated user does not exist or is deleted |
-| 409 | `user.errors.emailExists` | Another active user already has this email |
-| 409 | `user.errors.phoneExists` | Another active user already has this phone number |
-| 500 | `common.internalError` | Unexpected error |
+| 400 | `common.invalidBodyParams` | Malformed JSON, invalid email, invalid phone, invalid birthday, invalid image URL, or invalid field shape |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 404 | `common.notFound` | User no longer exists or is deleted |
+| 409 | `user.errors.emailExists` | Another active user already owns the email |
+| 409 | `user.errors.phoneExists` | Another active user already owns the phone number |
+| 429 | `common.rateLimited` | Patch rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### DELETE /user/me
 
-Soft-delete the current account for the authenticated `userId` and revoke all stored refresh tokens for that user.
+Soft-delete the current user account and revoke the user's refresh tokens.
 
-**Lambda:** `user`  
+**Lambda owner:** `user`  
 **Auth:** `x-api-key` + Bearer JWT required
 
-**Request body:** none
+#### Delete Request Body
 
-**Side effects**
+None.
 
-- Updates `User.deleted` to `true`
-- Deletes all `RefreshToken` records for the current `userId`
+#### Side Effects
 
-**Success (200)**
+- Sets `deleted: true` on the user
+- Deletes all refresh-token records for that user
+- Future refresh attempts for that session family will fail with `auth.refresh.invalidSession`
+
+#### Delete Success (200)
 
 ```json
 {
   "success": true,
   "message": "Deleted successfully",
-  "userId": "665f1a2b3c4d5e6f7a8b9c0d",
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Errors**
+#### Delete Errors
 
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 or 403 | `common.unauthorized` | Missing or invalid auth in deployed/API-authorizer contexts; local handler normalization is `401` |
-| 404 | `common.notFound` | Authenticated user does not exist or is already deleted |
-| 500 | `common.internalError` | Unexpected error |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 404 | `common.notFound` | User already deleted or not found |
+| 429 | `common.rateLimited` | Delete rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
+
+---
 
 ## Frontend Integration Guide
 
-### Read Current Profile
+1. Load `/user/me` after authentication bootstrap and treat `body.data` as the canonical profile object.
+2. For PATCH, only send fields the user changed. The route is partial-update-safe.
+3. Do not rely on the backend to reject unknown top-level PATCH keys. The live runtime ignores them, so frontend payload shaping should stay explicit.
+4. On `409 user.errors.emailExists` or `409 user.errors.phoneExists`, attach the error to the corresponding form field.
+5. On successful PATCH, replace local profile state with the returned `data` object.
+6. On successful DELETE, clear local auth state immediately. The backend also revokes refresh tokens, so token refresh will stop working.
 
-Use `GET /user/me` after login or refresh to hydrate account state. No path parameter is needed; the backend resolves the user from the JWT.
+---
 
-Because the handler is keyed by JWT `userId` rather than JWT role, this endpoint can also hydrate the underlying `User` record for NGO callers.
+## Verification Snapshot
 
-### Update Current Profile
-
-Use `PATCH /user/me` with only changed fields. If the UI branches on duplicate conflicts, key on:
-
-- `user.errors.emailExists`
-- `user.errors.phoneExists`
-
-### Delete Current Account
-
-After `DELETE /user/me` succeeds, clear any in-memory access token immediately. Existing refresh cookies will no longer be usable because the backend deletes all refresh-token records.
+Current verification evidence is in `__tests__/user.test.js`. That suite proves the `data` wrapper on GET/PATCH, sanitization of returned user objects, duplicate email/phone handling, PATCH mass-assignment stripping, valid NGO-role access to the same underlying user record, and the delete-then-refresh invalidation path. Deployed development-stage verification is still the authoritative final check for API Gateway auth behavior.

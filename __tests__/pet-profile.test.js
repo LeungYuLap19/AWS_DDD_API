@@ -8,6 +8,7 @@ const sharedRuntimeModulePath = path.resolve(
   '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
 );
 const templatePath = path.resolve(__dirname, '../template.yaml');
+const pngBuffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]);
 
 function createContext() {
   return {
@@ -164,9 +165,7 @@ function loadHandlerWithMocks({
   const actualMongoose = jest.requireActual('mongoose');
   const resolvedAuthRole = authRole || (authNgoId ? 'ngo' : 'user');
   const petFindChain = createFindChain(petList);
-  const multipartParseMock = multipartError
-    ? jest.fn().mockRejectedValue(multipartError)
-    : jest.fn().mockResolvedValue(multipartForm || { files: [] });
+  const multipartParseMock = jest.fn(); // kept for backward compat, busboy is mocked below
   const s3SendMock = jest.fn().mockResolvedValue({});
 
   const petFindOne = jest.fn((query = {}, projection) => {
@@ -266,14 +265,39 @@ function loadHandlerWithMocks({
     },
   }));
 
-  jest.doMock('lambda-multipart-parser', () => ({
-    __esModule: true,
-    default: {
-      parse: multipartParseMock,
-    },
-  }));
-
-  jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
+  jest.doMock('@aws-ddd-api/shared', () => {
+    const realShared = require(sharedRuntimeModulePath);
+    return {
+      ...realShared,
+      parseMultipartBody: async (event, schema, options = {}) => {
+        if (multipartError) {
+          return { ok: false, statusCode: 400, errorKey: options.parseErrorKey || 'common.invalidBodyParams' };
+        }
+        const form = multipartForm || {};
+        const files = (Array.isArray(form.files) ? form.files : []).map((f) => ({
+          fieldname: f.fieldname || 'image',
+          filename: f.filename || 'test.jpg',
+          contentType: f.contentType || 'image/jpeg',
+          content: f.content || Buffer.from('test'),
+        }));
+        const rawFields = { ...form };
+        delete rawFields.files;
+        if (options.validate) {
+          const vKey = options.validate(rawFields);
+          if (vKey !== null) return { ok: false, statusCode: 400, errorKey: vKey };
+        }
+        const normalizedFields = options.normalize ? options.normalize(rawFields) : rawFields;
+        const parsed = schema.safeParse(normalizedFields);
+        if (!parsed.success) {
+          const fallback = options.fallbackErrorKey || 'common.invalidBodyParams';
+          const message = realShared.getFirstZodIssueMessage(parsed.error, fallback);
+          const errorKey = message.includes('.') ? message : fallback;
+          return { ok: false, statusCode: 400, errorKey };
+        }
+        return { ok: true, data: parsed.data, files };
+      },
+    };
+  }, { virtual: true });
 
   const { handler } = require(handlerModulePath);
   const authorizer = createAuthorizer({
@@ -429,8 +453,8 @@ describe('pet-profile handler Tier 2 integration', () => {
       );
 
       const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(500);
-      expect(parsed.body.errorKey).toBe('common.internalError');
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
       expect(petModel.create).not.toHaveBeenCalled();
     });
 
@@ -560,10 +584,9 @@ describe('pet-profile handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.success).toBe(true);
-      expect(parsed.body.view).toBe('full');
-      expect(parsed.body.form.name).toBe('Mochi');
-      expect(parsed.body.form.tagId).toBe('TAG-001');
-      expect(parsed.body.form.ownerContact1).toBe(91234567);
+      expect(parsed.body.data.name).toBe('Mochi');
+      expect(parsed.body.data.tagId).toBe('TAG-001');
+      expect(parsed.body.data.ownerContact1).toBe(91234567);
     });
 
     test('returns only basic fields for GET /pet/profile/{petId}?view=basic', async () => {
@@ -596,11 +619,10 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.view).toBe('basic');
-      expect(parsed.body.form.name).toBe('Mochi');
-      expect(parsed.body.form.tagId).toBe('TAG-001');
-      expect(parsed.body.form.chipId).toBeUndefined();
-      expect(parsed.body.form.motherName).toBeUndefined();
+      expect(parsed.body.data.name).toBe('Mochi');
+      expect(parsed.body.data.tagId).toBe('TAG-001');
+      expect(parsed.body.data.chipId).toBeUndefined();
+      expect(parsed.body.data.motherName).toBeUndefined();
     });
 
     test('returns only lineage fields for GET /pet/profile/{petId}?view=detail', async () => {
@@ -634,12 +656,11 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.view).toBe('detail');
-      expect(parsed.body.form.chipId).toBe('CHIP-001');
-      expect(parsed.body.form.motherName).toBe('Luna');
-      expect(parsed.body.form.transferNGO).toHaveLength(1);
-      expect(parsed.body.form.name).toBeUndefined();
-      expect(parsed.body.form.tagId).toBeUndefined();
+      expect(parsed.body.data.chipId).toBe('CHIP-001');
+      expect(parsed.body.data.motherName).toBe('Luna');
+      expect(parsed.body.data.transferNGO).toHaveLength(1);
+      expect(parsed.body.data.name).toBeUndefined();
+      expect(parsed.body.data.tagId).toBeUndefined();
     });
 
     test('returns all fields for GET /pet/profile/{petId}?view=full', async () => {
@@ -672,11 +693,10 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.view).toBe('full');
-      expect(parsed.body.form.name).toBe('Mochi');
-      expect(parsed.body.form.tagId).toBe('TAG-001');
-      expect(parsed.body.form.chipId).toBe('CHIP-001');
-      expect(parsed.body.form.motherName).toBe('Luna');
+      expect(parsed.body.data.name).toBe('Mochi');
+      expect(parsed.body.data.tagId).toBe('TAG-001');
+      expect(parsed.body.data.chipId).toBe('CHIP-001');
+      expect(parsed.body.data.motherName).toBe('Luna');
     });
 
     test('returns narrowed summary data without sensitive fields for GET /pet/profile/me user scope', async () => {
@@ -709,13 +729,13 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.total).toBe(1);
-      expect(Array.isArray(parsed.body.pets)).toBe(true);
-      expect(parsed.body.pets[0].name).toBe('Mochi');
-      expect(parsed.body.pets[0].location).toBe('Shelter A');
-      expect(parsed.body.pets[0].userId).toBeUndefined();
-      expect(parsed.body.pets[0].ownerContact1).toBeUndefined();
-      expect(parsed.body.pets[0].tagId).toBeUndefined();
+      expect(parsed.body.pagination.total).toBe(1);
+      expect(Array.isArray(parsed.body.data)).toBe(true);
+      expect(parsed.body.data[0].name).toBe('Mochi');
+      expect(parsed.body.data[0].location).toBe('Shelter A');
+      expect(parsed.body.data[0].userId).toBeUndefined();
+      expect(parsed.body.data[0].ownerContact1).toBeUndefined();
+      expect(parsed.body.data[0].tagId).toBeUndefined();
     });
 
     test('returns NGO list results with paging and sort metadata for GET /pet/profile/me NGO scope', async () => {
@@ -754,10 +774,10 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.pets).toHaveLength(1);
-      expect(parsed.body.total).toBe(1);
-      expect(parsed.body.currentPage).toBe(2);
-      expect(parsed.body.perPage).toBe(30);
+      expect(parsed.body.data).toHaveLength(1);
+      expect(parsed.body.pagination.total).toBe(1);
+      expect(parsed.body.pagination.page).toBe(2);
+      expect(parsed.body.pagination.limit).toBe(30);
       expect(petModel.find.mock.calls[0][0]).toMatchObject({
         ngoId,
         deleted: false,
@@ -789,10 +809,10 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.form.name).toBe('Mochi');
-      expect(parsed.body.form.breed).toBe('Mixed');
-      expect(parsed.body.form.userId).toBeUndefined();
-      expect(parsed.body.form.ngoId).toBeUndefined();
+      expect(parsed.body.data.name).toBe('Mochi');
+      expect(parsed.body.data.breed).toBe('Mixed');
+      expect(parsed.body.data.userId).toBeUndefined();
+      expect(parsed.body.data.ngoId).toBeUndefined();
     });
 
     test('creates a pet profile from multipart form via POST /pet/profile', async () => {
@@ -825,8 +845,8 @@ describe('pet-profile handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
       expect(parsed.body.success).toBe(true);
-      expect(parsed.body.message).toBe('Pet profile created successfully');
-      expect(parsed.body.result).toBeDefined();
+      expect(parsed.body.message).toBe('Created successfully');
+      expect(parsed.body.data).toBeDefined();
       expect(petModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId,
@@ -853,7 +873,7 @@ describe('pet-profile handler Tier 2 integration', () => {
           sex: 'Female',
           ngoId,
           ownerContact1: '91234567',
-          files: [{ content: Buffer.from('abc'), filename: 'pet.png' }],
+          files: [{ content: pngBuffer, filename: 'pet.png' }],
         },
       });
 
@@ -870,9 +890,10 @@ describe('pet-profile handler Tier 2 integration', () => {
       );
 
       const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(201);
+      expect(petModel.create).toHaveBeenCalled();
       const createCall = petModel.create.mock.calls[0][0];
 
-      expect(parsed.statusCode).toBe(201);
       expect(ngoCountersModel.findOneAndUpdate).toHaveBeenCalled();
       expect(imageCollectionModel.create).toHaveBeenCalled();
       expect(s3SendMock).toHaveBeenCalled();
@@ -945,7 +966,7 @@ describe('pet-profile handler Tier 2 integration', () => {
         multipartForm: {
           removedIndices: '[0]',
           name: 'Updated Mochi',
-          files: [{ content: Buffer.from('abc'), filename: 'new.jpg' }],
+          files: [{ content: pngBuffer, filename: 'new.png' }],
         },
       });
 
@@ -963,6 +984,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       );
 
       const parsed = parseResponse(result);
+      expect(parsed.body).toMatchObject({ success: true });
       expect(parsed.statusCode).toBe(200);
       expect(imageCollectionModel.create).toHaveBeenCalled();
       expect(s3SendMock).toHaveBeenCalled();
@@ -1008,7 +1030,6 @@ describe('pet-profile handler Tier 2 integration', () => {
       const [filter, update] = petModel.findOneAndUpdate.mock.calls[0];
 
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.petId).toBe(petId);
       expect(filter).toMatchObject({
         _id: petId,
         deleted: false,
@@ -1063,7 +1084,7 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidPetId');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
     });
 
     test('rejects missing tagId on GET /pet/profile/by-tag/{tagId}', async () => {
@@ -1081,7 +1102,7 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.missingTagId');
+      expect(parsed.body.errorKey).toBe('common.invalidPathParams');
     });
 
     test('rejects empty required fields on multipart POST /pet/profile', async () => {
@@ -1165,7 +1186,7 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
       expect(petModel.create).not.toHaveBeenCalled();
     });
 
@@ -1261,8 +1282,8 @@ describe('pet-profile handler Tier 2 integration', () => {
       );
 
       const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(500);
-      expect(parsed.body.errorKey).toBe('common.internalError');
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
       expect(save).not.toHaveBeenCalled();
     });
 
@@ -1295,7 +1316,7 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidPetId');
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
     });
 
     test('rejects deprecated body petId field on multipart PATCH', async () => {
@@ -1333,7 +1354,7 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
       expect(save).not.toHaveBeenCalled();
       expect(petModel.findOne).not.toHaveBeenCalled();
     });
@@ -1411,7 +1432,7 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
       expect(save).not.toHaveBeenCalled();
     });
   });
@@ -1612,8 +1633,9 @@ describe('pet-profile handler Tier 2 integration', () => {
       );
 
       const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(404);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.noPetsFound');
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.data).toEqual([]);
+      expect(parsed.body.pagination.total).toBe(0);
     });
 
     test('returns 200 with null-filled form when no pet matches a public tag lookup', async () => {
@@ -1633,9 +1655,9 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.form.name).toBeNull();
-      expect(parsed.body.form.breedimage).toBeNull();
-      expect(parsed.body.form.status).toBeNull();
+      expect(parsed.body.data.name).toBeNull();
+      expect(parsed.body.data.breedimage).toBeNull();
+      expect(parsed.body.data.status).toBeNull();
     });
 
     test('returns 429 with retry-after header when create exceeds the rate limit', async () => {
@@ -2041,7 +2063,7 @@ describe('pet-profile handler Tier 2 integration', () => {
 
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
-      expect(parsed.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
       expect(save).not.toHaveBeenCalled();
     });
 
@@ -2281,7 +2303,7 @@ describe('pet-profile handler Tier 2 integration', () => {
     test('template grants pet-profile its dedicated S3 upload role', async () => {
       const template = fs.readFileSync(templatePath, 'utf8');
 
-      expect(template).toMatch(/PetProfileFunctionRole:[\s\S]*?PolicyName: !Sub '\$\{ProjectName\}-\$\{StageName\}-pet-profile-s3-upload'[\s\S]*?s3:PutObject[\s\S]*?s3:PutObjectAcl[\s\S]*?arn:aws:s3:::\$\{S3BucketName\}\/user-uploads\/pets\/\*/);
+      expect(template).toMatch(/PetProfileFunctionRole:[\s\S]*?PolicyName: !Sub '\$\{ProjectName\}-\$\{StageName\}-pet-profile-s3-upload'[\s\S]*?Action:[\s\S]*?s3:PutObject[\s\S]*?Resource: !Sub 'arn:aws:s3:::\$\{S3BucketName\}\/user-uploads\/pets\/\*'/);
       expect(template).toMatch(/PetProfileFunction:[\s\S]*?Role: !GetAtt PetProfileFunctionRole\.Arn/);
     });
   });

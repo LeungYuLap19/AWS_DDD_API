@@ -3,6 +3,21 @@ import path from 'node:path';
 
 const templateCache: Record<string, string> = {};
 
+function resolveTemplatePath(templateName: string): string {
+  const candidatePaths = [
+    path.join(__dirname, '..', '..', 'static', templateName),
+    path.join(__dirname, 'static', templateName),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (fs.existsSync(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  throw new Error(`Missing static template: ${templateName}`);
+}
+
 /**
  * Escapes HTML special characters to prevent XSS in email content.
  */
@@ -26,8 +41,7 @@ export function escapeHtml(value: unknown): string {
  */
 export function renderTemplate(templateName: string, data: Record<string, string>): string {
   if (!templateCache[templateName]) {
-    // __dirname is dist/functions/commerce-orders/src/utils/ at runtime
-    const filePath = path.join(__dirname, '..', '..', 'static', templateName);
+    const filePath = resolveTemplatePath(templateName);
     templateCache[templateName] = fs.readFileSync(filePath, 'utf8');
   }
 

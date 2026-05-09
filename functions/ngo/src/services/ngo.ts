@@ -1,7 +1,8 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import {
-  AuthContextError,
+  HttpError,
   logWarn,
+  paginationQuerySchema,
   parseBody,
   requireAuthContext,
 } from '@aws-ddd-api/shared';
@@ -16,6 +17,7 @@ import {
 import { buildNgoMemberList } from '../utils/memberList';
 import { normalizeEmail, normalizePhone } from '../utils/normalize';
 import { escapeRegex, flattenToDot, hasKeys, pickAllowed } from '../utils/object';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import {
   sanitizeNgo,
@@ -37,12 +39,17 @@ type UserDocument = {
 function requireNgoContext(ctx: RouteContext): NgoAuthContext {
   const authContext = requireAuthContext(ctx.event);
   if (authContext.userRole !== 'ngo' || !authContext.ngoId) {
-    throw new AuthContextError('common.unauthorized', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 
   return authContext;
 }
 
+/**
+ * Returns the authenticated NGO member profile together with NGO, access, and
+ * counter data. Partial read failures are downgraded into warning keys so the
+ * caller still receives the sections that resolved successfully.
+ */
 export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireNgoContext(ctx);
   await connectToMongoDB();
@@ -51,9 +58,6 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
   const NgoCounters = mongoose.model('NgoCounters');
 
   const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
-  if ('errorResponse' in authorizedNgo) {
-    return authorizedNgo.errorResponse;
-  }
 
   const results = await Promise.allSettled([
     User.findOne({ _id: authContext.userId, deleted: false }).lean(),
@@ -83,42 +87,57 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
   };
 
   return response.successResponse(200, ctx.event, {
-    userProfile: sanitizeUser(pick(0) as UserDocument | null),
-    ngoProfile: sanitizeNgo(authorizedNgo.ngo),
-    ngoUserAccessProfile: sanitizeNgoUserAccess(authorizedNgo.ngoUserAccess),
-    ngoCounters: sanitizeNgoCounters(pick(1) as Record<string, unknown> | null),
-    warnings: {
-      userProfile: warningKey(0, 'userProfile'),
-      ngoCounters: warningKey(1, 'ngoCounters'),
+    message: 'success.retrieved',
+    data: {
+      userProfile: sanitizeUser(pick(0) as UserDocument | null),
+      ngoProfile: sanitizeNgo(authorizedNgo.ngo),
+      ngoUserAccessProfile: sanitizeNgoUserAccess(authorizedNgo.ngoUserAccess),
+      ngoCounters: sanitizeNgoCounters(pick(1) as Record<string, unknown> | null),
+      warnings: {
+        userProfile: warningKey(0, 'userProfile'),
+        ngoCounters: warningKey(1, 'ngoCounters'),
+      },
     },
   });
 }
 
+/**
+ * Returns the paginated NGO member list for the caller's NGO, including
+ * optional search filtering after membership access is verified.
+ */
 export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireNgoContext(ctx);
   await connectToMongoDB();
   const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
-  if ('errorResponse' in authorizedNgo) {
-    return authorizedNgo.errorResponse;
-  }
 
-  const searchRaw = (ctx.event.queryStringParameters?.search || '').trim();
+  const queryParams = ctx.event.queryStringParameters || {};
+  const searchRaw = (queryParams['search'] || '').trim();
   const search = escapeRegex(searchRaw);
-  const page = Math.max(parseInt(ctx.event.queryStringParameters?.page || '1', 10), 1);
+  const pagination = paginationQuerySchema().safeParse(queryParams);
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
 
   const { members, totalDocs, totalPages } = await buildNgoMemberList({
     ngoId: authContext.ngoId as string,
     search,
     page,
+    limit,
   });
 
   return response.successResponse(200, ctx.event, {
-    userList: members,
-    totalPages,
-    totalDocs,
+    message: 'success.retrieved',
+    data: members,
+    pagination: { page, limit, total: totalDocs, totalPages },
   });
 }
 
+/**
+ * Updates the authenticated NGO member profile and, for NGO admins, selected
+ * NGO/counter/access fields in one flow with duplicate checks and role-based
+ * write restrictions.
+ */
 export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireNgoContext(ctx);
   const parsed = parseBody(ctx.body, editNgoBodySchema);
@@ -127,6 +146,17 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   }
 
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'ngo.patchMe',
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 30, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   const session = await mongoose.startSession();
   const User = mongoose.model('User');
@@ -139,9 +169,6 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   try {
     const authorizedNgo = await requireAuthorizedNgoAccess(ctx, authContext);
-    if ('errorResponse' in authorizedNgo) {
-      return authorizedNgo.errorResponse;
-    }
 
     const USER_ALLOWED = new Set(['firstName', 'lastName', 'email', 'phoneNumber', 'gender']);
     const NGO_ALLOWED = new Set([
@@ -192,7 +219,7 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
       typeof ngoDot.registrationNumber === 'string' ? ngoDot.registrationNumber : undefined;
 
     if (!isAdmin && (hasKeys(ngoDot) || hasKeys(countersDot) || hasKeys(accessDot))) {
-      return response.errorResponse(403, 'common.unauthorized', ctx.event);
+      return response.errorResponse(403, 'common.forbidden', ctx.event);
     }
 
     if (userDot.email) {
@@ -271,7 +298,7 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
       if (!responseData.ngoUserAccessProfile) {
         await session.abortTransaction();
-        return response.errorResponse(403, 'common.unauthorized', ctx.event);
+        return response.errorResponse(403, 'common.forbidden', ctx.event);
       }
     }
 
@@ -286,7 +313,6 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
     return response.successResponse(200, ctx.event, {
       message: 'success.updated',
-      updated: Object.keys(responseData),
       data: responseData,
     });
   } catch (error) {

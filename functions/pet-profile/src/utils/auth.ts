@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { AuthContextError, requireAuthContext } from '@aws-ddd-api/shared';
+import { HttpError, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 
 type PetDocument = {
@@ -20,6 +20,11 @@ function toStringId(value: unknown): string | null {
   return String(value);
 }
 
+/**
+ * Loads a pet by route or explicit id and enforces owner/NGO access before
+ * returning it. Throws `HttpError` for invalid ids, missing pets, or forbidden
+ * access so callers can rely on shared handler mapping.
+ */
 export async function loadAuthorizedPet(
   event: RouteContext['event'],
   options: { petId?: string; lean?: boolean; notFoundKey?: string; forbiddenKey?: string } = {}
@@ -30,7 +35,7 @@ export async function loadAuthorizedPet(
   const forbiddenKey = options.forbiddenKey || 'common.forbidden';
 
   if (!petId || !mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('petProfile.errors.invalidPetId', 400);
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   const Pet = mongoose.model('Pet');
@@ -38,19 +43,23 @@ export async function loadAuthorizedPet(
   const pet = (options.lean === false ? await query.exec() : await query.lean()) as PetDocument | null;
 
   if (!pet) {
-    throw new AuthContextError(notFoundKey, 404);
+    throw new HttpError(notFoundKey, 404);
   }
 
   const isOwner = toStringId(pet.userId) === authContext.userId;
   const isNgoOwner = Boolean(authContext.ngoId && pet.ngoId && String(pet.ngoId) === authContext.ngoId);
 
   if (!isOwner && !isNgoOwner) {
-    throw new AuthContextError(forbiddenKey, 403);
+    throw new HttpError(forbiddenKey, 403);
   }
 
   return pet;
 }
 
+/**
+ * Builds the ownership filter used by write operations so both direct user
+ * ownership and NGO ownership stay aligned with the auth context.
+ */
 export function buildOwnershipFilter(event: RouteContext['event'], petId: string): Record<string, unknown> {
   const authContext = requireAuthContext(event);
   const ownershipFilters: Record<string, unknown>[] = [{ userId: authContext.userId }];

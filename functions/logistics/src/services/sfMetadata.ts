@@ -1,5 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { getAuthContext, logError, parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseBody } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import {
@@ -16,117 +16,119 @@ import {
   getPickupLocationsSchema,
 } from '../zodSchema/logisticsSchema';
 
-function getRateLimitIdentifier(event: RouteContext['event']): string | null {
-  const auth = getAuthContext(event);
-  return auth?.userEmail ?? auth?.userId ?? null;
-}
-
+/**
+ * Retrieves an address-service bearer token from SF Express. This route is
+ * intentionally public, so only an IP-scoped rate limit is applied.
+ */
 export async function getToken({ event }: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(event);
+  await connectToMongoDB();
+
+  const rateLimitResult = await applyRateLimit({
+    action: 'logistics.getToken',
+    event,
+    identifier: null,
+    policies: [
+      // Public unauthenticated route: only the per-IP lane is meaningful.
+      { scope: 'ip', limit: 10, windowSeconds: 300 },
+    ],
+  });
+  if (rateLimitResult) return rateLimitResult;
+
+  let bearerToken: unknown;
   try {
-    await connectToMongoDB();
-
-    const rateLimitResult = await applyRateLimit({
-      action: 'logistics.getToken',
-      event,
-      identifier: getRateLimitIdentifier(event),
-      limit: 10,
-      windowSeconds: 300,
-    });
-    if (rateLimitResult) return rateLimitResult;
-
-    const bearerToken = await fetchAddressToken();
-    return response.successResponse(200, event, { bearer_token: bearerToken });
-  } catch (error) {
-    logError('Failed to get SF address token', {
-      scope: 'services.sfMetadata.getToken',
-      extra: { error },
-    });
-    return response.errorResponse(500, 'common.internalError', event);
+    bearerToken = await fetchAddressToken();
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
   }
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { bearerToken } });
 }
 
+/**
+ * Resolves the SF area list for a previously issued address token after body
+ * validation and public-route throttling.
+ */
 export async function getArea({ event, body }: RouteContext): Promise<APIGatewayProxyResult> {
+  const parsed = parseBody(body, getAreaSchema);
+  if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
+
+  await connectToMongoDB();
+
+  const rateLimitResult = await applyRateLimit({
+    action: 'logistics.getArea',
+    event,
+    identifier: null,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+    ],
+  });
+  if (rateLimitResult) return rateLimitResult;
+
+  let areaList: unknown;
   try {
-    await connectToMongoDB();
-
-    const rateLimitResult = await applyRateLimit({
-      action: 'logistics.getArea',
-      event,
-      identifier: getRateLimitIdentifier(event),
-      limit: 30,
-      windowSeconds: 300,
-    });
-    if (rateLimitResult) return rateLimitResult;
-
-    const parsed = parseBody(body, getAreaSchema);
-    if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
-
-    const areaList = await fetchAreaList(parsed.data.token);
-    return response.successResponse(200, event, { area_list: areaList });
-  } catch (error) {
-    logError('Failed to get SF area list', {
-      scope: 'services.sfMetadata.getArea',
-      extra: { error },
-    });
-    return response.errorResponse(500, 'common.internalError', event);
+    areaList = await fetchAreaList(parsed.data.token);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
   }
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { areaList } });
 }
 
+/**
+ * Resolves SF net-code metadata for the supplied address payload. Provider
+ * failures are normalized into the shared `logistics.sfApiError` contract.
+ */
 export async function getNetCode({ event, body }: RouteContext): Promise<APIGatewayProxyResult> {
+  const parsed = parseBody(body, getNetCodeSchema);
+  if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
+
+  await connectToMongoDB();
+
+  const rateLimitResult = await applyRateLimit({
+    action: 'logistics.getNetCode',
+    event,
+    identifier: null,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+    ],
+  });
+  if (rateLimitResult) return rateLimitResult;
+
+  let netCode: unknown;
   try {
-    await connectToMongoDB();
-
-    const rateLimitResult = await applyRateLimit({
-      action: 'logistics.getNetCode',
-      event,
-      identifier: getRateLimitIdentifier(event),
-      limit: 30,
-      windowSeconds: 300,
-    });
-    if (rateLimitResult) return rateLimitResult;
-
-    const parsed = parseBody(body, getNetCodeSchema);
-    if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
-
-    const netCode = await fetchNetCodeList(parsed.data);
-    return response.successResponse(200, event, { netCode });
-  } catch (error) {
-    logError('Failed to get SF net codes', {
-      scope: 'services.sfMetadata.getNetCode',
-      extra: { error },
-    });
-    return response.errorResponse(500, 'common.internalError', event);
+    netCode = await fetchNetCodeList(parsed.data);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
   }
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { netCode } });
 }
 
+/**
+ * Returns pickup addresses from SF Express for a validated location request.
+ * The call remains public but is capped by IP to bound third-party API abuse.
+ */
 export async function getPickupLocations({
   event,
   body,
 }: RouteContext): Promise<APIGatewayProxyResult> {
+  const parsed = parseBody(body, getPickupLocationsSchema);
+  if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
+
+  await connectToMongoDB();
+
+  const rateLimitResult = await applyRateLimit({
+    action: 'logistics.getPickupLocations',
+    event,
+    identifier: null,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 300 },
+    ],
+  });
+  if (rateLimitResult) return rateLimitResult;
+
+  let addresses: unknown;
   try {
-    await connectToMongoDB();
-
-    const rateLimitResult = await applyRateLimit({
-      action: 'logistics.getPickupLocations',
-      event,
-      identifier: getRateLimitIdentifier(event),
-      limit: 30,
-      windowSeconds: 300,
-    });
-    if (rateLimitResult) return rateLimitResult;
-
-    const parsed = parseBody(body, getPickupLocationsSchema);
-    if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
-
-    const addresses = await fetchPickupAddresses(parsed.data);
-    return response.successResponse(200, event, { addresses });
-  } catch (error) {
-    logError('Failed to get SF pickup locations', {
-      scope: 'services.sfMetadata.getPickupLocations',
-      extra: { error },
-    });
-    return response.errorResponse(500, 'common.internalError', event);
+    addresses = await fetchPickupAddresses(parsed.data);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
   }
+  return response.successResponse(200, event, { message: 'success.retrieved', data: { addresses } });
 }
-

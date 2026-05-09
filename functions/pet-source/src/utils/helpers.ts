@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { type AuthContext, AuthContextError } from '@aws-ddd-api/shared';
+import { type AuthContext, HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 import type { SourcePatchBody } from '../zodSchema/sourceSchema';
@@ -11,6 +11,7 @@ type AuthorizedPet = {
   ngoId?: unknown;
 };
 
+/** Persisted pet-source record shape returned from Mongo for sanitization/update flows. */
 export type PetSourceRecord = {
   _id: unknown;
   petId?: unknown;
@@ -23,24 +24,33 @@ export type PetSourceRecord = {
   toObject?: () => Record<string, unknown>;
 };
 
+/** Minimal duplicate-key error contract read from Mongo write failures. */
 export type MongoDuplicateError = {
   code?: number;
 };
 
+/**
+ * Returns the required `petId` path param and rejects missing or malformed
+ * Mongo object ids with `HttpError`.
+ */
 export function getValidatedPetId(event: RouteContext['event']): string {
   const petId = event.pathParameters?.petId;
 
   if (!petId) {
-    throw new AuthContextError('petSource.errors.missingPetId', 400);
+    throw new HttpError('common.missingPathParams', 400);
   }
 
   if (!mongoose.isValidObjectId(petId)) {
-    throw new AuthContextError('petSource.errors.invalidPetId', 400);
+    throw new HttpError('common.invalidObjectId', 400);
   }
 
   return petId;
 }
 
+/**
+ * Removes Mongo internal fields from a pet-source document while preserving
+ * the business fields returned to API callers.
+ */
 export function sanitizeSource(record: PetSourceRecord | null): Record<string, unknown> | null {
   if (!record) {
     return null;
@@ -51,11 +61,16 @@ export function sanitizeSource(record: PetSourceRecord | null): Record<string, u
   return safe;
 }
 
+/**
+ * Converts known `HttpError`-shaped failures into the domain response format
+ * so route handlers can centralize error handling without widening catch
+ * blocks.
+ */
 export function toErrorResponse(
   error: unknown,
   event: RouteContext['event']
 ): APIGatewayProxyResult | null {
-  if (error instanceof AuthContextError) {
+  if (error instanceof HttpError) {
     return response.errorResponse(error.statusCode, error.errorKey, event);
   }
 
@@ -68,6 +83,10 @@ export function toErrorResponse(
   return null;
 }
 
+/**
+ * Confirms the caller owns the pet directly or via matching NGO ownership
+ * before pet-source records can be read or written.
+ */
 export async function authorizePetAccess(
   authContext: AuthContext,
   petId: string
@@ -78,7 +97,7 @@ export async function authorizePetAccess(
     .lean()) as AuthorizedPet | null;
 
   if (!pet) {
-    throw new AuthContextError('petSource.errors.petNotFound', 404);
+    throw new HttpError('petSource.errors.petNotFound', 404);
   }
 
   const isOwner = pet.userId !== null && String(pet.userId) === authContext.userId;
@@ -86,10 +105,14 @@ export async function authorizePetAccess(
     Boolean(authContext.ngoId) && pet.ngoId !== null && String(pet.ngoId) === authContext.ngoId;
 
   if (!isOwner && !isNgoOwner) {
-    throw new AuthContextError('common.forbidden', 403);
+    throw new HttpError('common.forbidden', 403);
   }
 }
 
+/**
+ * Translates the optional patch body into Mongo `$set` fields so omitted keys
+ * remain unchanged.
+ */
 export function buildSourceUpdateFields(body: SourcePatchBody): Record<string, unknown> {
   const updateFields: Record<string, unknown> = {};
 

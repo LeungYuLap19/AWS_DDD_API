@@ -1,17 +1,13 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { handleGetEye, handlePatchEye, handlePostEye } from './services/eye';
-import { handleBreedAnalysis } from './services/breed';
-import { handleUploadImage, handleUploadPetBreedImage } from './services/upload';
 
-const routes: Record<string, RouteHandler> = {
-  'GET /pet/analysis/eye/{identifier}': handleGetEye,
-  'POST /pet/analysis/eye/{identifier}': handlePostEye,
-  'PATCH /pet/analysis/eye/{identifier}': handlePatchEye,
-  'POST /pet/analysis/breed': handleBreedAnalysis,
-  'POST /pet/analysis/uploads/image': handleUploadImage,
-  'POST /pet/analysis/uploads/breed-image': handleUploadPetBreedImage,
+const routes = {
+  'GET /pet/analysis/eye/{identifier}': () => import('./services/eye').then(m => m.handleGetEye),
+  'POST /pet/analysis/eye/{identifier}': () => import('./services/eye').then(m => m.handlePostEye),
+  'PATCH /pet/analysis/eye/{identifier}': () => import('./services/eye').then(m => m.handlePatchEye),
+  'POST /pet/analysis/breed': () => import('./services/breed').then(m => m.handleBreedAnalysis),
+  'POST /pet/analysis/uploads/image': () => import('./services/upload').then(m => m.handleUploadImage),
+  'POST /pet/analysis/uploads/breed-image': () => import('./services/upload').then(m => m.handleUploadPetBreedImage),
 };
 
 export const routeRequest = createRouter(routes, { response });

@@ -3,69 +3,88 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import env from '../config/env';
 import s3Client from '../config/s3';
 
-function getFileExtension(file: { originalname?: string }): string {
-  const originalName = String(file.originalname || '');
-  const lastDotIndex = originalName.lastIndexOf('.');
-  if (lastDotIndex === -1 || lastDotIndex === originalName.length - 1) {
-    return 'jpg';
+export const ALLOWED_UPLOAD_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB — with BinaryMediaTypes: multipart/form-data, API GW base64-encodes (4 MB → ~5.33 MB), safely under Lambda's 6 MB synchronous invocation limit
+
+/**
+ * Detects MIME type from magic bytes. Returns null if unrecognised.
+ */
+function detectMimeFromBuffer(buffer: Buffer): string | null {
+  if (!buffer || buffer.length < 12) return null;
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47 &&
+    buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a
+  ) return 'image/png';
+  // GIF87a / GIF89a
+  if (
+    buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38 &&
+    (buffer[4] === 0x37 || buffer[4] === 0x39) && buffer[5] === 0x61
+  ) return 'image/gif';
+  // WebP: RIFF????WEBP
+  if (
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+  ) return 'image/webp';
+  return null;
+}
+
+const EXT_MAP: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+};
+
+/**
+ * Uploads a file buffer to S3 and records the upload in ImageCollection.
+ * Detects MIME from magic bytes; throws { code: 'INVALID_FILE_TYPE' } or { code: 'FILE_TOO_LARGE' } on violation.
+ * The DB connection must be established before calling this.
+ */
+export async function uploadImageFile(
+  file: { buffer: Buffer; originalname: string },
+  folder: string,
+  owner = 'user'
+): Promise<string> {
+  const detectedMime = detectMimeFromBuffer(file.buffer);
+  if (!detectedMime || !ALLOWED_UPLOAD_MIME.has(detectedMime)) {
+    throw Object.assign(new Error('Unsupported file type'), { code: 'INVALID_FILE_TYPE' });
+  }
+  if (file.buffer.length > MAX_UPLOAD_BYTES) {
+    throw Object.assign(new Error('File exceeds maximum allowed size'), { code: 'FILE_TOO_LARGE' });
   }
 
-  return originalName.slice(lastDotIndex + 1).toLowerCase();
-}
-
-function getContentType(extension: string): string {
-  const mimeByExtension: Record<string, string> = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    gif: 'image/gif',
-    tif: 'image/tiff',
-    tiff: 'image/tiff',
-    webp: 'image/webp',
-    bmp: 'image/bmp',
-    pdf: 'application/pdf',
-  };
-
-  return mimeByExtension[extension] || 'image/jpeg';
-}
-
-export async function uploadImageFile(params: {
-  buffer: Buffer;
-  folder: string;
-  originalname?: string;
-  owner?: string;
-}): Promise<string> {
+  const ext = EXT_MAP[detectedMime] || 'bin';
   const ImageCollection = mongoose.model('ImageCollection');
-  const imageRecord = await ImageCollection.create({});
-
-  const extension = getFileExtension({ originalname: params.originalname });
-  const fileName = `${imageRecord._id}.${extension}`;
-  const key = `${params.folder}/${fileName}`;
+  const img = await ImageCollection.create({});
+  const fileName = `${img._id}.${ext}`;
+  const key = `${folder}/${fileName}`;
   const url = `${env.AWS_BUCKET_BASE_URL}/${key}`;
-  const fileSizeMb = params.buffer.length / (1024 * 1024);
 
   await s3Client.send(
     new PutObjectCommand({
       Bucket: env.AWS_BUCKET_NAME,
       Key: key,
-      Body: params.buffer,
-      ACL: 'public-read',
-      ContentType: getContentType(extension),
+      Body: file.buffer,
+      ContentType: detectedMime,
     })
   );
 
   await ImageCollection.updateOne(
-    { _id: imageRecord._id },
+    { _id: img._id },
     {
       $set: {
         fileName,
         url,
-        fileSize: fileSizeMb,
-        mimeType: getContentType(extension),
-        owner: params.owner || 'user',
+        fileSize: file.buffer.length / (1024 * 1024),
+        mimeType: detectedMime,
+        owner,
       },
     }
   );
 
   return url;
 }
+

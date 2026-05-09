@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { getAuthContext, logError, parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { callSfService, getAccessToken } from '../config/sfExpressClient';
@@ -14,79 +14,80 @@ function normalizeEmail(email: string | undefined): string | null {
   return typeof email === 'string' ? email.trim().toLowerCase() : null;
 }
 
+/**
+ * Creates an SF shipment for one or more order tempIds, enforcing caller
+ * ownership unless the auth role is privileged, then backfills the resolved
+ * waybill number onto matched order records.
+ */
 export async function createShipment({
   event,
   body,
 }: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(event);
-  try {
-    await connectToMongoDB();
+  const auth = requireAuthContext(event);
 
-    const auth = getAuthContext(event);
+  const parsed = parseBody(body, createShipmentSchema);
+  if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
 
-    const rateLimitResult = await applyRateLimit({
-      action: 'logistics.createShipment',
-      event,
-      identifier: auth?.userEmail ?? auth?.userId ?? null,
-      limit: 20,
-      windowSeconds: 300,
-    });
-    if (rateLimitResult) return rateLimitResult;
+  const customerDetails = parsed.data;
 
-    const parsed = parseBody(body, createShipmentSchema);
-    if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
+  await connectToMongoDB();
 
-    const customerDetails = parsed.data;
+  const rateLimitResult = await applyRateLimit({
+    action: 'logistics.createShipment',
+    event,
+    identifier: auth?.userEmail ?? auth?.userId ?? null,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+      { scope: 'identifier', limit: 30, windowSeconds: 300 },
+      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
+    ],
+  });
+  if (rateLimitResult) return rateLimitResult;
 
-    // Ownership check: resolve tempIds against orders and verify caller owns them
-    const requestedTempIds = Array.from(
-      new Set(
-        [
-          ...(Array.isArray(customerDetails.tempIdList) ? customerDetails.tempIdList : []),
-          ...(customerDetails.tempId ? [customerDetails.tempId] : []),
-        ].filter(Boolean)
-      )
-    );
+  // Ownership check: resolve tempIds against orders and verify caller owns them
+  const requestedTempIds = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(customerDetails.tempIdList) ? customerDetails.tempIdList : []),
+        ...(customerDetails.tempId ? [customerDetails.tempId] : []),
+      ].filter(Boolean)
+    )
+  );
 
-    let matchedOrders: Array<{ tempId?: string; email: string }> = [];
+  let matchedOrders: Array<{ tempId?: string; email: string }> = [];
 
-    if (requestedTempIds.length > 0) {
-      const Order = mongoose.model('Order');
-      const orders = await Order.find({ tempId: { $in: requestedTempIds } })
-        .select('_id tempId email')
-        .lean<Array<{ _id: unknown; tempId?: string; email: string }>>();
+  if (requestedTempIds.length > 0) {
+    const Order = mongoose.model('Order');
+    const orders = await Order.find({ tempId: { $in: requestedTempIds } })
+      .select('_id tempId email')
+      .lean<Array<{ _id: unknown; tempId?: string; email: string }>>();
 
-      if (orders.length > 0) {
-        const isPrivileged = auth?.userRole && PRIVILEGED_ROLES.has(auth.userRole);
+    if (orders.length > 0) {
+      const isPrivileged = auth?.userRole && PRIVILEGED_ROLES.has(auth.userRole);
 
-        if (!isPrivileged) {
-          const callerEmail = normalizeEmail(auth?.userEmail);
-          if (!callerEmail) {
-            logError('Caller email missing for order ownership check', {
-              scope: 'services.sfShipment.createShipment',
-              extra: { tempIds: requestedTempIds },
-            });
-            return response.errorResponse(403, 'common.unauthorized', event);
-          }
-
-          const unauthorizedOrder = orders.find(
-            (order) => normalizeEmail(order.email) !== callerEmail
-          );
-          if (unauthorizedOrder) {
-            logError('Order ownership check failed', {
-              scope: 'services.sfShipment.createShipment',
-              extra: { tempId: (unauthorizedOrder as { tempId?: string }).tempId },
-            });
-            return response.errorResponse(403, 'common.unauthorized', event);
-          }
+      if (!isPrivileged) {
+        const callerEmail = normalizeEmail(auth?.userEmail);
+        if (!callerEmail) {
+          return response.errorResponse(403, 'common.forbidden', event);
         }
 
-        matchedOrders = orders as Array<{ tempId?: string; email: string }>;
+        const unauthorizedOrder = orders.find(
+          (order) => normalizeEmail(order.email) !== callerEmail
+        );
+        if (unauthorizedOrder) {
+          return response.errorResponse(403, 'common.forbidden', event);
+        }
       }
-    }
 
-    const accessToken = await getAccessToken();
-    const apiResultData = await callSfService({
+      matchedOrders = orders as Array<{ tempId?: string; email: string }>;
+    }
+  }
+
+  let accessToken: string;
+  let apiResultData: Record<string, unknown>;
+  try {
+    accessToken = await getAccessToken();
+    apiResultData = await callSfService({
       serviceCode: 'EXP_RECE_CREATE_ORDER',
       accessToken,
       msgData: {
@@ -126,36 +127,29 @@ export async function createShipment({
         ],
       },
     });
-
-    const waybillInfo = apiResultData.msgData as
-      | { waybillNoInfoList?: Array<{ waybillNo?: string }> }
-      | undefined;
-    const trackingNumber = waybillInfo?.waybillNoInfoList?.[0]?.waybillNo;
-    if (!trackingNumber) {
-      return response.errorResponse(500, 'logistics.missingWaybill', event);
-    }
-
-    const matchedTempIds = matchedOrders.map((o) => o.tempId).filter(Boolean);
-    if (matchedTempIds.length > 0) {
-      const Order = mongoose.model('Order');
-      await Order.updateMany(
-        { tempId: { $in: matchedTempIds } },
-        { $set: { sfWayBillNumber: trackingNumber } }
-      );
-    }
-
-    return response.successResponse(200, event, {
-      tempIdList: customerDetails.tempIdList,
-      trackingNumber,
-    });
-  } catch (error) {
-    logError('Failed to create SF shipment', {
-      scope: 'services.sfShipment.createShipment',
-      extra: { error },
-    });
-
-    const message = (error as { message?: string })?.message ?? '';
-    const errorKey = message.startsWith('logistics.') ? message : 'common.internalError';
-    return response.errorResponse(500, errorKey, event);
+  } catch {
+    return response.errorResponse(502, 'logistics.sfApiError', event);
   }
+
+  const waybillInfo = apiResultData.msgData as
+    | { waybillNoInfoList?: Array<{ waybillNo?: string }> }
+    | undefined;
+  const trackingNumber = waybillInfo?.waybillNoInfoList?.[0]?.waybillNo;
+  if (!trackingNumber) {
+    return response.errorResponse(500, 'logistics.missingWaybill', event);
+  }
+
+  const matchedTempIds = matchedOrders.map((o) => o.tempId).filter(Boolean);
+  if (matchedTempIds.length > 0) {
+    const Order = mongoose.model('Order');
+    await Order.updateMany(
+      { tempId: { $in: matchedTempIds } },
+      { $set: { sfWayBillNumber: trackingNumber } }
+    );
+  }
+
+  return response.successResponse(200, event, {
+    message: 'success.created',
+    data: { tempIdList: customerDetails.tempIdList, trackingNumber },
+  });
 }

@@ -17,6 +17,7 @@ This checklist should be treated as the **current DDD implementation standard**.
 
 Required companion docs for AI-driven migration:
 
+- `dev_docs/llms/DDD_TSDOC_STANDARD.md`
 - `dev_docs/llms/DDD_MIGRATION_HARNESS.md`
 - `dev_docs/llms/DDD_TESTING_STANDARD.md`
 
@@ -372,6 +373,26 @@ The minimum expectation is:
 
 If a Lambda truly has no function-local runtime dependencies, keep the manifest minimal rather than omitting it.
 
+### 4.10 TSDoc
+
+Follow:
+
+- `dev_docs/llms/DDD_TSDOC_STANDARD.md`
+
+Short rule:
+
+- TSDoc is required on new or modified exported symbols when the contract is non-obvious
+- do not add boilerplate comments to obvious `handler`, router, schema, or trivial helper code
+
+Prioritize documenting:
+
+- service handlers
+- security/ownership helpers
+- fallback/caching behavior
+- runtime resource helpers
+- intentionally partial models
+- exported result/params types whose meaning is not obvious from the name alone
+
 ---
 
 ## 5. VPC and Runtime Infra Rules
@@ -475,6 +496,7 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 - [ ] Implement response mapping
 - [ ] Implement auth/session/cookie behavior if applicable
 - [ ] Implement ownership / role / security checks
+- [ ] Add or refresh TSDoc on touched non-obvious exported symbols per `dev_docs/llms/DDD_TSDOC_STANDARD.md`
 
 ### Phase F — Security Audit
 
@@ -642,6 +664,7 @@ A domain Lambda is only considered done when:
 - env is wired
 - packaging is correct
 - VPC/runtime assumptions are correct
+- touched non-obvious exported symbols meet the TSDoc standard
 - build passes
 - deploy passes
 - smoke/manual tests pass

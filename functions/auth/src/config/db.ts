@@ -23,6 +23,12 @@ function registerModels() {
     mongoose.model('NgoUserAccess', NgoUserAccessSchema, 'ngo_user_access');
 }
 
+/**
+ * Reuses the warm-container Mongoose connection and idempotently registers the
+ * auth-domain models after the connection is ready. If the initial connect
+ * attempt fails, the cached promise is cleared so the next invocation can
+ * retry.
+ */
 export async function connectToMongoDB() {
   if (mongoose.connection.readyState === 1) {
     registerModels();

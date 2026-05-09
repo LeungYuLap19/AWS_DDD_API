@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import type mongoose from 'mongoose';
-import { AuthContextError, parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { HttpError, parseBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectMainDB } from '../config/db';
 import { response } from '../utils/response';
@@ -9,7 +9,6 @@ import {
   isValidObjectId,
   parseDateFlexible,
   sanitizeManagedAdoption,
-  toErrorResponse,
   validateAdoptionDates,
 } from '../utils/helpers';
 import { adoptionCreateSchema, adoptionUpdateSchema } from '../zodSchema/adoptionSchema';
@@ -27,39 +26,29 @@ export async function handleGetManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
-  try {
-    const authContext = requireAuthContext(ctx.event);
-    const mainConn = await connectMainDB();
-    await authorizePetAccess(mainConn, petId, authContext);
+  const authContext = requireAuthContext(ctx.event);
+  const mainConn = await connectMainDB();
+  await authorizePetAccess(mainConn, petId, authContext);
 
-    const AdoptionModel = mainConn.model('pet_adoptions');
-    const record = await AdoptionModel.findOne({ petId })
-      .select(ADOPTION_PROJECTION)
-      .lean();
+  const AdoptionModel = mainConn.model('pet_adoptions');
+  const record = await AdoptionModel.findOne({ petId })
+    .select(ADOPTION_PROJECTION)
+    .lean();
 
-    if (!record) {
-      return response.successResponse(200, ctx.event, {
-        message: 'petAdoption.success.managed.retrieved',
-        form: null,
-        petId,
-      });
-    }
-
-    const raw = record as Record<string, unknown>;
+  if (!record) {
     return response.successResponse(200, ctx.event, {
-      message: 'petAdoption.success.managed.retrieved',
-      form: sanitizeManagedAdoption(record),
-      petId,
-      adoptionId: String(raw._id),
+      message: 'success.retrieved',
+      data: null,
     });
-  } catch (error) {
-    const knownError = toErrorResponse(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
   }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'success.retrieved',
+    data: sanitizeManagedAdoption(record),
+  });
 }
 
 /**
@@ -72,60 +61,52 @@ export async function handleCreateManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
+  const authContext = requireAuthContext(ctx.event);
+
+  const parsed = parseBody(ctx.body, adoptionCreateSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
+  }
+
+  const data = parsed.data as Record<string, unknown>;
+
+  const invalidDate = validateAdoptionDates(data);
+  if (invalidDate) {
+    return response.errorResponse(400, 'petAdoption.errors.managed.invalidDateFormat', ctx.event);
+  }
+
+  const mainConn = await connectMainDB();
+  await authorizePetAccess(mainConn, petId, authContext);
+
+  const AdoptionModel = mainConn.model('pet_adoptions');
+  const existing = await AdoptionModel.findOne({ petId }).select('_id').lean();
+  if (existing) {
+    return response.errorResponse(409, 'petAdoption.errors.managed.duplicateRecord', ctx.event);
+  }
+
+  let newRecord: mongoose.Document & Record<string, unknown>;
   try {
-    const authContext = requireAuthContext(ctx.event);
-
-    const parsed = parseBody(ctx.body, adoptionCreateSchema);
-    if (!parsed.ok) {
-      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-    }
-
-    const data = parsed.data as Record<string, unknown>;
-
-    const invalidDate = validateAdoptionDates(data);
-    if (invalidDate) {
-      return response.errorResponse(400, 'petAdoption.errors.managed.invalidDateFormat', ctx.event);
-    }
-
-    const mainConn = await connectMainDB();
-    await authorizePetAccess(mainConn, petId, authContext);
-
-    const AdoptionModel = mainConn.model('pet_adoptions');
-    const existing = await AdoptionModel.findOne({ petId }).select('_id').lean();
-    if (existing) {
-      return response.errorResponse(409, 'petAdoption.errors.managed.duplicateRecord', ctx.event);
-    }
-
-    let newRecord: mongoose.Document & Record<string, unknown>;
-    try {
-      newRecord = (await AdoptionModel.create(
-        buildAdoptionCreateDoc(petId, data)
-      )) as typeof newRecord;
-    } catch (error) {
-      if ((error as { code?: number }).code === 11000) {
-        return response.errorResponse(
-          409,
-          'petAdoption.errors.managed.duplicateRecord',
-          ctx.event
-        );
-      }
-      throw error;
-    }
-
-    return response.successResponse(201, ctx.event, {
-      message: 'petAdoption.success.managed.created',
-      form: sanitizeManagedAdoption(newRecord),
-      petId,
-      adoptionId: String((newRecord as Record<string, unknown>)._id),
-    });
+    newRecord = (await AdoptionModel.create(
+      buildAdoptionCreateDoc(petId, data)
+    )) as typeof newRecord;
   } catch (error) {
-    const knownError = toErrorResponse(error, ctx.event);
-    if (knownError) return knownError;
+    if ((error as { code?: number }).code === 11000) {
+      return response.errorResponse(
+        409,
+        'petAdoption.errors.managed.duplicateRecord',
+        ctx.event
+      );
+    }
     throw error;
   }
+
+  return response.successResponse(201, ctx.event, {
+    message: 'success.created',
+    data: sanitizeManagedAdoption(newRecord),
+  });
 }
 
 /**
@@ -139,45 +120,39 @@ export async function handleUpdateManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
-  try {
-    const authContext = requireAuthContext(ctx.event);
+  const authContext = requireAuthContext(ctx.event);
 
-    const parsed = parseBody(ctx.body, adoptionUpdateSchema);
-    if (!parsed.ok) {
-      return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
-    }
-
-    const data = parsed.data as Record<string, unknown>;
-
-    const invalidDate = validateAdoptionDates(data);
-    if (invalidDate) {
-      return response.errorResponse(400, 'petAdoption.errors.managed.invalidDateFormat', ctx.event);
-    }
-
-    const updateFields = buildAdoptionUpdateFields(data);
-    if (Object.keys(updateFields).length === 0) {
-      return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
-    }
-
-    const mainConn = await connectMainDB();
-    await authorizePetAccess(mainConn, petId, authContext);
-
-    const AdoptionModel = mainConn.model('pet_adoptions');
-    const result = await AdoptionModel.updateOne({ petId }, { $set: updateFields });
-
-    if ((result as { matchedCount?: number }).matchedCount === 0) {
-      return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
-    }
-
-    return response.successResponse(200, ctx.event, { message: 'petAdoption.success.managed.updated', petId });
-  } catch (error) {
-    const knownError = toErrorResponse(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
+  const parsed = parseBody(ctx.body, adoptionUpdateSchema);
+  if (!parsed.ok) {
+    return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
+
+  const data = parsed.data as Record<string, unknown>;
+
+  const invalidDate = validateAdoptionDates(data);
+  if (invalidDate) {
+    return response.errorResponse(400, 'petAdoption.errors.managed.invalidDateFormat', ctx.event);
+  }
+
+  const updateFields = buildAdoptionUpdateFields(data);
+  if (Object.keys(updateFields).length === 0) {
+    return response.errorResponse(400, 'common.noFieldsToUpdate', ctx.event);
+  }
+
+  const mainConn = await connectMainDB();
+  await authorizePetAccess(mainConn, petId, authContext);
+
+  const AdoptionModel = mainConn.model('pet_adoptions');
+  const result = await AdoptionModel.updateOne({ petId }, { $set: updateFields });
+
+  if ((result as { matchedCount?: number }).matchedCount === 0) {
+    return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
+  }
+
+  return response.successResponse(200, ctx.event, { message: 'success.updated' });
 }
 
 /**
@@ -191,27 +166,21 @@ export async function handleDeleteManagedRecord(
   petId: string
 ): Promise<APIGatewayProxyResult> {
   if (!isValidObjectId(petId)) {
-    return response.errorResponse(400, 'petAdoption.errors.managed.invalidPetId', ctx.event);
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
 
-  try {
-    const authContext = requireAuthContext(ctx.event);
-    const mainConn = await connectMainDB();
-    await authorizePetAccess(mainConn, petId, authContext);
+  const authContext = requireAuthContext(ctx.event);
+  const mainConn = await connectMainDB();
+  await authorizePetAccess(mainConn, petId, authContext);
 
-    const AdoptionModel = mainConn.model('pet_adoptions');
-    const deleted = await AdoptionModel.deleteOne({ petId });
+  const AdoptionModel = mainConn.model('pet_adoptions');
+  const deleted = await AdoptionModel.deleteOne({ petId });
 
-    if ((deleted as { deletedCount?: number }).deletedCount === 0) {
-      return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
-    }
-
-    return response.successResponse(200, ctx.event, { message: 'petAdoption.success.managed.deleted', petId });
-  } catch (error) {
-    const knownError = toErrorResponse(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
+  if ((deleted as { deletedCount?: number }).deletedCount === 0) {
+    return response.errorResponse(404, 'petAdoption.errors.managed.recordNotFound', ctx.event);
   }
+
+  return response.successResponse(200, ctx.event, { message: 'success.deleted' });
 }
 
 // ---------------------------------------------------------------------------

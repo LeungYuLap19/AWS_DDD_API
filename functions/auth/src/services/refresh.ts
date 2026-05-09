@@ -12,7 +12,7 @@ import {
   issueUserAccessToken,
   readRefreshTokenFromEvent,
 } from '../utils/token';
-import { applyRateLimit } from '../utils/rateLimit';
+import { applyRateLimit, recordFailure, requireFailureCooldown } from '../utils/rateLimit';
 
 async function buildAccessTokenForUser(user: {
   _id: { toString(): string };
@@ -56,6 +56,11 @@ async function buildAccessTokenForUser(user: {
   return { token: issueNgoAccessToken(user, ngo), errorKey: null };
 }
 
+/**
+ * Rotates the refresh session carried in cookies, enforcing replay-resistant
+ * single-use refresh tokens and NGO approval checks before minting the next
+ * access token pair.
+ */
 export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
@@ -68,14 +73,46 @@ export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayP
     action: 'auth.refresh',
     event: ctx.event,
     identifier: rateLimitIdentifier,
-    limit: Number(env.REFRESH_RATE_LIMIT_LIMIT),
-    windowSeconds: Number(env.REFRESH_RATE_LIMIT_WINDOW_SEC),
+    // ip+identifier omitted: identifier and ip+identifier shared the same
+    // env-driven limit, so the composite lane could never trip first.
+    policies: [
+      // Per-IP cap independent of token: bounds enumeration and replay across
+      // many tokens from one host.
+      { scope: 'ip', limit: 60, windowSeconds: 5 * 60 },
+      // Per-token cap (legacy env-driven values).
+      {
+        scope: 'identifier',
+        limit: Number(env.REFRESH_RATE_LIMIT_LIMIT),
+        windowSeconds: Number(env.REFRESH_RATE_LIMIT_WINDOW_SEC),
+      },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
   }
 
+  // Cool down hosts that keep presenting invalid refresh tokens.
+  const cooldownResponse = await requireFailureCooldown({
+    action: 'auth.refresh.fail',
+    cooldownSeconds: 30 * 60,
+    event: ctx.event,
+    identifier: rateLimitIdentifier,
+    scope: 'ip',
+    threshold: 10,
+  });
+  if (cooldownResponse) {
+    return cooldownResponse;
+  }
+
   if (refreshTokenResult.errorKey) {
+    await recordFailure({
+      action: 'auth.refresh.fail',
+      cooldownSeconds: 30 * 60,
+      event: ctx.event,
+      identifier: rateLimitIdentifier,
+      scope: 'ip',
+      threshold: 10,
+    });
     return response.errorResponse(401, refreshTokenResult.errorKey, ctx.event);
   }
 
@@ -91,6 +128,14 @@ export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayP
     } | null;
 
   if (!record || new Date(record.expiresAt).getTime() <= Date.now()) {
+    await recordFailure({
+      action: 'auth.refresh.fail',
+      cooldownSeconds: 30 * 60,
+      event: ctx.event,
+      identifier: rateLimitIdentifier,
+      scope: 'ip',
+      threshold: 10,
+    });
     return response.errorResponse(401, 'auth.refresh.invalidSession', ctx.event);
   }
 
@@ -104,6 +149,14 @@ export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayP
     } | null;
 
   if (!user) {
+    await recordFailure({
+      action: 'auth.refresh.fail',
+      cooldownSeconds: 30 * 60,
+      event: ctx.event,
+      identifier: rateLimitIdentifier,
+      scope: 'ip',
+      threshold: 10,
+    });
     return response.errorResponse(401, 'auth.refresh.invalidSession', ctx.event);
   }
 
@@ -122,8 +175,8 @@ export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayP
     200,
     ctx.event,
     {
-      accessToken: accessTokenResult.token,
-      id: user._id.toString(),
+      message: 'success.completed',
+      data: { accessToken: accessTokenResult.token, id: user._id.toString() },
     },
     {
       'Set-Cookie': buildRefreshCookie(newRefreshToken, ctx.event),

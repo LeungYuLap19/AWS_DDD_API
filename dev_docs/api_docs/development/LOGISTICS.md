@@ -2,9 +2,9 @@
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-SF Express logistics integration — address lookups, shipment creation, and cloud waybill printing. Lookup routes require `x-api-key` but no JWT. Token, shipment, and waybill routes require full authentication.
+**Lambda:** `aws-ddd-api-{stage}-logistics`
 
-> Conventions: see shared API Gateway / auth / error-response rules below.
+SF Express integration for public metadata lookups, shipment creation, and cloud-waybill printing. The current DDD implementation uses the shared `{ success, message, data, requestId }` envelope. Older docs that describe top-level `bearer_token`, `area_list`, `netCode`, `addresses`, or `trackingNumber` payloads are stale.
 
 ---
 
@@ -12,79 +12,101 @@ SF Express logistics integration — address lookups, shipment creation, and clo
 
 ### Route Summary
 
-| Method | Path | Auth | API Key | Lambda | Purpose |
-| --- | --- | --- | --- | --- | --- |
-| POST | `/logistics/token` | Bearer JWT | Yes | `logistics` | Get SF Address API bearer token |
-| POST | `/logistics/lookups/areas` | None | Yes | `logistics` | List SF area metadata |
-| POST | `/logistics/lookups/net-codes` | None | Yes | `logistics` | List SF net codes for an area + type |
-| POST | `/logistics/lookups/pickup-locations` | None | Yes | `logistics` | Get pickup addresses for net codes |
-| POST | `/logistics/shipments` | Bearer JWT | Yes | `logistics` | Create SF shipment and record waybill |
-| POST | `/logistics/cloud-waybill` | Bearer JWT | Yes | `logistics` | Print cloud waybill PDF and email it |
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| POST | `/logistics/token` | `x-api-key` only | Fetch SF address-service bearer token |
+| POST | `/logistics/lookups/areas` | `x-api-key` only | Get area list |
+| POST | `/logistics/lookups/net-codes` | `x-api-key` only | Get net-code list for area + type |
+| POST | `/logistics/lookups/pickup-locations` | `x-api-key` only | Get pickup locations for net codes |
+| POST | `/logistics/shipments` | `x-api-key` + Bearer JWT | Create shipment and write waybill number onto matched orders |
+| POST | `/logistics/cloud-waybill` | `x-api-key` + Bearer JWT | Generate and email cloud-print waybill PDF |
 
-### Typical Frontend Flow
+### Integration-Critical Behavior
 
-```
-1. POST /logistics/token          → bearer_token
-2. POST /logistics/lookups/areas  → area_list  (pick area)
-3. POST /logistics/lookups/net-codes → netCode (pick net code)
-4. POST /logistics/lookups/pickup-locations → addresses (pick pickup point)
-5. POST /logistics/shipments      → trackingNumber
-6. POST /logistics/cloud-waybill  → waybillNo + PDF emailed
-```
+| Topic | Current DDD behavior |
+| --- | --- |
+| Token route auth | `POST /logistics/token` is public at API Gateway and in the handler; the old protected-doc version is wrong |
+| Lookup routes | All three lookups are public and IP-rate-limited only |
+| Shipment ownership | Non-privileged callers can only create shipments for orders whose `email` matches `jwt.userEmail` |
+| Privileged roles | `admin`, `ngo`, `staff`, and `developer` bypass the order-email ownership check |
+| Shipment side effect | Successful shipment creation updates matched `Order.sfWayBillNumber` values |
+| Cloud-waybill side effect | On success, the PDF is emailed to `notification@ptag.com.hk` |
+| Response wrappers | All routes return wrapper-based `data`; no legacy top-level fields |
 
-Step 1 (token) requires a Bearer JWT. Steps 2–4 (lookups) require `x-api-key` but no JWT. Steps 5–6 require full authentication.
+---
+
+## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
 | Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| `/logistics/token`, `/logistics/shipments`, `/logistics/cloud-waybill` | Yes | `DddTokenAuthorizer` |
-| `/logistics/lookups/*` | **Yes** | None |
-
-`OPTIONS` preflight routes are always public and do not require `x-api-key`.
-
-Local SAM testing (`sam local start-api`) does not enforce `x-api-key`.
-
-### Authentication
-
-| Route | Mechanism |
-| --- | --- |
-| `/logistics/token` | Bearer JWT required |
-| `/logistics/lookups/areas` | No JWT, but `x-api-key` required |
-| `/logistics/lookups/net-codes` | No JWT, but `x-api-key` required |
-| `/logistics/lookups/pickup-locations` | No JWT, but `x-api-key` required |
-| `/logistics/shipments` | Bearer JWT required. Ownership check applies for non-privileged callers |
-| `/logistics/cloud-waybill` | Bearer JWT required |
-
-**Privileged roles for shipment ownership bypass:** `admin`, `ngo`, `staff`, `developer`. A caller with one of these roles may create shipments linked to orders owned by any email address.
+| `/logistics/token` | Yes | None |
+| `/logistics/lookups/*` | Yes | None |
+| `/logistics/shipments` | Yes | `DddTokenAuthorizer` |
+| `/logistics/cloud-waybill` | Yes | `DddTokenAuthorizer` |
+| `OPTIONS` for all logistics routes | No | None |
 
 ### Required Headers
 
-| Scenario | Headers |
-| --- | --- |
-| Deployed: `/logistics/token`, `/logistics/shipments`, `/logistics/cloud-waybill` | `Content-Type: application/json`, `x-api-key: <key>`, `Authorization: Bearer <access-token>` |
-| Deployed: `/logistics/lookups/*` | `Content-Type: application/json`, `x-api-key: <key>` (no `Authorization`) |
-| Local SAM | `Content-Type: application/json` |
+Public logistics requests:
+
+```http
+x-api-key: <api-gateway-api-key>
+Content-Type: application/json
+```
+
+Protected logistics requests:
+
+```http
+x-api-key: <api-gateway-api-key>
+Authorization: Bearer <access-token>
+Content-Type: application/json
+```
 
 ### Rate Limits
 
-Rate limiting is enforced per `userEmail ?? userId`. For public lookup routes, the caller has no JWT so `getAuthContext` returns `null` and the rate-limit identifier is `null`. How the shared rate limiter handles a null identifier (e.g. global action bucket or no limit) is determined by the shared runtime and is not directly observable from this Lambda's code.
+| Route | Policy |
+| --- | --- |
+| Token | IP 10 / 300s |
+| Areas lookup | IP 30 / 300s |
+| Net-code lookup | IP 30 / 300s |
+| Pickup-locations lookup | IP 30 / 300s |
+| Shipments | IP 60 / 300s, identifier 30 / 300s, IP+identifier 20 / 300s |
+| Cloud waybill | IP 60 / 300s, identifier 30 / 300s, IP+identifier 20 / 300s |
 
-| Route | Limit | Window |
-| --- | --- | --- |
-| `POST /logistics/token` | 10 requests | 300 s |
-| `POST /logistics/lookups/areas` | 30 requests | 300 s |
-| `POST /logistics/lookups/net-codes` | 30 requests | 300 s |
-| `POST /logistics/lookups/pickup-locations` | 30 requests | 300 s |
-| `POST /logistics/shipments` | 20 requests | 300 s |
-| `POST /logistics/cloud-waybill` | 20 requests | 300 s |
+Rate-limit failures return `429 common.rateLimited`.
+
+### Localization
+
+- Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
+- Use `errorKey` for integration logic
+
+---
+
+## Success And Error Conventions
 
 ### Success Response Shape
+
+Metadata success:
 
 ```json
 {
   "success": true,
-  "<endpoint-specific-fields>": "..."
+  "message": "Retrieved successfully",
+  "data": {},
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Create success:
+
+```json
+{
+  "success": true,
+  "message": "Created successfully",
+  "data": {},
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
@@ -94,21 +116,10 @@ Rate limiting is enforced per `userEmail ?? userId`. For public lookup routes, t
 {
   "success": false,
   "errorKey": "logistics.validation.tokenRequired",
-  "error": "<localized message>",
-  "requestId": "<lambda-request-id>"
+  "error": "localized message",
+  "requestId": "aws-lambda-request-id"
 }
 ```
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `success` | `boolean` | Always `false` |
-| `errorKey` | `string` | Machine-readable key for integration logic |
-| `error` | `string` | Localized message — do not use for branching |
-| `requestId` | `string` | Lambda request ID for CloudWatch lookup |
-
-### Localization
-
-Append `?lang=en` to the URL for English. Default is `zh` (Traditional Chinese).
 
 ---
 
@@ -116,398 +127,263 @@ Append `?lang=en` to the URL for English. Default is `zh` (Traditional Chinese).
 
 ### POST /logistics/token
 
-Fetch an SF Address API bearer token. The returned token is passed as-is to the `/lookups/areas`, `/lookups/net-codes`, and `/lookups/pickup-locations` endpoints. Tokens are short-lived — callers should fetch a fresh one before each lookup session.
+Fetch the SF address-service bearer token.
 
-**Lambda:** `logistics`  
-**Auth:** Bearer JWT required  
-**Rate limit:** 10 / 300 s  
-**Env dependency:** `SF_ADDRESS_API_KEY`
+**Lambda owner:** `logistics`  
+**Auth:** `x-api-key` only
 
-**Body:** The Lambda handler does not parse or validate the request body — any body content is ignored. However, the deployed API Gateway requires a valid JSON object body; sending no body returns a `400` from API Gateway before the Lambda runs. Send `{}` as the minimal valid body.
+#### Request Body
 
-**Example request:**
+No fields are required. `{}` is the simplest valid body for deployed API Gateway.
 
-```http
-POST /logistics/token HTTP/1.1
-Authorization: Bearer <access-token>
-x-api-key: <api-key>
-Content-Type: application/json
-
-{}
-```
-
-**Success (200):**
+#### Token Success (200)
 
 ```json
 {
   "success": true,
-  "bearer_token": "<sf-address-api-bearer-token>"
+  "message": "Retrieved successfully",
+  "data": {
+    "bearerToken": "sf-address-token"
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-`bearer_token` is an opaque value returned directly from the SF Address login API. Pass it to subsequent lookup requests as `token`.
+#### Token Errors
 
-**Errors:**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 | `common.unauthorized` | Missing or invalid Bearer JWT |
-| 429 | `common.rateLimited` | Rate limit exceeded |
-| 500 | `common.internalError` | `SF_ADDRESS_API_KEY` missing or SF upstream failure |
-
----
+| 429 | `common.rateLimited` | Token rate limit exceeded |
+| 502 | `logistics.sfApiError` | Upstream SF token call failed |
 
 ### POST /logistics/lookups/areas
 
-List SF Express area metadata. No authentication required. Use the returned `area_list` to display area selection and to determine `areaId` for the next step.
+Get area metadata.
 
-**Lambda:** `logistics`  
-**Auth:** None  
-**API key:** Not required  
-**Rate limit:** 30 / 300 s
+**Lambda owner:** `logistics`  
+**Auth:** `x-api-key` only
 
-**Body:**
+#### Areas Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `token` | string | Yes | Bearer token from `POST /logistics/token` |
+| `token` | string | Yes | SF address bearer token |
 
-Unknown fields are rejected (`.strict()` schema).
-
-**Example request:**
-
-```json
-{ "token": "<bearer-token>" }
-```
-
-**Success (200):**
+#### Areas Success (200)
 
 ```json
 {
   "success": true,
-  "area_list": [
-    { "areaId": 1, "areaName": "Hong Kong Island" },
-    { "areaId": 2, "areaName": "Kowloon" }
-  ]
+  "message": "Retrieved successfully",
+  "data": {
+    "areaList": []
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-`area_list` is the pass-through `data` value from the SF Address API. Shape is controlled by SF.
+#### Areas Errors
 
-**Errors:**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `logistics.validation.tokenRequired` | `token` field present but empty string |
-| 400 | `common.missingBodyParams` | `token` field absent from the request body entirely |
-| 400 | `common.invalidJSON` | Malformed JSON body |
-| 429 | `common.rateLimited` | Rate limit exceeded |
-| 500 | `common.internalError` | SF upstream failure |
-
----
+| 400 | `logistics.validation.tokenRequired` | Missing or empty `token` |
+| 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
+| 429 | `common.rateLimited` | Lookup rate limit exceeded |
+| 502 | `logistics.sfApiError` | Upstream SF call failed |
 
 ### POST /logistics/lookups/net-codes
 
-List SF Express net codes for a given area and type. No authentication required. Use `areaId` from `/lookups/areas` and a `typeId` to get relevant net codes.
+Get net codes for an area and type.
 
-**Lambda:** `logistics`  
-**Auth:** None  
-**API key:** Not required  
-**Rate limit:** 30 / 300 s
+**Lambda owner:** `logistics`  
+**Auth:** `x-api-key` only
 
-**Body:**
+#### Net-Code Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `token` | string | Yes | Bearer token from `POST /logistics/token` |
-| `typeId` | string \| number | Yes | Express type identifier |
-| `areaId` | string \| number | Yes | Area identifier from `/lookups/areas` |
+| `token` | string | Yes | SF address bearer token |
+| `typeId` | string or number | Yes | SF type id |
+| `areaId` | string or number | Yes | SF area id |
 
-Unknown fields are rejected (`.strict()` schema).
-
-**Example request:**
-
-```json
-{
-  "token": "<bearer-token>",
-  "typeId": 1,
-  "areaId": 2
-}
-```
-
-**Success (200):**
+#### Net-Code Success (200)
 
 ```json
 {
   "success": true,
-  "netCode": [
-    { "netCode": "852A", "netName": "Mong Kok Service Point" }
-  ]
+  "message": "Retrieved successfully",
+  "data": {
+    "netCode": []
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-`netCode` is the pass-through `data` value from the SF Address API. Shape is controlled by SF.
+#### Net-Code Errors
 
-**Errors:**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `logistics.validation.tokenRequired` | `token` missing or empty |
-| 400 | `logistics.validation.typeIdRequired` | `typeId` missing |
-| 400 | `logistics.validation.areaIdRequired` | `areaId` missing |
-| 400 | `common.invalidJSON` | Malformed JSON body |
-| 429 | `common.rateLimited` | Rate limit exceeded |
-| 500 | `common.internalError` | SF upstream failure |
-
----
+| 400 | `logistics.validation.tokenRequired` | Missing or empty `token` |
+| 400 | `logistics.validation.typeIdRequired` | Missing `typeId` |
+| 400 | `logistics.validation.areaIdRequired` | Missing `areaId` |
+| 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
+| 429 | `common.rateLimited` | Lookup rate limit exceeded |
+| 502 | `logistics.sfApiError` | Upstream SF call failed |
 
 ### POST /logistics/lookups/pickup-locations
 
-Get SF Express pickup addresses for one or more net codes. Fetches each net code's addresses in parallel. No authentication required.
+Get pickup-location lists for one or more net codes.
 
-**Lambda:** `logistics`  
-**Auth:** None  
-**API key:** Not required  
-**Rate limit:** 30 / 300 s
+**Lambda owner:** `logistics`  
+**Auth:** `x-api-key` only
 
-**Body:**
+#### Pickup-Locations Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `token` | string | Yes | Bearer token from `POST /logistics/token` |
-| `netCode` | string[] | Yes | Non-empty array of net code strings from `/lookups/net-codes` |
-| `lang` | string | No | Language for address names. Default `"en"` |
+| `token` | string | Yes | SF address bearer token |
+| `netCode` | string[] | Yes | Non-empty list of net codes |
+| `lang` | string | No | Defaults to `en` |
 
-Unknown fields are rejected (`.strict()` schema).
-
-**Example request:**
-
-```json
-{
-  "token": "<bearer-token>",
-  "netCode": ["852A", "852B"],
-  "lang": "en"
-}
-```
-
-**Success (200):**
+#### Pickup-Locations Success (200)
 
 ```json
 {
   "success": true,
-  "addresses": [
-    [
-      { "addressId": 123, "addressName": "Pickup Point A" }
-    ],
-    [
-      { "addressId": 124, "addressName": "Pickup Point B" }
-    ]
-  ]
+  "message": "Retrieved successfully",
+  "data": {
+    "addresses": []
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-`addresses[i]` corresponds to `netCode[i]`. Each inner array is the pass-through `data` value from the SF Address API. Shape is controlled by SF.
+`addresses` follows the SF response structure and may be nested by requested net code.
 
-**Errors:**
+#### Pickup-Locations Errors
 
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `logistics.validation.tokenRequired` | `token` missing or empty |
-| 400 | `logistics.validation.netCodeListRequired` | `netCode` missing, empty array, or contains empty strings |
-| 400 | `common.invalidJSON` | Malformed JSON body |
-| 429 | `common.rateLimited` | Rate limit exceeded |
-| 500 | `common.internalError` | SF upstream failure |
-
----
+| 400 | `logistics.validation.tokenRequired` | Missing or empty `token` |
+| 400 | `logistics.validation.netCodeListRequired` | Missing or empty `netCode` list |
+| 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
+| 429 | `common.rateLimited` | Lookup rate limit exceeded |
+| 502 | `logistics.sfApiError` | Upstream SF call failed |
 
 ### POST /logistics/shipments
 
-Create an SF Express shipment for a receiver and record the waybill number on any linked orders. Requires authentication.
+Create a shipment and write the returned waybill number onto matched orders.
 
-**Lambda:** `logistics`  
-**Auth:** Bearer JWT required  
-**Rate limit:** 20 / 300 s  
-**Env dependencies:** `SF_CUSTOMER_CODE`, `SF_PRODUCTION_CHECK_CODE`
+**Lambda owner:** `logistics`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Body:**
+#### Shipment Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `lastName` | string | Yes | Receiver last name |
-| `phoneNumber` | string | Yes | Receiver phone number |
-| `address` | string | Yes | Receiver delivery address |
-| `count` | number | No | Item count. Positive integer. Default `1` |
-| `attrName` | string | No | SF extra attribute name (e.g. net code attribute name) |
-| `netCode` | string | No | Selected net code string |
-| `tempId` | string | No | Single `Order.tempId` to link the shipment to |
-| `tempIdList` | string[] | No | Multiple `Order.tempId` values to link |
+| `lastName` | string | Yes | Max 100 chars |
+| `phoneNumber` | string | Yes | Max 20 chars |
+| `address` | string | Yes | Max 500 chars |
+| `count` | integer | No | Defaults to `1`, max `1000` |
+| `attrName` | string | No | Max 200 chars |
+| `netCode` | string | No | Max 64 chars |
+| `tempId` | string | No | Max 64 chars |
+| `tempIdList` | string[] | No | Max 100 items |
 
-Unknown fields are rejected (`.strict()` schema).
-
-**Order ownership:** If `tempId` or `tempIdList` is supplied, the service resolves the linked `Order` records and enforces caller ownership.
-
-- **Non-privileged caller (`user` role):** `Order.email` must match the caller's JWT `userEmail` (case-insensitive). Any mismatch returns `403 common.unauthorized`.
-- **Privileged caller (`admin`, `ngo`, `staff`, `developer`):** Ownership check is skipped.
-- If no orders are found for the provided `tempId` values, the ownership check is skipped and the shipment still proceeds.
-
-The SF shipment is sent with a hardcoded sender address (Pet Pet Club, Tsuen Wan HK). The receiver address is built from `lastName`, `phoneNumber`, and `address`.
-
-After a successful shipment, `Order.sfWayBillNumber` is updated for all matched orders.
-
-**Example request:**
-
-```json
-{
-  "lastName": "Chan",
-  "phoneNumber": "85291234567",
-  "address": "Flat 5B, 12 Example Street, Kowloon",
-  "count": 1,
-  "attrName": "网点代码",
-  "netCode": "852A",
-  "tempIdList": ["T0001234567", "T0001234568"]
-}
-```
-
-**Success (200):**
+#### Shipment Success (200)
 
 ```json
 {
   "success": true,
-  "tempIdList": ["T0001234567", "T0001234568"],
-  "trackingNumber": "SF1234567890"
+  "message": "Created successfully",
+  "data": {
+    "tempIdList": ["T0001234567"],
+    "trackingNumber": "SF1234567890"
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-`tempIdList` echoes back `customerDetails.tempIdList` from the request. If `tempIdList` was not provided in the request, the field is omitted from the response. `trackingNumber` is the SF waybill number.
+`tempIdList` is only echoed when the caller sent that field. If the request uses only `tempId`, the success payload may contain just `trackingNumber`.
 
-**Errors:**
+#### Shipment Ownership Rules
 
-| Status | errorKey | Cause |
+- if `tempId` or `tempIdList` resolves to orders, non-privileged callers must match `Order.email` against `jwt.userEmail`
+- privileged roles `admin`, `ngo`, `staff`, and `developer` bypass this check
+- matched orders are updated with `sfWayBillNumber`
+
+#### Shipment Errors
+
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `logistics.validation.lastNameRequired` | `lastName` missing or empty |
-| 400 | `logistics.validation.phoneNumberRequired` | `phoneNumber` missing or empty |
-| 400 | `logistics.validation.addressRequired` | `address` missing or empty |
-| 400 | `common.invalidJSON` | Malformed JSON body |
-| 401 | `common.unauthorized` | Missing or invalid Bearer JWT |
-| 403 | `common.unauthorized` | Non-privileged caller does not own linked order |
-| 429 | `common.rateLimited` | Rate limit exceeded |
-| 500 | `common.internalError` | SF auth failure, missing env vars, or unhandled error |
-| 500 | `logistics.missingWaybill` | SF returned a success response but no waybill number |
-| 500 | `logistics.sfApiError` | SF API returned a failure (propagated from SF service error message) |
-
----
+| 400 | `logistics.validation.lastNameRequired` | Missing or empty `lastName` |
+| 400 | `logistics.validation.phoneNumberRequired` | Missing or empty `phoneNumber` |
+| 400 | `logistics.validation.addressRequired` | Missing or empty `address` |
+| 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 403 | `common.forbidden` | Non-privileged caller does not own linked order(s) |
+| 429 | `common.rateLimited` | Shipment rate limit exceeded |
+| 500 | `logistics.missingWaybill` | SF returned no waybill number |
+| 502 | `logistics.sfApiError` | Upstream SF shipment call failed |
 
 ### POST /logistics/cloud-waybill
 
-Request SF's cloud-print PDF for a waybill number, then email the PDF to the internal logistics address (`notification@ptag.com.hk`). Requires authentication.
+Generate a cloud-print PDF for a waybill and email it internally.
 
-**Lambda:** `logistics`  
-**Auth:** Bearer JWT required  
-**Rate limit:** 20 / 300 s  
-**Env dependencies:** `SF_CUSTOMER_CODE`, `SF_PRODUCTION_CHECK_CODE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+**Lambda owner:** `logistics`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
 
-**Body:**
+#### Cloud-Waybill Request Body
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `waybillNo` | string | Yes | SF waybill number returned from `POST /logistics/shipments` |
+| `waybillNo` | string | Yes | Max 64 chars |
 
-Unknown fields are rejected (`.strict()` schema).
-
-**Side effect:** On success, the waybill PDF is emailed to `notification@ptag.com.hk`. There is no record of this action saved to MongoDB.
-
-**Example request:**
-
-```json
-{ "waybillNo": "SF1234567890" }
-```
-
-**Success (200):**
+#### Cloud-Waybill Success (200)
 
 ```json
 {
   "success": true,
-  "waybillNo": "SF1234567890"
+  "message": "Created successfully",
+  "data": {
+    "waybillNo": "SF1234567890"
+  },
+  "requestId": "aws-lambda-request-id"
 }
 ```
 
-`waybillNo` echoes back the input waybill number. The PDF is emailed in the background — no PDF URL is returned.
+#### Cloud-Waybill Side Effects
 
-**Errors:**
+- downloads the generated PDF from SF
+- emails it to `notification@ptag.com.hk`
 
-| Status | errorKey | Cause |
+#### Cloud-Waybill Errors
+
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `logistics.validation.waybillNoRequired` | `waybillNo` field present but empty string |
-| 400 | `common.missingBodyParams` | `waybillNo` field absent from the request body entirely |
-| 400 | `common.invalidJSON` | Malformed JSON body |
-| 401 | `common.unauthorized` | Missing or invalid Bearer JWT |
-| 429 | `common.rateLimited` | Rate limit exceeded |
-| 500 | `common.internalError` | SF auth failure, PDF download failure, SMTP failure, or missing env vars |
-| 500 | `logistics.sfApiError` | SF cloud-print API returned `success: false` |
-| 500 | `logistics.missingPrintFile` | SF cloud-print API returned no file entries |
-
----
-
-## DDD Contract Delta vs Legacy
-
-The DDD Logistics API intentionally differs from the legacy `SFExpressRoutes` endpoints. Frontend integrators must update their integration.
-
-| Concern | Legacy (`AWS_API`) | DDD (`AWS_DDD_API`) |
-| --- | --- | --- |
-| **Route prefix** | `/sf-express-routes/` or `/v2/sf-express-routes/` | `/logistics/` |
-| **Route paths** | `/sf-express-routes/get-token` | `/logistics/token` |
-| | `/sf-express-routes/get-area` | `/logistics/lookups/areas` |
-| | `/sf-express-routes/get-netCode` | `/logistics/lookups/net-codes` |
-| | `/sf-express-routes/get-pickup-locations` | `/logistics/lookups/pickup-locations` |
-| | `/sf-express-routes/create-order` | `/logistics/shipments` |
-| | `/v2/sf-express-routes/print-cloud-waybill` | `/logistics/cloud-waybill` |
-| **Lookup auth** | All legacy routes required Bearer JWT | Lookup routes (`/lookups/*`) are **public — no auth, no API key** |
-| **Error key namespace** | `sfExpressRoutes.errors.*` | `logistics.*` |
-| **Validation error keys** | `sfExpressRoutes.errors.validation.*` | `logistics.validation.*` |
+| 400 | `logistics.validation.waybillNoRequired` | Missing or empty `waybillNo` |
+| 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 429 | `common.rateLimited` | Cloud-waybill rate limit exceeded |
+| 500 | `logistics.sfApiError` | SF returned a failure state |
+| 500 | `logistics.missingPrintFile` | SF returned no PDF file entry |
+| 500 | `common.internalError` | Internal email delivery failed after the PDF was generated |
+| 502 | `logistics.sfApiError` | Upstream SF call or PDF download failed |
 
 ---
 
 ## Frontend Integration Guide
 
-### Address Discovery Flow (Public — No Token Required)
+1. Treat `/logistics/token` and `/logistics/lookups/*` as public API-key routes. The old doc version that required JWT for `/logistics/token` is wrong.
+2. Read all successful payloads from `data`; do not use the old top-level `bearer_token`, `area_list`, `netCode`, or `trackingNumber` keys.
+3. Use `tempId` or `tempIdList` only when shipment creation should also update matching orders.
+4. Do not assume shipment success always returns `tempIdList`; that field is only echoed when it was sent in the request.
+5. For non-privileged callers, ensure the shipment is tied to orders owned by the current user's email or the request will fail with `common.forbidden`.
 
-```
-1. POST /logistics/token   (requires auth) → bearer_token
-2. POST /logistics/lookups/areas            → area_list
-3. POST /logistics/lookups/net-codes        → netCode list
-4. POST /logistics/lookups/pickup-locations → addresses
-```
+---
 
-Steps 2–4 require the `token` value from step 1 in their body, but do not require an `Authorization` header or `x-api-key`. The SF bearer token is not the same as the PetPetClub JWT.
+## Verification Snapshot
 
-### Creating A Shipment
-
-```http
-POST /logistics/shipments
-Authorization: Bearer <access-token>
-x-api-key: <api-key>
-Content-Type: application/json
-
-{
-  "lastName": "Chan",
-  "phoneNumber": "85291234567",
-  "address": "...",
-  "netCode": "852A",
-  "tempIdList": ["T0001234567"]
-}
-```
-
-On success, store `trackingNumber` for display and waybill printing.
-
-### Printing A Waybill
-
-```http
-POST /logistics/cloud-waybill
-Authorization: Bearer <access-token>
-x-api-key: <api-key>
-Content-Type: application/json
-
-{ "waybillNo": "SF1234567890" }
-```
-
-Success means the PDF was emailed to `notification@ptag.com.hk`. No PDF URL is returned to the caller.
+This document is grounded in `functions/logistics/src/services/sfMetadata.ts`, `sfShipment.ts`, `sfWaybill.ts`, `functions/logistics/src/zodSchema/logisticsSchema.ts`, and the public/protected route wiring in `template.yaml`.

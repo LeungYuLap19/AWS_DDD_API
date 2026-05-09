@@ -2,11 +2,9 @@
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-**Lambda name:** `aws-ddd-api-{stage}-commerce-orders`
+**Lambda:** `aws-ddd-api-{stage}-commerce-orders`
 
-Order checkout and retrieval. All routes require `x-api-key` + `Authorization: Bearer <token>`.
-
-> See also: [COMMERCE_CATALOG.md](COMMERCE_CATALOG.md), [COMMERCE_FULFILLMENT.md](COMMERCE_FULFILLMENT.md)
+Authenticated order checkout and order retrieval. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `orders`, `allOrders`, `purchase_code`, `_id`, or `form` payloads are stale.
 
 ---
 
@@ -14,66 +12,118 @@ Order checkout and retrieval. All routes require `x-api-key` + `Authorization: B
 
 ### Route Summary
 
-| Method | Path | Auth | Purpose |
-| --- | --- | --- | --- |
-| GET | `/commerce/orders` | `x-api-key` + JWT; admin/developer only | Paginated list of all orders |
-| POST | `/commerce/orders` | `x-api-key` + JWT; any authenticated user | Submit a new PTag order (multipart/form-data) |
-| GET | `/commerce/orders/operations` | `x-api-key` + JWT; admin/developer only | Paginated list of all order verifications |
-| GET | `/commerce/orders/{tempId}` | `x-api-key` + JWT; owner or admin/developer | Get contact summary for one order |
+| Method | Path | Auth | Content-Type | Purpose |
+| --- | --- | --- | --- | --- |
+| GET | `/commerce/orders` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Paginated list of all orders |
+| POST | `/commerce/orders` | `x-api-key` + Bearer JWT | `multipart/form-data` | Create one order and one order-verification record |
+| GET | `/commerce/orders/operations` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Paginated operations view of order verifications |
+| GET | `/commerce/orders/{tempId}` | `x-api-key` + Bearer JWT | — | Return minimal contact data for one order |
 
-### Domain Model Relationships
+### Integration-Critical Behavior
 
-```
-Order (tempId)  ──────────────────────────────── OrderVerification (orderId = Order.tempId)
-  └── buyDate, lastName, email, price, option      └── tagId, staffVerification, qrUrl, shortUrl
-  └── delivery, paymentWay, shopCode               └── verifyDate, pendingStatus, cancelled
-  └── petImg, petContact, sfWayBillNumber           └── masterEmail, contact, location, petHuman
-```
-
-When `POST /commerce/orders` succeeds, it creates both documents atomically. `OrderVerification.orderId` references `Order.tempId`.
-
-**Auth delta vs legacy:** `POST /commerce/orders` was a **public** route in legacy (`POST /purchase/confirmation`). The DDD version requires authentication. This is an intentional auth-strengthening delta — the frontend must send a valid JWT when submitting an order.
+| Topic | Current DDD behavior |
+| --- | --- |
+| Auth delta | `POST /commerce/orders` is protected in DDD; legacy public checkout behavior is no longer valid |
+| Checkout response | Order creation returns `data: { id, purchaseCode, price }`, not top-level `purchase_code`, `price`, or `_id` |
+| Price source | `price` is resolved server-side from `ShopInfo.price` using `shopCode`; client price is not accepted |
+| Order side effects | Successful checkout creates both `Order` and `OrderVerification`, generates a tag id, and may generate QR and short URLs |
+| Best-effort notifications | Confirmation email and WhatsApp send after persistence, but failures do not roll back a successful order |
+| List pagination | All list routes use shared pagination defaults: `page=1`, `limit=30`, max `limit=100` |
+| Operations filter | `GET /commerce/orders/operations` only returns records where `cancelled` field exists |
+| Order lookup shape | `GET /commerce/orders/{tempId}` returns only `data.id` and `data.petContact` |
 
 ---
 
-## API Gateway and Auth Rules
+## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
-| Route group | API key required | API Gateway authorizer |
+| Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| All `/commerce/orders` routes | Yes | Lambda authorizer |
-| `OPTIONS` preflight routes | No | None |
+| All `/commerce/orders` routes | Yes | `DddTokenAuthorizer` |
+| `OPTIONS` for `/commerce/orders*` | No | None |
 
-### Authentication
+Protected requests must send:
 
-| Scenario | Requirement |
+```http
+x-api-key: <api-gateway-api-key>
+Authorization: Bearer <access-token>
+```
+
+### Authorization Rules
+
+| Route | Rule |
 | --- | --- |
-| Submit an order | `Authorization: Bearer <access-token>` + `x-api-key` |
-| View own order by tempId | `Authorization: Bearer <access-token>` + `x-api-key` |
-| Admin order/operations list | `Authorization: Bearer <access-token>` + `x-api-key`; role must be `admin` or `developer` |
+| `GET /commerce/orders` | Admin or developer only |
+| `POST /commerce/orders` | Any authenticated caller |
+| `GET /commerce/orders/operations` | Admin or developer only |
+| `GET /commerce/orders/{tempId}` | Admin/developer can read any order; other callers must match `Order.email` using normalized email comparison |
 
-**Privileged roles:** `admin` and `developer`. They bypass ownership checks on all routes.
+### Rate Limits
 
-### Ownership Rules
+`POST /commerce/orders` applies layered Mongo-backed rate limiting:
 
-| Route | Non-privileged access control |
+| Scope | Policy |
 | --- | --- |
-| `GET /commerce/orders/{tempId}` | Caller's JWT email must match `Order.email` (case-insensitive, trimmed) |
-| `GET /commerce/orders` | Admin/developer only |
-| `GET /commerce/orders/operations` | Admin/developer only |
+| IP | 60 requests / 3600s |
+| Identifier (`auth.userId`) | 20 requests / 3600s |
+| IP + identifier | 10 requests / 3600s |
+
+Rate-limit failures return `429 common.rateLimited` and may include `Retry-After`.
+
+### Localization
+
+- Locale priority for API messages is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
+- The multipart body field `lang` is separate from API message localization and is stored with the order for downstream messaging flows
 
 ---
 
-## Shared Conventions
+## Success And Error Conventions
 
 ### Success Response Shape
+
+List success:
 
 ```json
 {
   "success": true,
-  "message": "<optional localized message>",
-  "<endpoint-specific fields>": "...",
+  "message": "Retrieved successfully",
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 0,
+    "totalPages": 0
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Order create success:
+
+```json
+{
+  "success": true,
+  "message": "Created successfully",
+  "data": {
+    "id": "665f1a2b3c4d5e6f7a8b9c20",
+    "purchaseCode": "TEMP-ORDER-001",
+    "price": 298
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Single-order lookup success:
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": {
+    "id": "665f1a2b3c4d5e6f7a8b9c21",
+    "petContact": "91234567"
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
@@ -84,37 +134,10 @@ When `POST /commerce/orders` succeeds, it creates both documents atomically. `Or
 {
   "success": false,
   "errorKey": "orders.errors.duplicateOrder",
-  "error": "Localized message (zh default)",
+  "error": "localized message",
   "requestId": "aws-lambda-request-id"
 }
 ```
-
-Use `errorKey` for programmatic branching. `error` is localized and not stable.
-
-### Common Error Keys
-
-| `errorKey` | Status | Meaning |
-| --- | --- | --- |
-| `common.unauthorized` | 401 / 403 | Missing/invalid JWT, or ownership check failed |
-| `common.forbidden` | 403 | Role check failed |
-| `common.internalError` | 500 | Unhandled server error — look up by `requestId` in CloudWatch |
-
-### Pagination
-
-List endpoints accept `?page=<n>&limit=<n>`. All return a `pagination` object:
-
-```json
-{ "page": 1, "limit": 100, "total": 450 }
-```
-
-| Param | Default | Max |
-| --- | --- | --- |
-| `page` | 1 | — |
-| `limit` | 100 | 500 |
-
-### Localization
-
-Append `?lang=en` for English messages. Default is `zh` (Traditional Chinese). For POST bodies, include `lang: "eng"` or `"chn"` where applicable.
 
 ---
 
@@ -122,281 +145,328 @@ Append `?lang=en` for English messages. Default is `zh` (Traditional Chinese). F
 
 ### GET /commerce/orders
 
-Returns paginated list of all orders. Admin/developer only.
+Return paginated order list. Admin/developer only.
 
-**Auth:** `x-api-key` + JWT; role must be `admin` or `developer`
-**Rate limit:** None configured
+**Lambda owner:** `commerce-orders`  
+**Auth:** `x-api-key` + Bearer JWT with `admin` or `developer` role
 
-**Query params:**
+#### Orders Query Parameters
 
-| Param | Type | Default | Max | Notes |
-| --- | --- | --- | --- | --- |
-| `page` | integer | 1 | — | 1-based |
-| `limit` | integer | 100 | 500 | |
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | No | Default `1` |
+| `limit` | integer | No | Default `30`, max `100` |
 
-**Success (200):**
+#### Returned Order Shape
+
+Each item in `data` is sanitized to:
+
+- `_id`
+- `isPTagAir`
+- `lastName`
+- `email`
+- `phoneNumber`
+- `address`
+- `paymentWay`
+- `delivery`
+- `tempId`
+- `option`
+- `type`
+- `price`
+- `petImg`
+- `promotionCode`
+- `shopCode`
+- `buyDate`
+- `petName`
+- `petContact`
+- `sfWayBillNumber`
+- `language`
+- `createdAt`
+- `updatedAt`
+
+#### Orders Success (200)
 
 ```json
 {
   "success": true,
-  "orders": [
+  "message": "Retrieved successfully",
+  "data": [
     {
-      "_id": "665f1a2b3c4d5e6f7a8b9c11",
+      "_id": "665f1a2b3c4d5e6f7a8b9c22",
       "isPTagAir": false,
       "lastName": "Chan",
       "email": "owner@example.com",
       "phoneNumber": "91234567",
-      "address": "123 Nathan Road, Mong Kok",
+      "address": "123 Nathan Road",
       "paymentWay": "FPS",
       "delivery": "SF Express",
-      "tempId": "ORDER-2025-001",
-      "option": "PTagStandard",
+      "tempId": "TEMP-ORDER-001",
+      "option": "PTagClassic",
       "type": "",
       "price": 298,
-      "petImg": "https://bucket.s3.amazonaws.com/user-uploads/orders/ORDER-2025-001/pet.jpg",
+      "petImg": "https://cdn.example.com/user-uploads/orders/TEMP-ORDER-001/file.jpg",
       "promotionCode": "",
       "shopCode": "HK001",
-      "buyDate": "2025-01-15T10:30:00.000Z",
+      "buyDate": "2026-05-10T12:34:56.000Z",
       "petName": "Mochi",
-      "petContact": "98765432",
+      "petContact": "91234567",
       "sfWayBillNumber": null,
       "language": "eng",
-      "createdAt": "2025-01-15T10:30:00.000Z",
-      "updatedAt": "2025-01-15T10:30:00.000Z"
+      "createdAt": "2026-05-10T12:34:56.000Z",
+      "updatedAt": "2026-05-10T12:34:56.000Z"
     }
   ],
   "pagination": {
     "page": 1,
-    "limit": 100,
-    "total": 320
+    "limit": 30,
+    "total": 1,
+    "totalPages": 1
   },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Errors:**
+#### Orders Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 | `common.unauthorized` | Missing or invalid JWT |
-| 403 | `common.forbidden` | Caller role is not `admin` or `developer` |
-| 500 | `common.internalError` | Unexpected error |
-
----
+| 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 403 | `common.forbidden` | Caller is not `admin` or `developer` |
+| 500 | `common.internalError` | Unexpected database or server error |
 
 ### POST /commerce/orders
 
-Submits a new PTag order. Authenticated users only.
+Create one order and its linked order-verification record.
 
-**Auth:** `x-api-key` + JWT; any authenticated user
-**Rate limit:** 10 requests / 3600 s per source IP
+**Lambda owner:** `commerce-orders`  
+**Auth:** `x-api-key` + Bearer JWT required  
 **Content-Type:** `multipart/form-data`
 
-**File upload rules:**
-- Field `pet_img`: optional; max 1 file; max 4 MB; accepted MIME types: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
-- Field `discount_proof`: optional; max 1 file; same size and type constraints as `pet_img`
-- MIME type is detected from file content (magic bytes), not from the `Content-Type` claim
+#### Multipart File Rules
 
-**Body fields (all arrive as strings from multipart):**
+| File field | Required | Max files | Allowed types | Size limit |
+| --- | --- | --- | --- | --- |
+| `pet_img` | No | 1 | `image/jpeg`, `image/png`, `image/webp`, `image/gif` | 4 MB |
+| `discount_proof` | No | 1 | `image/jpeg`, `image/png`, `image/webp`, `image/gif` | 4 MB |
+
+The backend detects MIME type from file bytes, not just the declared multipart content type.
+
+#### Multipart Text Fields
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `lastName` | string | Yes | Order holder last name |
-| `email` | string | Yes | Valid email; normalized to lowercase |
-| `phoneNumber` | string | Yes | 7–15 digits only (`/^\d{7,15}$/`) |
-| `address` | string | Yes | Delivery address |
-| `option` | string | Yes | Tag option identifier; max 64 chars; alphanumeric + `-_` only |
-| `tempId` | string | Yes | Client-generated unique order ID; max 64 chars; alphanumeric + `-_` only; must be globally unique |
-| `paymentWay` | string | Yes | Payment method description; max 128 chars |
-| `delivery` | string | Yes | Delivery method; max 128 chars |
-| `petName` | string | Yes | Pet name |
-| `shopCode` | string | Yes | Must match an existing `ShopInfo.shopCode` — used to resolve server-authoritative price |
-| `type` | string | No | Tag type; max 64 chars; defaults to `""` |
-| `promotionCode` | string | No | Promotion code; max 64 chars; defaults to `""` |
-| `petContact` | string | No | Pet-related contact number; defaults to `""` |
-| `optionSize` | string | No | Size variant; max 32 chars; defaults to `""` |
-| `optionColor` | string | No | Color variant; max 64 chars; defaults to `""` |
-| `optionImg` | string | No | Image URL variant hint; max unconstrained; defaults to `""`; accepted by the schema but **not used** by the handler — stored as empty string regardless |
-| `lang` | string | No | `"chn"` or `"eng"`; defaults to `"eng"` |
+| `lastName` | string | Yes | Trimmed, max 100 |
+| `email` | string | Yes | Valid email |
+| `address` | string | Yes | Trimmed, max 500 |
+| `option` | string | Yes | Max 64, must match `[A-Za-z0-9_-]+` |
+| `tempId` | string | Yes | Max 64, must match `[A-Za-z0-9_-]+` |
+| `paymentWay` | string | Yes | Max 128 |
+| `delivery` | string | Yes | Max 128 |
+| `petName` | string | Yes | Trimmed, max 100 |
+| `phoneNumber` | string | Yes | 7 to 15 digits only |
+| `shopCode` | string | Yes | Must resolve to an existing `ShopInfo.shopCode` |
+| `type` | string | No | Defaults to `""` |
+| `promotionCode` | string | No | Defaults to `""` |
+| `petContact` | string | No | Defaults to `""` |
+| `optionImg` | string | No | Accepted by schema but not used by handler output or response |
+| `optionSize` | string | No | Defaults to `""` |
+| `optionColor` | string | No | Defaults to `""` |
+| `lang` | enum string | No | `chn` or `eng`, defaults to `eng` |
 
-**Side effects on success:**
-1. Creates `Order` document in MongoDB
-2. Generates a unique 6-character `tagId` (format: `[A-Z][0-9][A-Z][0-9][A-Z][0-9]` from restricted alphabets)
-3. Creates `OrderVerification` document linked by `orderId = tempId`
-4. For non-PTagAir options: generates a QR code image and shortens the QR URL via Cutt.ly; uploads QR image to S3
-5. Sends confirmation email to the order email address (non-fatal — order still succeeds if email fails)
-6. Sends WhatsApp order notification (non-fatal — order still succeeds if WhatsApp fails)
+The multipart field set is strict. Unknown text fields are rejected.
 
-If `OrderVerification` creation fails after `Order` is saved, the `Order` is deleted (compensation) so the same `tempId` can be retried.
+#### Order Side Effects
 
-`isPTagAir` is set server-side when `option` is `"PTagAir"` or `"PTagAir_member"`.
+On success, the handler:
 
-**Price is server-authoritative.** The client-submitted price is ignored. Price is resolved from `ShopInfo.price` by `shopCode`. If `shopCode` does not match any shop, the request is rejected.
+1. creates an `Order` record using the canonical storefront price
+2. classifies `isPTagAir` from `option`
+3. uploads `pet_img` and `discount_proof` when present
+4. generates a unique `tagId`
+5. resolves a short URL for every order; non-`PTagAir` orders upload a QR image from that short URL, while `PTagAir` uses the landing URL plus the shared static QR asset
+6. creates an `OrderVerification` record linked by `orderId = tempId`
+7. sends confirmation email and WhatsApp order message in parallel on a best-effort basis
 
-**Success (200):**
+If order-verification creation fails after the order is saved, the handler compensates by deleting the just-created order so the same `tempId` can be retried.
+
+#### Order Success (200)
 
 ```json
 {
   "success": true,
-  "message": "Order placed successfully.",
-  "purchase_code": "ORDER-2025-001",
-  "price": 298,
-  "_id": "665f1a2b3c4d5e6f7a8b9c12",
+  "message": "Created successfully",
+  "data": {
+    "id": "665f1a2b3c4d5e6f7a8b9c23",
+    "purchaseCode": "TEMP-ORDER-001",
+    "price": 298
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-`_id` is the `OrderVerification._id` (not the `Order._id`).
+`data.id` is the `OrderVerification._id`, not the `Order._id`.
 
-**Errors:**
+#### Order Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `orders.errors.missingRequiredFields` | Missing required fields in multipart body |
-| 400 | `orders.errors.invalidEmail` | Invalid email format |
-| 400 | `orders.errors.invalidOption` | `option` exceeds max length or contains invalid characters |
-| 400 | `orders.errors.invalidTempId` | `tempId` exceeds max length or contains invalid characters |
-| 400 | `orders.errors.missingPhoneNumber` | `phoneNumber` absent |
-| 400 | `orders.errors.invalidPhone` | `phoneNumber` fails digit-only regex |
-| 400 | `orders.errors.invalidShopCode` | `shopCode` not found in `ShopInfo` collection |
-| 400 | `orders.errors.invalidFileType` | Uploaded file MIME type not allowed |
-| 400 | `orders.errors.fileTooLarge` | Uploaded file exceeds 4 MB |
-| 400 | `orders.errors.tooManyFiles` | More than 1 file per field |
-| 413 | *(Lambda invocation limit)* | Base64-encoded request body exceeds Lambda's 6 MB synchronous payload limit (raw file > ~4.5 MB); API GW returns 413 before Lambda runs. API GW's own limit is 10 MB. |
-| 401 | `common.unauthorized` | Missing or invalid JWT |
-| 409 | `orders.errors.duplicateOrder` | `tempId` already exists in `Order` collection |
-| 429 | `common.rateLimited` | Rate limit exceeded (10 req / hour per IP) |
-| 500 | `common.internalError` | Unexpected error |
-
----
+| 400 | `common.missingBodyParams` | Missing multipart body or missing required text field |
+| 400 | `orders.errors.invalidEmail` | Invalid email |
+| 400 | `orders.errors.invalidOption` | Invalid `option` format |
+| 400 | `orders.errors.invalidTempId` | Invalid `tempId` format |
+| 400 | `orders.errors.invalidPhone` | Invalid `phoneNumber` |
+| 400 | `orders.errors.invalidShopCode` | Unknown `shopCode` |
+| 400 | `orders.errors.invalidFileType` | Unsupported upload format |
+| 400 | `orders.errors.tooManyFiles` | More than one file supplied for `pet_img` or `discount_proof` |
+| 400 | `common.invalidBodyParams` | Strict-schema violation on text fields |
+| 409 | `orders.errors.duplicateOrder` | `tempId` already exists |
+| 413 | `orders.errors.fileTooLarge` | Uploaded file exceeds 4 MB |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 429 | `common.rateLimited` | Checkout rate limit exceeded |
+| 500 | `common.internalError` | Unexpected server error |
 
 ### GET /commerce/orders/operations
 
-Returns paginated list of all `OrderVerification` records. Admin/developer only.
+Return paginated operations view of order-verification records. Admin/developer only.
 
-**Auth:** `x-api-key` + JWT; role must be `admin` or `developer`
-**Rate limit:** None configured
+**Lambda owner:** `commerce-orders`  
+**Auth:** `x-api-key` + Bearer JWT with `admin` or `developer` role
 
-**Query params:** `page`, `limit` (same defaults and max as GET /commerce/orders)
+#### Operations Query Parameters
 
-**Note:** Filter is `{ cancelled: { $exists: true } }` — records without a `cancelled` field are excluded.
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | No | Default `1` |
+| `limit` | integer | No | Default `30`, max `100` |
 
-**Success (200):**
+#### Operations Filter
+
+This endpoint filters with `{ cancelled: { $exists: true } }`. It returns only records that already have a `cancelled` field in MongoDB.
+
+#### Returned Operations Shape
+
+Each item in `data` is sanitized to:
+
+- `_id`
+- `tagId`
+- `staffVerification`
+- `cancelled`
+- `verifyDate`
+- `petName`
+- `shortUrl`
+- `masterEmail`
+- `qrUrl`
+- `petUrl`
+- `orderId`
+- `pendingStatus`
+- `option`
+- `type`
+- `optionSize`
+- `optionColor`
+- `price`
+- `createdAt`
+- `updatedAt`
+
+#### Operations Success (200)
 
 ```json
 {
   "success": true,
-  "message": "Latest PTag orders retrieved successfully.",
-  "allOrders": [
+  "message": "Retrieved successfully",
+  "data": [
     {
-      "_id": "665f1a2b3c4d5e6f7a8b9c12",
+      "_id": "665f1a2b3c4d5e6f7a8b9c24",
       "tagId": "A2B3C4",
       "staffVerification": false,
+      "cancelled": false,
       "verifyDate": null,
       "petName": "Mochi",
-      "shortUrl": "https://cutt.ly/abc123",
+      "shortUrl": "https://cutt.ly/example",
       "masterEmail": "owner@example.com",
-      "qrUrl": "https://bucket.s3.amazonaws.com/qr-codes/A2B3C4.png",
-      "petUrl": "https://bucket.s3.amazonaws.com/user-uploads/orders/ORDER-2025-001/pet.jpg",
-      "orderId": "ORDER-2025-001",
+      "qrUrl": "https://cdn.example.com/qr-codes/A2B3C4.png",
+      "petUrl": "https://cdn.example.com/user-uploads/orders/TEMP-ORDER-001/file.jpg",
+      "orderId": "TEMP-ORDER-001",
       "pendingStatus": false,
-      "option": "PTagStandard",
+      "option": "PTagClassic",
       "type": "",
       "optionSize": "",
       "optionColor": "",
       "price": 298,
-      "cancelled": false,
-      "createdAt": "2025-01-15T10:30:00.000Z",
-      "updatedAt": "2025-01-15T10:30:00.000Z"
+      "createdAt": "2026-05-10T12:34:56.000Z",
+      "updatedAt": "2026-05-10T12:34:56.000Z"
     }
   ],
   "pagination": {
     "page": 1,
-    "limit": 100,
-    "total": 320
+    "limit": 30,
+    "total": 1,
+    "totalPages": 1
   },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Errors:**
+#### Operations Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 | `common.unauthorized` | Missing or invalid JWT |
+| 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
 | 403 | `common.forbidden` | Caller is not `admin` or `developer` |
-| 404 | `orders.errors.noOrders` | No records match the filter |
-| 500 | `common.internalError` | Unexpected error |
-
----
+| 500 | `common.internalError` | Unexpected database or server error |
 
 ### GET /commerce/orders/{tempId}
 
-Returns the pet contact summary for one order. Ownership enforced for non-admin callers.
+Return minimal contact data for one order.
 
-**Auth:** `x-api-key` + JWT; any authenticated user; non-admin callers must own the order
-**Rate limit:** None configured
+**Lambda owner:** `commerce-orders`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-**Path parameter:**
+#### Path Parameters
 
-| Param | Type | Notes |
-| --- | --- | --- |
-| `tempId` | string | The order's `tempId` value |
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `tempId` | string | Yes | Validated by the shared temp-id path parser |
 
-**Ownership rule:** Admin/developer callers bypass ownership. Non-privileged callers must have a JWT email that matches `Order.email` (case-insensitive, trimmed).
-
-**Success (200):**
+#### Lookup Success (200)
 
 ```json
 {
   "success": true,
-  "message": "Order info retrieved successfully.",
-  "form": {
-    "petContact": "98765432"
+  "message": "Retrieved successfully",
+  "data": {
+    "id": "665f1a2b3c4d5e6f7a8b9c25",
+    "petContact": "91234567"
   },
-  "id": "665f1a2b3c4d5e6f7a8b9c12",
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-`id` is the `Order._id` (as string). `form.petContact` may be `undefined` if no pet contact was provided at order time.
+`petContact` may be empty or omitted depending on stored data.
 
-**Errors:**
+#### Lookup Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `orders.errors.missingTempId` | `tempId` path parameter is absent |
-| 401 | `common.unauthorized` | Missing or invalid JWT |
-| 403 | `common.forbidden` | Non-owner caller |
-| 404 | `orders.errors.orderNotFound` | No `Order` document with this `tempId` |
-| 500 | `common.internalError` | Unexpected error |
+| 400 | `common.invalidPathParams` | Missing or invalid `tempId` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 403 | `common.forbidden` | Caller does not own the order |
+| 404 | `orders.errors.orderNotFound` | No order found for `tempId` |
+| 500 | `common.internalError` | Unexpected database or server error |
 
 ---
 
 ## Frontend Integration Guide
 
-### Order Checkout Flow
-
-The frontend must have a valid JWT before submitting an order.
-
-```
-1. GET /commerce/storefront       → get shopCode + canonical price
-2. User fills order form
-3. POST /commerce/orders          → multipart/form-data
-   └── on 200: store purchase_code (= tempId) and _id (= OrderVerification._id)
-   └── on 409 orders.errors.duplicateOrder: re-generate tempId client-side and retry
-   └── on 429: show rate limit error
-4. GET /commerce/orders/{tempId}  → verify petContact if needed
-```
-
-Generate `tempId` client-side using a UUID or collision-resistant format. The server will reject a duplicate with `409`.
-
-**Price is always server-authoritative.** Do not send price in the order body. The price shown to the user should come from `ShopInfo.price` via `GET /commerce/storefront` (see [COMMERCE_CATALOG.md](COMMERCE_CATALOG.md)).
+1. Fetch storefront metadata first, display the returned price to the user, and submit only the selected `shopCode`; the checkout route does not accept a client-supplied `price` field.
+2. Submit checkout as `multipart/form-data`; do not send JSON to `POST /commerce/orders`.
+3. Read successful checkout output from `data.purchaseCode` and `data.id`.
+4. Treat `orders.errors.duplicateOrder` as a client retry case with a newly generated `tempId`.
+5. Use `GET /commerce/orders/{tempId}` only for the minimal post-checkout contact lookup; it is not a full order-details endpoint.
 
 ---
 
-## Known Constraints
+## Verification Snapshot
 
-- `POST /commerce/orders` uses `multipart/form-data`, not JSON. All scalar fields arrive as strings from the multipart parser.
-- `GET /commerce/orders/operations` only returns records where the `cancelled` field **exists** (`$exists: true`). Records created before the `cancelled` field was introduced are not returned.
-- Cutt.ly URL shortening in `POST /commerce/orders` is best-effort — if the API key is not configured or the Cutt.ly call fails, the full unshortened URL is stored and used as `shortUrl`.
+This document is grounded in `functions/commerce-orders/src/services/orders.ts`, `orderSchema.ts`, `upload.ts`, `sanitize.ts`, the commerce-order tests, and the route wiring in `template.yaml`.

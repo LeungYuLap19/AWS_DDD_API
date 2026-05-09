@@ -1,26 +1,47 @@
-# NGO Admin API
+# NGO API
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-Protected NGO self-service and NGO member-management endpoints owned by the `ngo` Lambda. For NGO registration and NGO login, see [AUTH.md](./AUTH.md).
+**Lambda:** `aws-ddd-api-{stage}-ngo`
+
+Protected NGO self-service endpoints for the current NGO-scoped caller. These routes serve NGO dashboard/profile needs and member-list retrieval. All payloads use the post-migration `data` envelope.
+
+---
 
 ## Overview
 
-| Method | Path | Auth | Lambda | Purpose |
-| --- | --- | --- | --- | --- |
-| GET | `/ngo/me` | `x-api-key` + Bearer JWT (`role: ngo`, `ngoId` required) | `ngo` | Return current NGO, NGO access, NGO counter, and caller user profile |
-| PATCH | `/ngo/me` | `x-api-key` + Bearer JWT (`role: ngo`, `ngoId` required) | `ngo` | Update current NGO-owned profile sections |
-| GET | `/ngo/me/members` | `x-api-key` + Bearer JWT (`role: ngo`, `ngoId` required) | `ngo` | Return paginated NGO member list |
+### Route Summary
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/ngo/me` | `x-api-key` + Bearer JWT with `userRole=ngo` and `ngoId` | Return current NGO dashboard/profile payload |
+| PATCH | `/ngo/me` | `x-api-key` + Bearer JWT with `userRole=ngo` and `ngoId` | Update allowed user, NGO, counter, and access sections |
+| GET | `/ngo/me/members` | `x-api-key` + Bearer JWT with `userRole=ngo` and `ngoId` | Return paginated NGO member list |
+
+### Integration-Critical Behavior
+
+| Topic | Current DDD behavior |
+| --- | --- |
+| GET wrapper | `/ngo/me` returns one composite object inside `data` |
+| Partial section failures | `/ngo/me` can still return `200` with `warnings.userProfile` or `warnings.ngoCounters` set to `ngo.warnings.temporarilyUnavailable` |
+| PATCH permission split | Non-admin NGO users can update `userProfile` only; NGO/admin sections require `roleInNgo === admin` |
+| PATCH unknown fields | Current built/runtime behavior ignores unsupported nested keys like `userProfile.role`, `ngoProfile.isVerified`, `ngoProfile._id`, `ngoUserAccessProfile.isActive`, and injected `_id` values; allowed fields in the same payload still update |
+| No-op PATCH | If the parsed payload yields no allowlisted updates after field filtering, PATCH returns `200` with `message: common.noFieldsToUpdate` and no `data` |
+| Members list | `/ngo/me/members` returns `data` array plus `pagination` |
+
+---
 
 ## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
-`/ngo/*` routes inherit the API's default authorizer and API-key requirement.
+All `/ngo/*` routes inherit the API default authorizer and API-key requirement.
 
 | Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| `/ngo/*` routes in this doc | Yes | `DddTokenAuthorizer` |
+| `/ngo/me` GET, PATCH | Yes | `DddTokenAuthorizer` |
+| `/ngo/me/members` GET | Yes | `DddTokenAuthorizer` |
+| `/ngo/*` OPTIONS | No | None |
 
 Required deployed headers:
 
@@ -29,378 +50,441 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
-For JSON body requests such as `PATCH /ngo/me`, also send:
+PATCH requests must also send:
 
 ```http
 Content-Type: application/json
 ```
 
-`OPTIONS` preflight for `/ngo/me` and `/ngo/me/members` does not require `x-api-key`.
-
-Browser integration note:
-
-- Current Lambda CORS preflight responses advertise `Content-Type,Authorization,X-Request-Id,x-api-key`
-- Cross-origin browser requests can therefore send `x-api-key`, subject to normal origin allowlisting
-
 ### Authorization Rules
 
-These routes require an auth context with:
+The Lambda first requires:
 
 - `userRole === "ngo"`
-- `ngoId` present in JWT
+- `ngoId` present in the JWT
 
-Additional backend checks then enforce:
+Then it verifies all of the following:
 
-- the NGO record must exist
-- the NGO record must be `isActive: true`
-- the NGO record must be `isVerified: true`
-- the caller must have an active `NgoUserAccess` row for that `ngoId`
+- NGO record exists
+- NGO is active
+- NGO is verified
+- Caller has an active `NgoUserAccess` record for that NGO
 
-Failures on these checks return:
+Failures return:
 
-- `404 ngo.errors.notFound` if NGO record does not exist
-- `403 common.unauthorized` for role mismatch, missing `ngoId`, inactive NGO, unverified NGO, or missing active NGO access
+| Condition | Status | `errorKey` |
+| --- | --- | --- |
+| Wrong role or missing `ngoId` | 403 | `common.forbidden` |
+| NGO record missing | 404 | `ngo.errors.notFound` |
+| NGO inactive or unverified | 403 | `common.forbidden` |
+| Missing active NGO access row | 403 | `common.forbidden` |
 
 Auth failure note:
 
-- In direct Lambda execution and local handler tests, missing auth context becomes `401 common.unauthorized`
-- In deployed API Gateway flows, an authorizer denial may surface as `401` or `403` before Lambda code runs
+- The handler-level branch for wrong role or missing `ngoId` is `403 common.forbidden`
+- In end-to-end SAM and deployed flows, equivalent authorization failures can surface as `401` or `403` with `common.unauthorized` before or during Lambda handling
+
+### Rate Limits
+
+| Route | Policy |
+| --- | --- |
+| `GET /ngo/me` | No route-level limiter in the current handler |
+| `PATCH /ngo/me` | IP 60 / 5 min, identifier 30 / 5 min |
+| `GET /ngo/me/members` | No route-level limiter in the current handler |
+
+Rate-limit failures return `429 common.rateLimited` and may include `Retry-After`.
+
+### Localization
+
+- Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
+- Default locale is `en`
+- Use `errorKey` for branching logic
+
+---
+
+## Success And Error Conventions
+
+### Success Response Shape
+
+GET `/ngo/me` and PATCH success-with-data:
+
+```json
+{
+  "success": true,
+  "message": "localized success message",
+  "data": {},
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Members list also includes pagination:
+
+```json
+{
+  "success": true,
+  "message": "localized success message",
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 0,
+    "totalPages": 1
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
 
 ### Error Response Shape
 
 ```json
 {
   "success": false,
-  "errorKey": "ngo.errors.registrationNumberExists",
-  "error": "Business registration number already exists",
+  "errorKey": "ngo.errors.emailExists",
+  "error": "localized message",
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-### Request Body Validation
+---
 
-JSON-body routes in this doc (`PATCH /ngo/me`) run their decoded body through the shared `parseBody` helper before any business logic.
+## GET /ngo/me
 
-The helper returns these standardized `400` `errorKey`s:
+Return the current NGO dashboard/profile payload.
 
-| Condition | `errorKey` |
-| --- | --- |
-| Body is not valid JSON (raw string survives parsing) | `common.invalidBodyParams` |
-| Body is missing, `null`, non-object, or an empty object `{}` | `common.missingParams` |
-| Zod schema rejected the body and the first issue message is a dotted i18n key | that key |
-| Zod schema rejected the body and no issue message is a dotted key | `common.invalidBodyParams` |
+**Lambda owner:** `ngo`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-`PATCH /ngo/me` schemas use `common.invalidBodyParams` for all field-level validation messages, so failed Zod validation surfaces as `400 common.invalidBodyParams`. Mongoose `ValidationError` thrown later during the transactional update is also normalized to the same key.
-
-Deployed API Gateway may also reject malformed or non-object JSON before Lambda runs with its own `400`.
-
-### Localization
-
-- Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
-- Default locale is `en`
-- Success messages like `success.updated` and `common.noFieldsToUpdate` are translated before returning JSON
-
-## Endpoints
-
-### GET /ngo/me
-
-Return the caller's current NGO management payload.
-
-**Lambda:** `ngo`  
-**Auth:** `x-api-key` + Bearer JWT required, caller must be NGO-scoped
-
-**Response sections**
+### Response `data` Shape
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `userProfile` | object or `null` | Sanitized caller user document |
-| `ngoProfile` | object | Sanitized authorized NGO document |
-| `ngoUserAccessProfile` | object | Sanitized active access document for caller and NGO |
-| `ngoCounters` | object or `null` | Sanitized NGO counter record when found |
-| `warnings` | object | Partial-success metadata for non-critical section failures |
+| `userProfile` | object or `null` | Sanitized current NGO user document |
+| `ngoProfile` | object | Sanitized NGO document |
+| `ngoUserAccessProfile` | object | Sanitized access document for the caller |
+| `ngoCounters` | object or `null` | Sanitized NGO counter document |
+| `warnings.userProfile` | string or `null` | `ngo.warnings.temporarilyUnavailable` when user lookup failed non-fatally |
+| `warnings.ngoCounters` | string or `null` | `ngo.warnings.temporarilyUnavailable` when counter lookup failed non-fatally |
 
-Sanitization rules:
+### Returned Sub-Objects
 
-- `userProfile` strips `password`, `deleted`, `credit`, `vetCredit`, `eyeAnalysisCredit`, `bloodAnalysisCredit`, `__v`, `createdAt`, `updatedAt`
-- `ngoProfile` strips `__v`, `createdAt`, `updatedAt`
-- `ngoUserAccessProfile` strips `__v`, `createdAt`, `updatedAt`
-- `ngoCounters` strips `__v`, `createdAt`, `updatedAt`
+#### `userProfile`
 
-`warnings` shape:
+Sanitized user fields typically include:
 
-- `warnings.userProfile`: `null` or `ngo.warnings.temporarilyUnavailable`
-- `warnings.ngoCounters`: `null` or `ngo.warnings.temporarilyUnavailable`
+- `_id`
+- `firstName`
+- `lastName`
+- `email`
+- `phoneNumber`
+- `role`
+- `verified`
+- `subscribe`
+- `promotion`
+- `district`
+- `image`
+- `birthday`
+- `gender`
 
-`warnings` is only used for non-fatal partial section failures. Auth-critical sections are not degraded into warnings.
+#### `ngoProfile`
 
-**Success (200)**
+Typical fields include:
+
+- `_id`
+- `name`
+- `description`
+- `email`
+- `phone`
+- `website`
+- `address.street`
+- `address.city`
+- `address.state`
+- `address.zipCode`
+- `address.country`
+- `registrationNumber`
+- `establishedDate`
+- `categories`
+- `isVerified`
+- `isActive`
+- `petPlacementOptions`
+
+#### `ngoUserAccessProfile`
+
+Typical fields include:
+
+- `_id`
+- `ngoId`
+- `userId`
+- `roleInNgo`
+- `assignedPetIds`
+- `menuConfig.canViewPetList`
+- `menuConfig.canEditPetDetails`
+- `menuConfig.canManageAdoptions`
+- `menuConfig.canAccessFosterLog`
+- `menuConfig.canViewReports`
+- `menuConfig.canManageUsers`
+- `menuConfig.canManageNgoSettings`
+- `isActive`
+
+#### `ngoCounters`
+
+Typical fields include:
+
+- `_id`
+- `ngoId`
+- `counterType`
+- `ngoPrefix`
+- `seq`
+
+### Success (200)
 
 ```json
 {
   "success": true,
-  "userProfile": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-    "firstName": "Ada",
-    "lastName": "Wong",
-    "email": "admin@helpingpaws.org",
-    "phoneNumber": "+85291234567",
-    "role": "ngo"
-  },
-  "ngoProfile": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0e",
-    "name": "Helping Paws",
-    "description": "Animal rescue NGO",
-    "email": "admin@helpingpaws.org",
-    "phone": "+85291234567",
-    "website": "https://helpingpaws.org",
-    "registrationNumber": "BR-12345",
-    "isVerified": true,
-    "isActive": true
-  },
-  "ngoUserAccessProfile": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0f",
-    "ngoId": "665f1a2b3c4d5e6f7a8b9c0e",
-    "userId": "665f1a2b3c4d5e6f7a8b9c0d",
-    "roleInNgo": "admin",
-    "assignedPetIds": [],
-    "menuConfig": {},
-    "isActive": true
-  },
-  "ngoCounters": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c10",
-    "ngoId": "665f1a2b3c4d5e6f7a8b9c0e",
-    "counterType": "ngopet",
-    "ngoPrefix": "HP",
-    "seq": 42
-  },
-  "warnings": {
-    "userProfile": null,
-    "ngoCounters": null
-  },
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-**Success: partial section warning (200)**
-
-```json
-{
-  "success": true,
-  "userProfile": null,
-  "ngoProfile": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0e",
-    "name": "Helping Paws",
-    "description": "Animal rescue NGO",
-    "email": "admin@helpingpaws.org",
-    "phone": "+85291234567",
-    "website": "https://helpingpaws.org",
-    "registrationNumber": "BR-12345",
-    "isVerified": true,
-    "isActive": true
-  },
-  "ngoUserAccessProfile": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c0f",
-    "ngoId": "665f1a2b3c4d5e6f7a8b9c0e",
-    "userId": "665f1a2b3c4d5e6f7a8b9c0d",
-    "roleInNgo": "admin",
-    "assignedPetIds": [],
-    "menuConfig": {},
-    "isActive": true
-  },
-  "ngoCounters": {
-    "_id": "665f1a2b3c4d5e6f7a8b9c10",
-    "ngoId": "665f1a2b3c4d5e6f7a8b9c0e",
-    "counterType": "ngopet",
-    "ngoPrefix": "HP",
-    "seq": 42
-  },
-  "warnings": {
-    "userProfile": "ngo.warnings.temporarilyUnavailable",
-    "ngoCounters": null
-  },
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-**Behavior notes**
-
-- `ngoProfile` and `ngoUserAccessProfile` are authorization-critical; failure there does not degrade to partial success
-- `userProfile` and `ngoCounters` are fetched with `Promise.allSettled`, so non-fatal section failures can be surfaced in `warnings` while still returning `200`
-- `userProfile`, `ngoProfile`, `ngoUserAccessProfile`, and `ngoCounters` are sanitized before being returned
-
-**Errors**
-
-| Status | errorKey | Cause |
-| --- | --- | --- |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.unauthorized` | Non-NGO token, missing `ngoId`, inactive NGO, unverified NGO, or no active NGO access |
-| 404 | `ngo.errors.notFound` | NGO record missing |
-| 500 | `common.internalError` | Unexpected error |
-
-### PATCH /ngo/me
-
-Update one or more NGO-owned profile sections in a single MongoDB transaction.
-
-**Lambda:** `ngo`  
-**Auth:** `x-api-key` + Bearer JWT required, caller must be NGO-scoped
-
-Deployment note:
-
-- This route has an API Gateway request model (`type: object`) in SAM
-- On deployed API Gateway, malformed JSON or non-object JSON can be rejected before Lambda with an API Gateway-generated `400`
-
-**Body sections**
-
-All top-level sections are optional. Unknown fields are ignored after allowlist filtering.
-
-```json
-{
-  "userProfile": {
-    "firstName": "Ada",
-    "lastName": "Wong",
-    "email": "admin@helpingpaws.org",
-    "phoneNumber": "+85291234567",
-    "gender": "female"
-  },
-  "ngoProfile": {
-    "name": "Helping Paws",
-    "description": "Animal rescue NGO",
-    "registrationNumber": "BR-12345",
-    "email": "contact@helpingpaws.org",
-    "website": "https://helpingpaws.org",
-    "address": {
-      "street": "1 Example Street",
-      "city": "Hong Kong",
-      "state": "",
-      "zipCode": "",
-      "country": "HK"
+  "message": "Retrieved successfully",
+  "data": {
+    "userProfile": {
+      "email": "admin@helpingpaws.org",
+      "firstName": "Ngo"
     },
-    "petPlacementOptions": [
-      {
-        "name": "Adoption",
-        "positions": ["home-check", "follow-up"]
-      }
-    ]
+    "ngoProfile": {
+      "name": "Helping Paws",
+      "registrationNumber": "BR-HELPING-PAWS-001"
+    },
+    "ngoUserAccessProfile": {
+      "roleInNgo": "admin"
+    },
+    "ngoCounters": {
+      "ngoPrefix": "HP",
+      "seq": 42
+    },
+    "warnings": {
+      "userProfile": null,
+      "ngoCounters": null
+    }
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+### Get Me Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 401 / 403 | `common.unauthorized` or `common.forbidden` | Missing/invalid JWT, wrong role, or access denied |
+| 404 | `ngo.errors.notFound` | NGO record does not exist |
+| 500 | `common.internalError` | Unexpected internal error |
+
+---
+
+## PATCH /ngo/me
+
+Update current NGO-owned profile sections.
+
+**Lambda owner:** `ngo`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
+
+### Request Body Shape
+
+All top-level sections are optional.
+
+```json
+{
+  "userProfile": {},
+  "ngoProfile": {},
+  "ngoCounters": {},
+  "ngoUserAccessProfile": {}
+}
+```
+
+Current runtime note: unsupported nested fields are ignored rather than rejected. Only allowlisted fields are applied to the write operations.
+
+### `userProfile` Fields
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `firstName` | string | No | Max 100 chars |
+| `lastName` | string | No | Max 100 chars |
+| `email` | string | No | Valid email; normalized before conflict checks |
+| `phoneNumber` | string | No | E.164 format; normalized before conflict checks |
+| `gender` | string | No | Max 20 chars |
+
+### `ngoProfile` Fields
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `name` | string | No | Max 200 chars |
+| `description` | string | No | Max 2000 chars |
+| `registrationNumber` | string | No | Max 64 chars; unique across NGOs |
+| `email` | string | No | Valid email |
+| `website` | string | No | Max 2048 chars |
+| `address.street` | string | No | Max 200 chars |
+| `address.city` | string | No | Max 100 chars |
+| `address.state` | string | No | Max 100 chars |
+| `address.zipCode` | string | No | Max 20 chars |
+| `address.country` | string | No | Max 100 chars |
+| `petPlacementOptions` | array | No | Max 50 items |
+
+Each `petPlacementOptions` item has:
+
+| Field | Type | Required |
+| --- | --- | --- |
+| `name` | string | Yes |
+| `positions` | string[] | Yes |
+
+### `ngoCounters` Fields
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `ngoPrefix` | string | No | Max 5 chars |
+| `seq` | integer | No | 0 to 1,000,000,000 |
+
+### `ngoUserAccessProfile` Fields
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `roleInNgo` | string | No | Max 50 chars |
+| `menuConfig.canViewPetList` | boolean | No | |
+| `menuConfig.canEditPetDetails` | boolean | No | |
+| `menuConfig.canManageAdoptions` | boolean | No | |
+| `menuConfig.canAccessFosterLog` | boolean | No | |
+| `menuConfig.canViewReports` | boolean | No | |
+| `menuConfig.canManageUsers` | boolean | No | |
+| `menuConfig.canManageNgoSettings` | boolean | No | |
+
+### Permission Rules
+
+| Section | Non-admin NGO user | NGO admin |
+| --- | --- | --- |
+| `userProfile` | Allowed | Allowed |
+| `ngoProfile` | Forbidden | Allowed |
+| `ngoCounters` | Forbidden | Allowed |
+| `ngoUserAccessProfile` | Forbidden | Allowed |
+
+### Example Request
+
+```json
+{
+  "userProfile": {
+    "firstName": "Ngo",
+    "phoneNumber": "+85261234567"
+  },
+  "ngoProfile": {
+    "description": "Updated NGO description",
+    "address": {
+      "country": "Hong Kong"
+    }
   },
   "ngoCounters": {
-    "ngoPrefix": "HP",
-    "seq": 43
+    "ngoPrefix": "HP"
   },
   "ngoUserAccessProfile": {
-    "roleInNgo": "admin",
     "menuConfig": {
-      "canViewPetList": true,
-      "canEditPetDetails": true,
-      "canManageAdoptions": true,
-      "canAccessFosterLog": true,
-      "canViewReports": true,
-      "canManageUsers": true,
-      "canManageNgoSettings": true
+      "canManageUsers": true
     }
   }
 }
 ```
 
-**Allowlisted fields**
+### Success: Updated Payload (200)
 
-| Section | Allowed fields |
-| --- | --- |
-| `userProfile` | `firstName`, `lastName`, `email`, `phoneNumber`, `gender` |
-| `ngoProfile` | `name`, `description`, `registrationNumber`, `email`, `website`, `address.street`, `address.city`, `address.state`, `address.zipCode`, `address.country`, `petPlacementOptions` |
-| `ngoCounters` | `ngoPrefix`, `seq` |
-| `ngoUserAccessProfile` | `roleInNgo`, `menuConfig.canViewPetList`, `menuConfig.canEditPetDetails`, `menuConfig.canManageAdoptions`, `menuConfig.canAccessFosterLog`, `menuConfig.canViewReports`, `menuConfig.canManageUsers`, `menuConfig.canManageNgoSettings` |
-
-**Admin-only rule**
-
-If the caller is not NGO admin (`roleInNgo !== "admin"`), they may only update `userProfile`. Any attempt to update `ngoProfile`, `ngoCounters`, or `ngoUserAccessProfile` returns `403 common.unauthorized`.
-
-**Conflict checks**
-
-- `userProfile.email` must be unique among active users excluding caller
-- `userProfile.phoneNumber` must be unique among active users excluding caller
-- `ngoProfile.registrationNumber` must be unique among NGOs excluding current NGO
-
-**Success: no effective updates (200)**
-
-```json
-{
-  "success": true,
-  "message": "No fields provided to update",
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-**Success: updated sections (200)**
+When at least one section is updated, the response returns only the updated sections inside `data`.
 
 ```json
 {
   "success": true,
   "message": "Updated successfully",
-  "updated": ["userProfile", "ngoProfile"],
   "data": {
     "userProfile": {
-      "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-      "firstName": "Ada",
-      "lastName": "Wong",
-      "email": "admin@helpingpaws.org"
+      "firstName": "Ngo",
+      "phoneNumber": "+85261234567"
     },
     "ngoProfile": {
-      "_id": "665f1a2b3c4d5e6f7a8b9c0e",
-      "name": "Helping Paws",
-      "registrationNumber": "BR-12345"
+      "description": "Updated NGO description"
+    },
+    "ngoCounters": {
+      "ngoPrefix": "HP"
+    },
+    "ngoUserAccessProfile": {
+      "menuConfig": {
+        "canManageUsers": true
+      }
     }
   },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Behavior notes**
-
-- The handler flattens nested objects to dot paths, filters to allowlists, then updates each section transactionally
-- If `ngoUserAccessProfile` update is requested but the active access row cannot be updated, the transaction is aborted and the route returns `403 common.unauthorized`
-- Mongoose `ValidationError` is normalized to `400 common.invalidBodyParams`
-- Any returned `userProfile`, `ngoProfile`, `ngoUserAccessProfile`, and `ngoCounters` objects in `data` are sanitized before being returned
-
-**Errors**
-
-| Status | errorKey | Cause |
-| --- | --- | --- |
-| 400 | `common.missingParams` | Empty or missing request body |
-| 400 | `common.invalidBodyParams` | Body failed Zod or Mongoose validation |
-| 401 or 403 | `common.unauthorized` | Missing or invalid auth in deployed/API-authorizer contexts; local handler normalization is `401` |
-| 403 | `common.unauthorized` | Non-NGO token, missing `ngoId`, inactive/unverified NGO, missing active access, or non-admin editing admin-only sections |
-| 404 | `ngo.errors.notFound` | NGO record missing |
-| 409 | `ngo.errors.emailExists` | Duplicate active user email |
-| 409 | `ngo.errors.phoneExists` | Duplicate active user phone |
-| 409 | `ngo.errors.registrationNumberExists` | Duplicate NGO registration number |
-| 500 | `common.internalError` | Unexpected error or transaction failure |
-
-### GET /ngo/me/members
-
-Return paginated NGO member records for the caller's NGO.
-
-**Lambda:** `ngo`  
-**Auth:** `x-api-key` + Bearer JWT required, caller must be NGO-scoped
-
-**Query params**
-
-| Param | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `search` | string | No | Case-insensitive regex search against `user.firstName`, `user.lastName`, `ngo.name`, `ngo.registrationNumber` |
-| `page` | number | No | 1-indexed, minimum `1`, default `1` |
-
-Fixed page size is `50`.
-
-**Success (200)**
+### Success: No-Updatable-Fields Branch (200)
 
 ```json
 {
   "success": true,
-  "userList": [
+  "message": "No fields to update",
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Current implementation key: `message` is generated from `common.noFieldsToUpdate`.
+
+Important distinction: an empty or malformed JSON body still fails earlier with `400`; this `200` branch applies only when the parsed payload contains no allowlisted updates after field filtering.
+
+### Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidBodyParams` | Malformed JSON, invalid nested types, invalid email, invalid phone, or invalid field shape |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 401 / 403 | `common.unauthorized` or `common.forbidden` | Missing/invalid JWT, wrong role, missing `ngoId`, missing NGO access, or non-admin trying to patch admin-only sections |
+| 404 | `ngo.errors.notFound` | NGO record does not exist |
+| 409 | `ngo.errors.emailExists` | Another active user already owns the requested email |
+| 409 | `ngo.errors.phoneExists` | Another active user already owns the requested phone number |
+| 409 | `ngo.errors.registrationNumberExists` | Another NGO already owns the requested registration number |
+| 429 | `common.rateLimited` | Patch rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
+
+---
+
+## GET /ngo/me/members
+
+Return the NGO's active member list.
+
+**Lambda owner:** `ngo`  
+**Auth:** `x-api-key` + Bearer JWT required
+
+### Query Parameters
+
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `page` | integer | No | Shared pagination schema, default 1 |
+| `limit` | integer | No | Shared pagination schema |
+| `search` | string | No | Escaped before regex lookup across first name, last name, NGO name, registration number |
+
+### Returned Member Row Shape
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `_id` | string | Same as member user id |
+| `firstName` | string | |
+| `lastName` | string | |
+| `email` | string | |
+| `role` | string | User role |
+| `ngoName` | string | NGO display name |
+| `ngoId` | string | |
+| `ngoPrefix` | string | From NGO counter, may be empty string |
+| `sequence` | string | Counter sequence converted to string, may be empty string |
+
+### Members Success (200)
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": [
     {
       "_id": "665f1a2b3c4d5e6f7a8b9c0d",
-      "firstName": "Ada",
-      "lastName": "Wong",
+      "firstName": "Ngo",
+      "lastName": "Admin",
       "email": "admin@helpingpaws.org",
       "role": "ngo",
       "ngoName": "Helping Paws",
@@ -409,49 +493,38 @@ Fixed page size is `50`.
       "sequence": "42"
     }
   ],
-  "totalPages": 1,
-  "totalDocs": 1,
+  "pagination": {
+    "page": 1,
+    "limit": 30,
+    "total": 1,
+    "totalPages": 1
+  },
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-**Behavior notes**
+### Members Errors
 
-- Only active `NgoUserAccess` rows are included
-- Joined users must be `deleted: false`
-- `sequence` is returned as a string
-- If no `NgoCounters` row exists, `ngoPrefix` and `sequence` become empty strings
-
-**Errors**
-
-| Status | errorKey | Cause |
+| Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 or 403 | `common.unauthorized` | Missing or invalid auth in deployed/API-authorizer contexts; local handler normalization is `401` |
-| 403 | `common.unauthorized` | Non-NGO token, missing `ngoId`, inactive/unverified NGO, or missing active NGO access |
-| 404 | `ngo.errors.notFound` | NGO record missing |
-| 500 | `common.internalError` | Unexpected error |
+| 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
+| 401 / 403 | `common.unauthorized` or `common.forbidden` | Missing/invalid JWT, wrong role, missing `ngoId`, missing access, or inactive/unverified NGO |
+| 404 | `ngo.errors.notFound` | NGO record does not exist |
+| 500 | `common.internalError` | Unexpected internal error |
+
+---
 
 ## Frontend Integration Guide
 
-### NGO Dashboard Bootstrap
+1. Load `/ngo/me` first for NGO dashboard bootstrapping. Treat `data` as the canonical dashboard payload.
+2. Handle `warnings.userProfile` and `warnings.ngoCounters` as partial-degradation flags, not hard failures.
+3. When building PATCH payloads for non-admin NGO users, only send `userProfile` fields.
+4. Do not rely on the backend to reject unsupported nested PATCH keys. The current runtime ignores them, so frontend payload shaping should stay explicit.
+5. For member management UIs, use `/ngo/me/members` with `page`, `limit`, and `search`; the returned `pagination` object is authoritative.
+6. Use `409 ngo.errors.emailExists`, `ngo.errors.phoneExists`, and `ngo.errors.registrationNumberExists` for inline form errors.
 
-Call `GET /ngo/me` after NGO login or refresh to hydrate:
+---
 
-- caller user profile
-- NGO profile
-- access permissions
-- NGO counters
+## Verification Snapshot
 
-The `warnings` object is section-specific partial-success metadata. Frontend should not treat non-null `warnings.userProfile` or `warnings.ngoCounters` as auth failure by themselves if the response status is still `200`.
-
-### NGO Profile Editing
-
-Send only the sections being changed to `PATCH /ngo/me`. Branch on these `errorKey` values for conflict handling:
-
-- `ngo.errors.emailExists`
-- `ngo.errors.phoneExists`
-- `ngo.errors.registrationNumberExists`
-
-### NGO Member List
-
-Use `GET /ngo/me/members?page=<n>&search=<term>` for the management grid. The backend currently returns only `totalDocs` and `totalPages`; it does not echo `page` or `limit`.
+Current verification evidence is in `__tests__/ngo.test.js`, plus the `ngo` service and helper code. The test suite covers NGO registration/login-adjacent flows, malformed PATCH bodies, duplicate email handling, authorization failures, partial-success warnings, PATCH mass-assignment stripping, injected `_id` suppression, and member-list behavior. The wrapped `data` contract documented here is grounded in the current DDD implementation and compiled lambda behavior.

@@ -6,8 +6,11 @@ import { connectToMongoDB } from '../config/db';
 import { buildOwnershipFilter, loadAuthorizedPet } from '../utils/auth';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
-import { handleKnownError } from './profileHelpers';
 
+/**
+ * Soft-deletes an owned pet profile, clearing its tag assignment while
+ * preserving explicit 404, already-deleted, and forbidden branches.
+ */
 export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -16,20 +19,17 @@ export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGate
     action: 'petProfile.delete',
     event: ctx.event,
     identifier: authContext.userId,
-    limit: 10,
-    windowSeconds: 60,
+    policies: [
+      { scope: 'ip', limit: 30, windowSeconds: 60 },
+      { scope: 'identifier', limit: 15, windowSeconds: 60 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 60 },
+    ],
   });
   if (rateLimitResponse) {
     return rateLimitResponse;
   }
 
-  try {
-    await loadAuthorizedPet(ctx.event);
-  } catch (error) {
-    const knownError = handleKnownError(error, ctx.event);
-    if (knownError) return knownError;
-    throw error;
-  }
+  await loadAuthorizedPet(ctx.event);
 
   const Pet = mongoose.model('Pet');
   const petId = String(ctx.event.pathParameters?.petId || '');
@@ -42,8 +42,7 @@ export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGate
 
   if (deletedPet) {
     return response.successResponse(200, ctx.event, {
-      message: 'petProfile.success.deleted',
-      petId: ctx.event.pathParameters?.petId,
+      message: 'success.deleted',
     });
   }
 

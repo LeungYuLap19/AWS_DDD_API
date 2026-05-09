@@ -5,6 +5,10 @@ const SF_ADDRESS_AREA_URL = 'https://hksfaddsit.sf-express.com/api/address_api/a
 const SF_ADDRESS_NETCODE_URL = 'https://hksfaddsit.sf-express.com/api/address_api/netCode';
 const SF_ADDRESS_DETAIL_URL = 'https://hksfaddsit.sf-express.com/api/address_api/address';
 
+/**
+ * Obtains the bearer token for the SF address metadata API using the shared
+ * API key configured for this Lambda.
+ */
 export async function fetchAddressToken(): Promise<unknown> {
   const res = await axios.post(
     SF_ADDRESS_LOGIN_URL,
@@ -20,6 +24,7 @@ export async function fetchAddressToken(): Promise<unknown> {
   return res.data?.data;
 }
 
+/** Fetches the SF area list for a previously issued address token. */
 export async function fetchAreaList(token: string): Promise<unknown> {
   const res = await axios.get(SF_ADDRESS_AREA_URL, {
     headers: {
@@ -31,6 +36,7 @@ export async function fetchAreaList(token: string): Promise<unknown> {
   return res.data?.data;
 }
 
+/** Fetches SF net-code options for a validated area/type pair. */
 export async function fetchNetCodeList(params: {
   token: string;
   typeId: string | number;
@@ -49,6 +55,10 @@ export async function fetchNetCodeList(params: {
   return res.data?.data;
 }
 
+/**
+ * Resolves pickup-address details for every requested net code and returns the
+ * provider payloads in the same order as the requested codes.
+ */
 export async function fetchPickupAddresses(params: {
   token: string;
   netCode: string[];

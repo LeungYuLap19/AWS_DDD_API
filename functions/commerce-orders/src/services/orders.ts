@@ -1,24 +1,26 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import multipart from 'lambda-multipart-parser';
 import {
-  getFirstZodIssueMessage,
+  paginationQuerySchema,
+  parseMultipartBody,
+  parsePathParam,
   requireAuthContext,
   requireRole,
+  tempIdString,
+  logWarn,
 } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import env from '../config/env';
 import { purchaseConfirmationSchema } from '../zodSchema/orderSchema';
 import { sanitizeOrder, sanitizeOrderVerification } from '../utils/sanitize';
-import { addImageFileToStorage, uploadQrCodeImage } from '../utils/s3';
+import { uploadImageFile } from '../utils/upload';
+import { uploadQrCodeImage } from '../utils/s3';
 import {
   normalizeEmail,
-  validateUploadFiles,
   generateUniqueTagId,
   resolveCanonicalPrice,
   resolveShortUrl,
-  type MultipartFile,
 } from '../utils/helpers';
 import { sendOrderEmail } from '../utils/smtp';
 import { sendWhatsAppOrderMessage } from '../utils/whatsapp';
@@ -41,9 +43,11 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
   await connectToMongoDB();
   const Order = mongoose.model('Order');
 
-  const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '', 10) || 1);
-  const limit = Math.min(500, Math.max(1, parseInt(queryParams['limit'] ?? '', 10) || 100));
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   const projection = {
@@ -59,8 +63,9 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
   ]);
 
   return response.successResponse(200, ctx.event, {
-    orders: (orders as Record<string, unknown>[]).map(sanitizeOrder),
-    pagination: { page, limit, total },
+    message: 'success.retrieved',
+    data: (orders as Record<string, unknown>[]).map(sanitizeOrder),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
 
@@ -75,94 +80,101 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
  * it protected. This is an auth-strengthening delta.
  */
 export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  const auth = requireAuthContext(ctx.event);
 
   // 2. Connect to DB first — rate limiter uses mongoose and needs an open connection
   await connectToMongoDB();
 
-  // 1. Rate limit (per IP, 10 requests/hour)
+  // 1. Layered rate limit. The narrow ip+account lane preserves the legacy
+  //    10/hr behaviour. Wider ip lane bounds anonymous probing and per-account
+  //    lane bounds an attacker rotating IPs against one account.
   const rateLimitResult = await applyRateLimit({
     action: 'submit-order',
     event: ctx.event,
-    limit: 10,
-    windowSeconds: 3600,
+    identifier: auth.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 3600 },
+      { scope: 'identifier', limit: 20, windowSeconds: 3600 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 3600 },
+    ],
   });
   if (rateLimitResult) return rateLimitResult;
 
-  // 3. Parse multipart form data
-  const parsed = await multipart.parse(ctx.event);
-
-  // 4. Zod validation
-  const parseResult = purchaseConfirmationSchema.safeParse(parsed);
-  if (!parseResult.success) {
-    return response.errorResponse(
-      400,
-      getFirstZodIssueMessage(parseResult.error) ?? 'orders.errors.missingRequiredFields',
-      ctx.event
-    );
+  // 3. Parse multipart form data + Zod validation
+  const multiResult = await parseMultipartBody(ctx.event, purchaseConfirmationSchema, {
+    fallbackErrorKey: 'common.missingBodyParams',
+  });
+  if (!multiResult.ok) {
+    return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
   }
 
   const {
     lastName, phoneNumber, address, email: rawEmail, option, type, tempId,
     paymentWay, shopCode, delivery, promotionCode, petContact,
     petName, optionSize, optionColor, lang,
-  } = parseResult.data;
+  } = multiResult.data;
 
   const email = normalizeEmail(rawEmail);
 
-  // 5. Validate and upload image files
-  const allFiles = parsed.files || [];
+  // 5. Upload image files
+  const allFiles = multiResult.files;
   const petImgFiles = allFiles.filter((f) => f.fieldname === 'pet_img');
   const discountProofFiles = allFiles.filter((f) => f.fieldname === 'discount_proof');
 
-  const fileError = validateUploadFiles(petImgFiles) || validateUploadFiles(discountProofFiles);
-  if (fileError) {
-    return response.errorResponse(400, fileError, ctx.event);
+  if (petImgFiles.length > 1) {
+    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
+  }
+  if (discountProofFiles.length > 1) {
+    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
   }
 
   let petImgUrl = '';
-  if (petImgFiles.length > 0) {
-    const urls = await Promise.all(
-      petImgFiles.map((f) =>
-        addImageFileToStorage(
-          { buffer: f.content, originalname: f.filename },
-          `user-uploads/orders/${tempId}`,
-          'user'
-        )
-      )
-    );
-    petImgUrl = urls[0] ?? '';
+  if (petImgFiles.length > 0 && petImgFiles[0].content) {
+    try {
+      petImgUrl = await uploadImageFile(
+        { buffer: petImgFiles[0].content, originalname: petImgFiles[0].filename ?? '' },
+        `user-uploads/orders/${tempId}`,
+        'user'
+      );
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'orders.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'orders.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
   }
 
   let discountProofUrl = '';
-  if (discountProofFiles.length > 0) {
-    const urls = await Promise.all(
-      discountProofFiles.map((f) =>
-        addImageFileToStorage(
-          { buffer: f.content, originalname: f.filename },
-          `user-uploads/orders/${tempId}/discount-proofs`,
-          'user'
-        )
-      )
-    );
-    discountProofUrl = urls[0] ?? '';
+  if (discountProofFiles.length > 0 && discountProofFiles[0].content) {
+    try {
+      discountProofUrl = await uploadImageFile(
+        { buffer: discountProofFiles[0].content, originalname: discountProofFiles[0].filename ?? '' },
+        `user-uploads/orders/${tempId}/discount-proofs`,
+        'user'
+      );
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'orders.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'orders.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
   }
 
-  // 6. Duplicate tempId guard
-  const Order = mongoose.model('Order');
-  if (await Order.findOne({ tempId }, { _id: 1 }).lean()) {
-    return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
-  }
-
-  // 7. Resolve server-authoritative price
+  // 6. Resolve server-authoritative price
   const priceResult = await resolveCanonicalPrice(shopCode);
   if (!priceResult) {
     return response.errorResponse(400, 'orders.errors.invalidShopCode', ctx.event);
   }
   const { canonicalPrice } = priceResult;
 
-  // 8. Create Order
+  // 7. Create Order
+  const Order = mongoose.model('Order');
   const isPTagAir = option === 'PTagAir' || option === 'PTagAir_member';
+
+  const existingOrder = await Order.findOne({ tempId }).select('_id').lean();
+  if (existingOrder) {
+    return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
+  }
 
   let order: Record<string, unknown>;
   try {
@@ -229,7 +241,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     }
   } catch (postOrderErr) {
     // Compensate: remove dangling Order so the user can retry with the same tempId
-    await Order.deleteOne({ _id: order['_id'] }).catch(() => {});
+    await Order.deleteOne({ _id: order['_id'] }).catch((error) => logWarn('Order compensation delete failed', { event: ctx.event, error, scope: 'commerce-orders.services.orders' }));
     throw postOrderErr;
   }
 
@@ -248,18 +260,16 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
       },
       'support@ptag.com.hk',
       newOrderVerificationId
-    ).catch(() => {}),
+    ).catch((error) => logWarn('Order confirmation email dispatch failed', { event: ctx.event, error, scope: 'commerce-orders.services.orders' })),
     sendWhatsAppOrderMessage(
       { phoneNumber, lastName, option, tempId, lang },
       newOrderVerificationId
-    ).catch(() => {}),
+    ).catch((error) => logWarn('WhatsApp order notification dispatch failed', { event: ctx.event, error, scope: 'commerce-orders.services.orders' })),
   ]);
 
 return response.successResponse(200, ctx.event, {
-  message: 'Order placed successfully.',
-  purchase_code: tempId,
-  price: canonicalPrice,
-  _id: String(newOrderVerificationId),
+  message: 'success.created',
+  data: { id: String(newOrderVerificationId), purchaseCode: tempId, price: canonicalPrice },
 });
 }
 
@@ -272,11 +282,11 @@ return response.successResponse(200, ctx.event, {
  */
 export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authCtx = requireAuthContext(ctx.event);
-  const tempId = ctx.event.pathParameters?.['tempId'];
-
-  if (!tempId) {
-    return response.errorResponse(400, 'orders.errors.missingTempId', ctx.event);
+  const tempParam = parsePathParam(ctx.event.pathParameters?.['tempId'], tempIdString());
+  if (!tempParam.ok) {
+    return response.errorResponse(tempParam.statusCode, tempParam.errorKey, ctx.event);
   }
+  const tempId = tempParam.data;
 
   await connectToMongoDB();
   const Order = mongoose.model('Order');
@@ -301,9 +311,8 @@ export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGate
 
   const safeOrder = sanitizeOrder(order);
   return response.successResponse(200, ctx.event, {
-    message: 'Order info retrieved successfully.',
-    form: { petContact: safeOrder['petContact'] as string | undefined },
-    id: String(safeOrder['_id']),
+    message: 'success.retrieved',
+    data: { id: String(safeOrder['_id']), petContact: safeOrder['petContact'] as string | undefined },
   });
 }
 
@@ -319,9 +328,11 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification');
 
-  const queryParams = ctx.event.queryStringParameters || {};
-  const page = Math.max(1, parseInt(queryParams['page'] ?? '', 10) || 1);
-  const limit = Math.min(500, Math.max(1, parseInt(queryParams['limit'] ?? '', 10) || 100));
+  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  if (!pagination.success) {
+    return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
+  }
+  const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
   const filter = { cancelled: { $exists: true } };
@@ -340,14 +351,9 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
     OrderVerification.countDocuments(filter),
   ]);
 
-  if (!allOrders || allOrders.length === 0) {
-    return response.errorResponse(404, 'orders.errors.noOrders', ctx.event);
-  }
-
   return response.successResponse(200, ctx.event, {
-    message: 'Latest PTag orders retrieved successfully.',
-    allOrders: allOrders.map(sanitizeOrderVerification),
-    pagination: { page, limit, total },
+    message: 'success.retrieved',
+    data: allOrders.map(sanitizeOrderVerification),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
-

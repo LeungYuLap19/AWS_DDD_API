@@ -1,9 +1,7 @@
 import { z } from 'zod';
-import mongoose from 'mongoose';
+import { objectIdString } from '@aws-ddd-api/shared';
 
-const objectIdField = z
-  .string()
-  .refine((v) => mongoose.Types.ObjectId.isValid(v), { message: 'common.invalidObjectId' });
+const objectIdField = objectIdString();
 
 /**
  * Supported notification types derived from system domain events.
@@ -35,13 +33,14 @@ export const dispatchNotificationSchema = z.object({
   targetUserId: objectIdField,
   type: z.enum(NOTIFICATION_TYPES, { message: 'notifications.errors.typeRequired' }),
   petId: objectIdField.optional().nullable(),
-  petName: z.string().optional().nullable(),
+  petName: z.string().trim().max(100, 'common.invalidBodyParams').optional().nullable(),
   nextEventDate: z
     .string()
+    .max(64, { message: 'notifications.errors.invalidDate' })
     .optional()
     .nullable()
     .refine((v) => v == null || isValidDateString(v), { message: 'notifications.errors.invalidDate' }),
-  nearbyPetLost: z.string().optional().nullable(),
+  nearbyPetLost: z.string().trim().max(2000, 'common.invalidBodyParams').optional().nullable(),
 }).strict();
 
 export type DispatchNotificationBody = z.infer<typeof dispatchNotificationSchema>;

@@ -1,25 +1,10 @@
 import { z } from 'zod';
 
-const optionalSourceString = z.string().optional();
-const optionalSourceList = z.array(z.string()).optional();
-const sourceAllowedFields = new Set([
-  'placeofOrigin',
-  'channel',
-  'rescueCategory',
-  'causeOfInjury',
-]);
-
-function rejectUnknownFields(body: Record<string, unknown>, ctx: z.RefinementCtx) {
-  for (const key of Object.keys(body)) {
-    if (!sourceAllowedFields.has(key)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: [key],
-        message: 'common.invalidBodyParams',
-      });
-    }
-  }
-}
+const optionalSourceString = z.string().trim().max(200, 'common.invalidBodyParams').optional();
+const optionalSourceList = z
+  .array(z.string().trim().max(200, 'common.invalidBodyParams'))
+  .max(50, 'common.invalidBodyParams')
+  .optional();
 
 export const sourceCreateBodySchema = z
   .object({
@@ -28,10 +13,7 @@ export const sourceCreateBodySchema = z
     rescueCategory: optionalSourceList,
     causeOfInjury: optionalSourceString,
   })
-  .passthrough()
-  .superRefine((body, ctx) => {
-    rejectUnknownFields(body, ctx);
-  })
+  .strict()
   .refine((data) => Boolean(data.placeofOrigin || data.channel), {
     message: 'petSource.errors.missingRequiredFields',
   });
@@ -43,10 +25,7 @@ export const sourcePatchBodySchema = z
     rescueCategory: optionalSourceList,
     causeOfInjury: optionalSourceString,
   })
-  .passthrough()
-  .superRefine((body, ctx) => {
-    rejectUnknownFields(body, ctx);
-  });
+  .strict();
 
 export type SourceCreateBody = z.infer<typeof sourceCreateBodySchema>;
 export type SourcePatchBody = z.infer<typeof sourcePatchBodySchema>;

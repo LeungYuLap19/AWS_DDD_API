@@ -1,13 +1,10 @@
 import { createRouter } from '@aws-ddd-api/shared';
-import type { RouteHandler } from '../../../types/lambda';
 import { response } from './utils/response';
-import { handleGetCatalog, handleCreateCatalogEvent } from './services/catalog';
-import { handleGetStorefront } from './services/storefront';
 
-const routes: Record<string, RouteHandler> = {
-  'GET /commerce/catalog': handleGetCatalog,
-  'POST /commerce/catalog/events': handleCreateCatalogEvent,
-  'GET /commerce/storefront': handleGetStorefront,
+const routes = {
+  'GET /commerce/catalog': () => import('./services/catalog').then(m => m.handleGetCatalog),
+  'POST /commerce/catalog/events': () => import('./services/catalog').then(m => m.handleCreateCatalogEvent),
+  'GET /commerce/storefront': () => import('./services/storefront').then(m => m.handleGetStorefront),
 };
 
 export const routeRequest = createRouter(routes, { response });

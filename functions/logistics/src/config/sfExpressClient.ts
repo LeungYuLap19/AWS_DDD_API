@@ -1,6 +1,7 @@
 import https from 'https';
 import querystring from 'querystring';
 import crypto from 'crypto';
+import { HttpError } from '@aws-ddd-api/shared';
 
 const SF_OAUTH_URL = 'https://sfapi.sf-express.com/oauth2/accessToken';
 const SF_SERVICE_URL = 'https://sfapi.sf-express.com/std/service';
@@ -42,7 +43,7 @@ async function requestJson(options: RequestJsonOptions): Promise<RequestJsonResu
           try {
             resolve({ status: res.statusCode ?? 0, body: JSON.parse(raw) });
           } catch {
-            reject(new Error('Invalid JSON response'));
+            reject(new HttpError('logistics.invalidSfResponse', 502));
           }
         });
       }
@@ -54,6 +55,11 @@ async function requestJson(options: RequestJsonOptions): Promise<RequestJsonResu
   });
 }
 
+/**
+ * Exchanges the configured SF customer credentials for an OAuth access token.
+ * Any transport or malformed-response failure is normalized into an
+ * `HttpError` so callers can map it directly to a 502 flow.
+ */
 export async function getAccessToken(): Promise<string> {
   const body = querystring.stringify({
     grantType: 'password',
@@ -73,7 +79,7 @@ export async function getAccessToken(): Promise<string> {
 
   const responseBody = result.body as { accessToken?: string };
   if (result.status < 200 || result.status >= 300 || !responseBody.accessToken) {
-    throw new Error('Unable to fetch SF access token');
+    throw new HttpError('logistics.sfApiError', 502);
   }
 
   return responseBody.accessToken;
@@ -86,6 +92,11 @@ interface CallSfServiceOptions {
   url?: string;
 }
 
+/**
+ * Calls one SF Express form-encoded service endpoint and returns the parsed
+ * `apiResultData` payload only when both HTTP status and SF business result
+ * code indicate success.
+ */
 export async function callSfService(
   options: CallSfServiceOptions
 ): Promise<Record<string, unknown>> {
@@ -113,20 +124,24 @@ export async function callSfService(
   const responseBody = result.body as { apiResultCode?: string; apiResultData?: string };
 
   if (result.status < 200 || result.status >= 300) {
-    throw new Error('logistics.sfApiError');
+    throw new HttpError('logistics.sfApiError', 502);
   }
 
   if (responseBody.apiResultCode !== 'A1000') {
-    throw new Error('logistics.sfApiError');
+    throw new HttpError('logistics.sfApiError', 502);
   }
 
   try {
     return JSON.parse(responseBody.apiResultData || '{}') as Record<string, unknown>;
   } catch {
-    throw new Error('logistics.invalidSfResponse');
+    throw new HttpError('logistics.invalidSfResponse', 502);
   }
 }
 
+/**
+ * Downloads a generated SF waybill PDF using the per-file auth token returned
+ * by the cloud-print API.
+ */
 export async function downloadPdf(url: string, token: string): Promise<Buffer> {
   const parsedUrl = new URL(url);
 
@@ -140,7 +155,7 @@ export async function downloadPdf(url: string, token: string): Promise<Buffer> {
       },
       (res) => {
         if (res.statusCode !== 200) {
-          reject(new Error('logistics.sfApiError'));
+          reject(new HttpError('logistics.sfApiError', 502));
           return;
         }
 

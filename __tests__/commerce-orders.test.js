@@ -188,6 +188,41 @@ function resetEnv(overrides = {}) {
   Object.assign(process.env, overrides);
 }
 
+function createSharedMultipartMock(sharedModulePath, multipartForm) {
+  return () => {
+    const realShared = require(sharedModulePath);
+    return {
+      ...realShared,
+      parseMultipartBody: async (event, schema, options = {}) => {
+        const form = multipartForm || { files: [] };
+        const files = (Array.isArray(form.files) ? form.files : []).map((file) => ({
+          fieldname: file.fieldname || file.field || 'file',
+          filename: file.filename || 'test.jpg',
+          contentType: file.contentType || 'image/jpeg',
+          content: file.content || Buffer.from('test'),
+        }));
+        const rawFields = { ...form };
+        delete rawFields.files;
+        if (options.validate) {
+          const validationKey = options.validate(rawFields);
+          if (validationKey !== null) {
+            return { ok: false, statusCode: 400, errorKey: validationKey };
+          }
+        }
+        const normalizedFields = options.normalize ? options.normalize(rawFields) : rawFields;
+        const parsed = schema.safeParse(normalizedFields);
+        if (!parsed.success) {
+          const fallback = options.fallbackErrorKey || 'common.invalidBodyParams';
+          const message = realShared.getFirstZodIssueMessage(parsed.error, fallback);
+          const errorKey = message.includes('.') ? message : fallback;
+          return { ok: false, statusCode: 400, errorKey };
+        }
+        return { ok: true, data: parsed.data, files };
+      },
+    };
+  };
+}
+
 // ─── query mock builders ──────────────────────────────────────────────────────
 
 function createQueryMock(result, err = null) {
@@ -369,7 +404,7 @@ function loadHandlerWithMocks({
     isValidObjectId: actualMongoose.isValidObjectId,
   }));
 
-  jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
+  jest.doMock('@aws-ddd-api/shared', createSharedMultipartMock(sharedRuntimeModulePath, { files: [] }), { virtual: true });
 
   // ── nodemailer ──
   const mockSendMail = sendMailError
@@ -402,16 +437,6 @@ function loadHandlerWithMocks({
     __esModule: true,
     default: { get: mockAxiosGet },
     get: mockAxiosGet,
-  }));
-
-  // ── lambda-multipart-parser ──
-  // Default: parse returns an empty multipart result (no files, no fields)
-  // Tests that exercise POST override this via jest.doMock before calling loadHandlerWithMocks
-  const parseImpl = jest.fn().mockResolvedValue({ files: [] });
-  jest.doMock('lambda-multipart-parser', () => ({
-    __esModule: true,
-    parse: parseImpl,
-    default: { parse: parseImpl },
   }));
 
   // ── requireMongoRateLimit (bypass for all tests unless specifically testing rate limit) ──
@@ -548,8 +573,8 @@ describe('GET /commerce/orders — admin order list', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.orders)).toBe(true);
-    expect(parsed.body.orders).toHaveLength(2);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.body.data).toHaveLength(2);
     expect(parsed.body.pagination.total).toBe(2);
     expect(parsed.body.pagination.page).toBe(1);
   });
@@ -628,13 +653,13 @@ describe('GET /commerce/orders — admin order list', () => {
       }),
       createContext()
     );
-    const item = parseResponse(result).body.orders[0];
+    const item = parseResponse(result).body.data[0];
     expect(item).not.toHaveProperty('internalSecret');
     expect(item).toHaveProperty('tempId');
     expect(item).toHaveProperty('email');
   });
 
-  test('limit is capped at 500', async () => {
+  test('oversized limit is rejected as invalid query params', async () => {
     const { handler, mocks } = loadHandlerWithMocks({ orderFindListResult: [], orderCountResult: 0 });
     await handler(
       createEvent({
@@ -646,9 +671,18 @@ describe('GET /commerce/orders — admin order list', () => {
       }),
       createContext()
     );
-    const limitFn = mocks.orderFindFn.mock.results[0]?.value?.skip.mock.results[0]?.value?.limit;
-    expect(limitFn).toBeDefined();
-    expect(limitFn).toHaveBeenCalledWith(500);
+    const parsed = parseResponse(await handler(
+      createEvent({
+        method: 'GET',
+        path: '/commerce/orders',
+        resource: '/commerce/orders',
+        queryStringParameters: { limit: '9999' },
+        authorizer: adminAuth(),
+      }),
+      createContext()
+    ));
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.invalidQueryParams');
   });
 });
 
@@ -672,8 +706,8 @@ describe('GET /commerce/orders/operations — admin OV list', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.allOrders)).toBe(true);
-    expect(parsed.body.allOrders).toHaveLength(2);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.body.data).toHaveLength(2);
     expect(parsed.body.message).toBeDefined();
     expect(parsed.body.pagination.total).toBe(2);
     expect(parsed.body.pagination.page).toBe(1);
@@ -690,7 +724,7 @@ describe('GET /commerce/orders/operations — admin OV list', () => {
       }),
       createContext()
     );
-    expect(parseResponse(result).statusCode).toBe(404);
+    expect(parseResponse(result).statusCode).toBe(200);
   });
 
   test('developer role can access operations', async () => {
@@ -733,7 +767,7 @@ describe('GET /commerce/orders/operations — admin OV list', () => {
       }),
       createContext()
     );
-    const item = parseResponse(result).body.allOrders[0];
+    const item = parseResponse(result).body.data[0];
     expect(item).not.toHaveProperty('discountProof');
     expect(item).toHaveProperty('tagId');
   });
@@ -761,9 +795,8 @@ describe('GET /commerce/orders/{tempId} — order info', () => {
     );
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body).toHaveProperty('form');
-    expect(parsed.body.form).toHaveProperty('petContact');
-    expect(parsed.body).toHaveProperty('id');
+    expect(parsed.body.data).toHaveProperty('petContact');
+    expect(parsed.body.data).toHaveProperty('id');
   });
 
   test('admin can access any order', async () => {
@@ -934,16 +967,15 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     };
 
     jest.doMock('mongoose', () => ({ __esModule: true, default: mongooseMock, Schema: actualMongoose.Schema, Types: actualMongoose.Types, isValidObjectId: actualMongoose.isValidObjectId }));
-    jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
-    jest.doMock('nodemailer', () => ({ __esModule: true, default: { createTransport: jest.fn().mockReturnValue({ sendMail: jest.fn().mockResolvedValue({ messageId: 'ok' }) }) }, createTransport: jest.fn().mockReturnValue({ sendMail: jest.fn().mockResolvedValue({ messageId: 'ok' }) }) }));
+    jest.doMock('@aws-ddd-api/shared', createSharedMultipartMock(sharedRuntimeModulePath, { ...fields, ...fileMocks }), { virtual: true });
+    const mockSendMail = jest.fn().mockResolvedValue({ messageId: 'ok' });
+    jest.doMock('nodemailer', () => ({ __esModule: true, default: { createTransport: jest.fn().mockReturnValue({ sendMail: mockSendMail }) }, createTransport: jest.fn().mockReturnValue({ sendMail: mockSendMail }) }));
     jest.doMock('@aws-sdk/client-s3', () => ({ __esModule: true, S3Client: jest.fn().mockImplementation(() => ({ send: jest.fn().mockResolvedValue({}) })), PutObjectCommand: jest.fn().mockImplementation((p) => p) }));
     jest.doMock('axios', () => ({ __esModule: true, default: { get: jest.fn().mockResolvedValue({ data: { url: { shortLink: 'https://cutt.ly/abc' } } }) }, get: jest.fn().mockResolvedValue({ data: { url: { shortLink: 'https://cutt.ly/abc' } } }) }));
-    const parseImpl2 = jest.fn().mockResolvedValue({ ...fields, ...fileMocks });
-    jest.doMock('lambda-multipart-parser', () => ({ __esModule: true, parse: parseImpl2, default: { parse: parseImpl2 } }));
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' });
 
     const { handler } = require(handlerModulePath);
-    return { handler, savedOrderId, savedOvId };
+    return { handler, savedOrderId, savedOvId, mockSendMail };
   }
 
   function validFields(overrides = {}) {
@@ -974,14 +1006,15 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     });
   }
 
-  test('happy path — creates order and returns purchase_code', async () => {
-    const { handler } = loadWithMultipartMock(validFields());
+  test('happy path — creates order, returns purchase_code, and sends confirmation email', async () => {
+    const { handler, mockSendMail } = loadWithMultipartMock(validFields());
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body).toHaveProperty('purchase_code');
-    expect(parsed.body).toHaveProperty('price');
-    expect(parsed.body).toHaveProperty('_id');
+    expect(parsed.body.data).toHaveProperty('purchaseCode');
+    expect(parsed.body.data).toHaveProperty('price');
+    expect(parsed.body.data).toHaveProperty('id');
+    expect(mockSendMail).toHaveBeenCalledTimes(1);
   });
 
   test('rejects unauthenticated request with 401', async () => {
@@ -1034,7 +1067,7 @@ describe('POST /commerce/orders — purchase confirmation', () => {
 
   test('returns 409 when tempId already exists', async () => {
     const { handler } = loadWithMultipartMock(validFields(), { files: [] }, {
-      orderFindOneResult: { _id: new mongoose.Types.ObjectId(), tempId: 'TEMP-TEST-001' },
+      orderSaveError: Object.assign(new Error('duplicate key'), { code: 11000 }),
     });
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
@@ -1059,7 +1092,7 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.price).toBe(399);
+    expect(parsed.body.data.price).toBe(399);
   });
 
   test('email is normalized to lowercase', async () => {
@@ -1123,12 +1156,10 @@ describe('POST /commerce/orders — purchase confirmation', () => {
       }),
     };
     jest.doMock('mongoose', () => ({ __esModule: true, default: mm, Schema: actualMongoose.Schema, Types: actualMongoose.Types, isValidObjectId: actualMongoose.isValidObjectId }));
-    jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
+    jest.doMock('@aws-ddd-api/shared', createSharedMultipartMock(sharedRuntimeModulePath, { ...validFields(), files: [] }), { virtual: true });
     jest.doMock('nodemailer', () => ({ __esModule: true, default: { createTransport: jest.fn().mockReturnValue({ sendMail: jest.fn().mockRejectedValue(new Error('SMTP failure')) }) }, createTransport: jest.fn().mockReturnValue({ sendMail: jest.fn().mockRejectedValue(new Error('SMTP failure')) }) }));
     jest.doMock('@aws-sdk/client-s3', () => ({ __esModule: true, S3Client: jest.fn().mockImplementation(() => ({ send: jest.fn().mockResolvedValue({}) })), PutObjectCommand: jest.fn().mockImplementation((p) => p) }));
     jest.doMock('axios', () => ({ __esModule: true, default: { get: jest.fn().mockResolvedValue({ data: { url: { shortLink: 'https://cutt.ly/abc' } } }) }, get: jest.fn() }));
-    const parseImpl3 = jest.fn().mockResolvedValue({ ...validFields(), files: [] });
-    jest.doMock('lambda-multipart-parser', () => ({ __esModule: true, parse: parseImpl3, default: { parse: parseImpl3 } }));
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '{}' });
 
     const { handler } = require(handlerModulePath);

@@ -139,6 +139,11 @@ async function req(method, path, body, headers = {}) {
   return { status: res.status, body: json, headers: Object.fromEntries(res.headers.entries()) };
 }
 
+function responseData(body) {
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
 async function connectDB() {
   if (!MONGODB_URI) throw new Error('env.json missing PetMedicalFunction.MONGODB_URI');
   if (dbReady) return;
@@ -195,7 +200,7 @@ async function seedFixtures() {
 
   // Clear rate-limit counters so 429s from previous runs don't bleed into this one.
   await mongoose.connection.db.collection('rate_limits').deleteMany({
-    action: /^petMedicalRecord\./,
+    action: /^petMedical\./,
   });
 
   const nowMs = Date.now();
@@ -483,11 +488,11 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body?.form?.medical)).toBe(true);
-      expect(res.body.form.medical).toHaveLength(0);
-      expect(String(res.body.petId)).toBe(String(state.primaryPetId));
+      expect(Array.isArray(data)).toBe(true);
+      expect(data).toHaveLength(0);
     });
 
     test('returns 400 for non-ObjectId petId', async () => {
@@ -525,7 +530,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(listRes.status).toBe(200);
-      expect(listRes.body.form.medical.length).toBeGreaterThanOrEqual(1);
+      expect(responseData(listRes.body).length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -547,13 +552,14 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         },
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(201);
-      expect(res.body?.medicalRecordId).toBeDefined();
-      expect(String(res.body.petId)).toBe(String(state.primaryPetId));
+      expect(data?._id).toBeDefined();
+      expect(String(data.petId)).toBe(String(state.primaryPetId));
 
       const persisted = await medicalCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.medicalRecordId),
+        _id: new mongoose.Types.ObjectId(data._id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.medicalPlace).toBe('PetCare Hospital');
@@ -572,12 +578,13 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         { medicalPlace: 'Min Body Vet' },
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(201);
-      expect(res.body?.medicalRecordId).toBeDefined();
+      expect(data?._id).toBeDefined();
 
       const persisted = await medicalCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.medicalRecordId),
+        _id: new mongoose.Types.ObjectId(data._id),
       });
       expect(persisted).not.toBeNull();
     });
@@ -595,7 +602,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.medicalRecord.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.medicalRecord.invalidDateFormat');
 
       const count = await medicalCol().countDocuments({ petId: state.primaryPetId });
       expect(count).toBe(0);
@@ -689,7 +696,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const medicalId = createRes.body.medicalRecordId;
+      const medicalId = responseData(createRes.body)._id;
 
       const patchRes = await req(
         'PATCH',
@@ -699,7 +706,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(patchRes.status).toBe(200);
-      expect(patchRes.body?.petId).toBeDefined();
+      expect(responseData(patchRes.body)?.petId).toBeDefined();
 
       const persisted = await medicalCol().findOne({
         _id: new mongoose.Types.ObjectId(medicalId),
@@ -722,7 +729,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.medicalRecord.notFound');
+      expect(res.body?.errorKey).toBe('petMedical.errors.medicalRecord.notFound');
     });
 
     test('returns 400 for invalid medicalId format', async () => {
@@ -781,7 +788,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const medicalId = createRes.body.medicalRecordId;
+      const medicalId = responseData(createRes.body)._id;
 
       const deleteRes = await req(
         'DELETE',
@@ -810,7 +817,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const medicalId = createRes.body.medicalRecordId;
+      const medicalId = responseData(createRes.body)._id;
 
       await req(
         'DELETE',
@@ -827,7 +834,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(listRes.status).toBe(200);
-      const ids = listRes.body.form.medical.map((r) => String(r._id));
+      const ids = responseData(listRes.body).map((r) => String(r._id));
       expect(ids).not.toContain(medicalId);
     });
 
@@ -844,7 +851,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.medicalRecord.notFound');
+      expect(res.body?.errorKey).toBe('petMedical.errors.medicalRecord.notFound');
     });
 
     test('returns 403 when caller deletes another owner\'s pet record — DB record survives', async () => {
@@ -898,10 +905,11 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body?.medicationRecordId).toBeDefined();
+      const medData = responseData(res.body);
+      expect(medData?._id).toBeDefined();
 
       const persisted = await medicationCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.medicationRecordId),
+        _id: new mongoose.Types.ObjectId(medData._id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.drugName).toBe('Amoxicillin');
@@ -922,7 +930,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(400);
       expect(res.body?.errorKey).toBe(
-        'petMedicalRecord.errors.medicationRecord.invalidDateFormat'
+        'petMedical.errors.medicationRecord.invalidDateFormat'
       );
 
       const count = await medicationCol().countDocuments({ petId: state.primaryPetId });
@@ -961,7 +969,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const medicationId = createRes.body.medicationRecordId;
+      const medicationId = responseData(createRes.body)._id;
 
       const patchRes = await req(
         'PATCH',
@@ -1009,7 +1017,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const medicationId = createRes.body.medicationRecordId;
+      const medicationId = responseData(createRes.body)._id;
 
       const deleteRes = await req(
         'DELETE',
@@ -1078,10 +1086,11 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body?.dewormRecordId).toBeDefined();
+      const dewData = responseData(res.body);
+      expect(dewData?._id).toBeDefined();
 
       const persisted = await dewormCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.dewormRecordId),
+        _id: new mongoose.Types.ObjectId(dewData._id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.vaccineBrand).toBe('NexGard');
@@ -1102,7 +1111,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.dewormRecord.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.dewormRecord.invalidDateFormat');
     });
 
     test('returns 400 for invalid nextDewormDate format', async () => {
@@ -1118,7 +1127,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.dewormRecord.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.dewormRecord.invalidDateFormat');
     });
   });
 
@@ -1135,7 +1144,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const dewormId = createRes.body.dewormRecordId;
+      const dewormId = responseData(createRes.body)._id;
 
       const patchRes = await req(
         'PATCH',
@@ -1182,7 +1191,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const dewormId = createRes.body.dewormRecordId;
+      const dewormId = responseData(createRes.body)._id;
 
       const deleteRes = await req(
         'DELETE',
@@ -1223,10 +1232,11 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body?.bloodTestRecordId).toBeDefined();
+      const btData = responseData(res.body);
+      expect(btData?._id).toBeDefined();
 
       const persisted = await bloodTestCol().findOne({
-        _id: new mongoose.Types.ObjectId(res.body.bloodTestRecordId),
+        _id: new mongoose.Types.ObjectId(btData._id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.heartworm).toBe('Negative');
@@ -1246,7 +1256,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.bloodTest.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.bloodTest.invalidDateFormat');
 
       const count = await bloodTestCol().countDocuments({ petId: state.primaryPetId });
       expect(count).toBe(0);
@@ -1284,7 +1294,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const bloodTestId = createRes.body.bloodTestRecordId;
+      const bloodTestId = responseData(createRes.body)._id;
 
       const patchRes = await req(
         'PATCH',
@@ -1315,9 +1325,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe(
-        'petMedicalRecord.errors.bloodTest.invalidBloodTestIdFormat'
-      );
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 404 when record does not exist', async () => {
@@ -1333,7 +1341,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.bloodTest.notFound');
+      expect(res.body?.errorKey).toBe('petMedical.errors.bloodTest.notFound');
     });
   });
 
@@ -1350,7 +1358,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const bloodTestId = createRes.body.bloodTestRecordId;
+      const bloodTestId = responseData(createRes.body)._id;
 
       const deleteRes = await req(
         'DELETE',
@@ -1428,7 +1436,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const medicalId = createRes.body.medicalRecordId;
+      const medicalId = responseData(createRes.body)._id;
 
       const before = await medicalCol().findOne({ _id: new mongoose.Types.ObjectId(medicalId) });
 
@@ -1465,7 +1473,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(201);
       expect(second.status).toBe(201);
-      expect(first.body.medicalRecordId).not.toBe(second.body.medicalRecordId);
+      expect(responseData(first.body)._id).not.toBe(responseData(second.body)._id);
 
       const count = await medicalCol().countDocuments({ petId: state.primaryPetId });
       expect(count).toBe(2);
@@ -1524,7 +1532,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body.form.medical.length).toBe(second.body.form.medical.length);
+      expect(responseData(first.body).length).toBe(responseData(second.body).length);
     });
   });
 });
