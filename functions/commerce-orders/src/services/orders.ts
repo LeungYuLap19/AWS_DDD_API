@@ -171,6 +171,11 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   const Order = mongoose.model('Order');
   const isPTagAir = option === 'PTagAir' || option === 'PTagAir_member';
 
+  const existingOrder = await Order.findOne({ tempId }).select('_id').lean();
+  if (existingOrder) {
+    return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
+  }
+
   let order: Record<string, unknown>;
   try {
     const OrderModel = Order as unknown as new (data: Record<string, unknown>) => {
@@ -352,4 +357,3 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
-

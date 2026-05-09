@@ -1778,13 +1778,14 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
       expect(res.body.errorKey).toBe('auth.login.ngo.userNGONotFound');
     });
 
-    test('PATCH /ngo/me strips mass-assignment fields and preserves protected NGO and access state', async () => {
+    test('PATCH /ngo/me rejects mass-assignment fields and preserves protected NGO and access state', async () => {
       if (!(await ensureSamOrSkip())) return;
       if (!(await ensureDbOrSkip())) return;
       const fixture = await registerNgoFixture({ label: 'mass-assignment' });
       expect(fixture.res.status).toBe(201);
 
       const beforeNgo = await ngosCol().findOne({ _id: new mongoose.Types.ObjectId(fixture.ngoId) });
+      const beforeUser = await usersCol().findOne({ _id: new mongoose.Types.ObjectId(fixture.userId) });
       const beforeAccess = await ngoUserAccessCol().findOne({
         userId: new mongoose.Types.ObjectId(fixture.userId),
         ngoId: new mongoose.Types.ObjectId(fixture.ngoId),
@@ -1822,16 +1823,17 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
       });
       const afterUser = await usersCol().findOne({ _id: new mongoose.Types.ObjectId(fixture.userId) });
 
-      expect(res.status).toBe(200);
-      expect(afterUser.firstName).toBe('Allowed Change');
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
+      expect(afterUser.firstName).toBe(beforeUser.firstName);
       expect(afterUser.role).toBe('ngo');
-      expect(afterNgo.description).toBe('Allowed NGO Change');
+      expect(afterNgo.description).toBe(beforeNgo.description);
       expect(afterNgo.isVerified).toBe(beforeNgo.isVerified);
       expect(afterNgo.isActive).toBe(beforeNgo.isActive);
       expect(afterAccess.isActive).toBe(beforeAccess.isActive);
     });
 
-    test('PATCH /ngo/me ignores injected _id fields and keeps ownership bound to the JWT NGO and user', async () => {
+    test('PATCH /ngo/me rejects injected _id fields and keeps ownership bound to the JWT NGO and user', async () => {
       if (!(await ensureSamOrSkip())) return;
       if (!(await ensureDbOrSkip())) return;
       const primary = await registerNgoFixture({ label: 'id-injection-primary' });
@@ -1865,9 +1867,10 @@ describe('Tier 3/4 - NGO routes via SAM local + UAT DB', () => {
       const secondaryUser = await usersCol().findOne({ _id: new mongoose.Types.ObjectId(secondary.userId) });
       const secondaryNgo = await ngosCol().findOne({ _id: new mongoose.Types.ObjectId(secondary.ngoId) });
 
-      expect(res.status).toBe(200);
-      expect(primaryUser.email).toBe(injectedEmail);
-      expect(primaryNgo.address.country).toBe('Japan');
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
+      expect(primaryUser.email).toBe(primary.payload.email);
+      expect(primaryNgo.address.country).toBe(primary.payload.address.country);
       expect(secondaryUser.email).toBe(secondary.payload.email);
       expect(secondaryNgo.address.country).toBe(secondary.payload.address.country);
     });

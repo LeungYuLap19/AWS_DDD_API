@@ -140,7 +140,8 @@ async function req(method, path, body, headers = {}) {
 }
 
 function responseData(body) {
-  return body?.data ?? body ?? null;
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
 }
 
 async function connectDB() {
@@ -199,7 +200,7 @@ async function seedFixtures() {
 
   // Clear rate-limit counters so 429s from previous runs don't bleed into this one.
   await mongoose.connection.db.collection('rate_limits').deleteMany({
-    action: /^petMedicalRecord\./,
+    action: /^petMedical\./,
   });
 
   const nowMs = Date.now();
@@ -601,7 +602,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.medicalRecord.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.medicalRecord.invalidDateFormat');
 
       const count = await medicalCol().countDocuments({ petId: state.primaryPetId });
       expect(count).toBe(0);
@@ -705,7 +706,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(patchRes.status).toBe(200);
-      expect(patchRes.body?.petId).toBeDefined();
+      expect(responseData(patchRes.body)?.petId).toBeDefined();
 
       const persisted = await medicalCol().findOne({
         _id: new mongoose.Types.ObjectId(medicalId),
@@ -728,7 +729,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.medicalRecord.notFound');
+      expect(res.body?.errorKey).toBe('petMedical.errors.medicalRecord.notFound');
     });
 
     test('returns 400 for invalid medicalId format', async () => {
@@ -850,7 +851,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.medicalRecord.notFound');
+      expect(res.body?.errorKey).toBe('petMedical.errors.medicalRecord.notFound');
     });
 
     test('returns 403 when caller deletes another owner\'s pet record — DB record survives', async () => {
@@ -904,10 +905,11 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body?.medicationRecordId).toBeDefined();
+      const medData = responseData(res.body);
+      expect(medData?._id).toBeDefined();
 
       const persisted = await medicationCol().findOne({
-        _id: new mongoose.Types.ObjectId(responseData(res.body)._id),
+        _id: new mongoose.Types.ObjectId(medData._id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.drugName).toBe('Amoxicillin');
@@ -928,7 +930,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(400);
       expect(res.body?.errorKey).toBe(
-        'petMedicalRecord.errors.medicationRecord.invalidDateFormat'
+        'petMedical.errors.medicationRecord.invalidDateFormat'
       );
 
       const count = await medicationCol().countDocuments({ petId: state.primaryPetId });
@@ -1084,10 +1086,11 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body?.dewormRecordId).toBeDefined();
+      const dewData = responseData(res.body);
+      expect(dewData?._id).toBeDefined();
 
       const persisted = await dewormCol().findOne({
-        _id: new mongoose.Types.ObjectId(responseData(res.body)._id),
+        _id: new mongoose.Types.ObjectId(dewData._id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.vaccineBrand).toBe('NexGard');
@@ -1108,7 +1111,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.dewormRecord.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.dewormRecord.invalidDateFormat');
     });
 
     test('returns 400 for invalid nextDewormDate format', async () => {
@@ -1124,7 +1127,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.dewormRecord.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.dewormRecord.invalidDateFormat');
     });
   });
 
@@ -1229,10 +1232,11 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body?.bloodTestRecordId).toBeDefined();
+      const btData = responseData(res.body);
+      expect(btData?._id).toBeDefined();
 
       const persisted = await bloodTestCol().findOne({
-        _id: new mongoose.Types.ObjectId(responseData(res.body)._id),
+        _id: new mongoose.Types.ObjectId(btData._id),
       });
       expect(persisted).not.toBeNull();
       expect(persisted.heartworm).toBe('Negative');
@@ -1252,7 +1256,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.bloodTest.invalidDateFormat');
+      expect(res.body?.errorKey).toBe('petMedical.errors.bloodTest.invalidDateFormat');
 
       const count = await bloodTestCol().countDocuments({ petId: state.primaryPetId });
       expect(count).toBe(0);
@@ -1321,9 +1325,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe(
-        'petMedicalRecord.errors.bloodTest.invalidBloodTestIdFormat'
-      );
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 404 when record does not exist', async () => {
@@ -1339,7 +1341,7 @@ describe('Tier 3+4 - /pet/medical via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(404);
-      expect(res.body?.errorKey).toBe('petMedicalRecord.errors.bloodTest.notFound');
+      expect(res.body?.errorKey).toBe('petMedical.errors.bloodTest.notFound');
     });
   });
 

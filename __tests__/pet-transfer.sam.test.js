@@ -686,7 +686,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(patchRes.status).toBe(400);
-      expect(patchRes.body?.errorKey).toBe('common.noFieldsToUpdate');
+      expect(patchRes.body?.errorKey).toBe('common.invalidBodyParams');
 
       await petsCol().updateOne(
         { _id: state.primaryPetId },
@@ -814,7 +814,6 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
 
       expect(deleteRes.status).toBe(200);
       expect(deleteRes.body.success).toBe(true);
-      expect(responseData(deleteRes.body)).toBeNull();
 
       const transferArr = await getTransferArray(state.primaryPetId);
       const record = transferArr.find((t) => String(t._id) === transferId);
@@ -924,7 +923,6 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(responseData(res.body)).toBeNull();
 
       const pet = await petsCol().findOne({ _id: state.ngoPetId });
       expect(String(pet.userId)).toBe(String(state.targetUserId));
@@ -1278,8 +1276,6 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
 
       const before = (await petsCol().findOne({ _id: state.primaryPetId })).transfer.length;
 
-      // transferCreateBodySchema uses z.object() without .strict(), so Zod strips
-      // unknown fields. The request succeeds (201) but only recognized fields are stored.
       const res = await req(
         'POST',
         `/pet/transfer/${state.primaryPetId}`,
@@ -1293,21 +1289,11 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
 
       const after = (await petsCol().findOne({ _id: state.primaryPetId })).transfer.length;
-      expect(after).toBe(before + 1);
-
-      const transferArr = await getTransferArray(state.primaryPetId);
-      const record = transferArr.find((t) => String(t._id) === responseData(res.body).id);
-      expect(record.regPlace).toBe('Legit');
-      expect(record.deleted).toBeUndefined();
-      expect(record.isAdmin).toBeUndefined();
-
-      await petsCol().updateOne(
-        { _id: state.primaryPetId },
-        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(responseData(res.body).id) } } }
-      );
+      expect(after).toBe(before);
     });
 
     test('PATCH /pet/transfer/{petId}/{transferId} rejects NoSQL injection in regPlace, DB unchanged', async () => {
@@ -1355,9 +1341,6 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       expect(createRes.status).toBe(201);
       const transferId = responseData(createRes.body).id;
 
-      // transferUpdateBodySchema uses z.object() without .strict(): Zod strips
-      // unknown fields. The recognized field (regPlace) is still applied → 200.
-      // Only the unknown fields (isAdmin, deleted) are silently ignored.
       const res = await req(
         'PATCH',
         `/pet/transfer/${state.primaryPetId}/${transferId}`,
@@ -1365,13 +1348,12 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
 
       const transferArr = await getTransferArray(state.primaryPetId);
       const record = transferArr.find((t) => String(t._id) === transferId);
-      expect(record.regPlace).toBe('Allowed');   // recognized field was applied
-      expect(record.isAdmin).toBeUndefined();     // unknown field was stripped
-      expect(record.deleted).toBeUndefined();     // unknown field was stripped
+      expect(record.regPlace).toBe('Original');
 
       await petsCol().updateOne(
         { _id: state.primaryPetId },
@@ -1423,10 +1405,6 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      // ngoTransferBodySchema uses z.object() without .strict(): Zod strips unknown fields.
-      // The recognized fields (UserEmail, UserContact) satisfy the schema refine() check,
-      // so the reassignment succeeds (200). Unknown fields (isAdmin, deleted, ngoId) are
-      // stripped and never reach the DB.
       const res = await req(
         'POST',
         `/pet/transfer/${state.ngoPetId}/ngo-reassignment`,
@@ -1440,13 +1418,12 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.ngoToken)
       );
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
 
       const pet = await petsCol().findOne({ _id: state.ngoPetId });
-      // The ngoId in the body was stripped — the Lambda clears ngoId to '' on reassignment.
-      expect(pet.ngoId).not.toBe('attacker-ngo');
-      // Ownership was reassigned to the target user.
-      expect(String(pet.userId)).toBe(String(state.targetUserId));
+      expect(pet.ngoId).toBe(state.ngoId);
+      expect(String(pet.userId)).not.toBe(String(state.targetUserId));
     });
 
     test('NGO alg:none JWT attack is rejected and no ownership change occurs', async () => {

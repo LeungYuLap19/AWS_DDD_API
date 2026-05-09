@@ -839,7 +839,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
   });
 
   describe('cyberattacks and sequential security state changes', () => {
-    samTest('PATCH /user/me strips mass-assignment fields and does not mutate protected state', async () => {
+    samTest('PATCH /user/me rejects mass-assignment fields and does not mutate protected state', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const before = await usersCol().findOne({ _id: state.primaryUserId });
@@ -857,15 +857,16 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
       const after = await usersCol().findOne({ _id: state.primaryUserId });
 
-      expect(res.status).toBe(200);
-      expect(after.firstName).toBe('Mass Assignment Attempt');
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
+      expect(after.firstName).toBe(before.firstName);
       expect(after.role).toBe(before.role);
       expect(after.credit).toBe(before.credit);
       expect(after.password).toBe(before.password);
       expect(after.deleted).toBe(false);
     });
 
-    samTest('PATCH /user/me ignores an injected _id field and keeps ownership bound to the JWT user', async () => {
+    samTest('PATCH /user/me rejects an injected _id field and keeps ownership bound to the JWT user', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const res = await req(
@@ -881,8 +882,9 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       const primary = await usersCol().findOne({ _id: state.primaryUserId });
       const conflict = await usersCol().findOne({ _id: state.conflictUserId });
 
-      expect(res.status).toBe(200);
-      expect(primary.email).toBe(`${RUN_ID}-id-injection@test.com`);
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
+      expect(primary.email).toBe(state.primaryEmail);
       expect(conflict.email).toBe(state.conflictEmail);
     });
 

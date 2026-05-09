@@ -66,11 +66,12 @@ Read in this order before starting a Lambda migration:
 1. `dev_docs/llms/migration/ROLE.md`
 2. `dev_docs/llms/LLM_PROJECT_CONTEXT.md`
 3. `dev_docs/llms/DDD_IMPLEMENTATION_CHECKLIST.md`
-4. `dev_docs/llms/DDD_MIGRATION_HARNESS.md`
-5. `dev_docs/llms/DDD_TESTING_STANDARD.md`
-6. `dev_docs/developers/DDD_API_REWRITE_PLAN_ZH_TW.md`
-7. `template.yaml`
-8. `../AWS_API/dev_docs/REFACTORED_LAMBDA_ENDPOINT_STATUS.md`
+4. `dev_docs/llms/DDD_TSDOC_STANDARD.md`
+5. `dev_docs/llms/DDD_MIGRATION_HARNESS.md`
+6. `dev_docs/llms/DDD_TESTING_STANDARD.md`
+7. `dev_docs/developers/DDD_API_REWRITE_PLAN_ZH_TW.md`
+8. `template.yaml`
+9. `../AWS_API/dev_docs/REFACTORED_LAMBDA_ENDPOINT_STATUS.md`
 
 Read additional legacy code and docs after that based on the target Lambda.
 

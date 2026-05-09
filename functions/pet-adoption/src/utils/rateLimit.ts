@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { requireMongoRateLimit } from '@aws-ddd-api/shared';
 import type { RateLimitPolicy } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
+import { connectDefaultDB } from '../config/db';
 import { response } from './response';
 
 /**
@@ -26,6 +27,7 @@ type ApplyRateLimitParams = {
 
 export async function applyRateLimit(params: ApplyRateLimitParams): Promise<APIGatewayProxyResult | null> {
   try {
+    await connectDefaultDB();
     await requireMongoRateLimit({
       accountId: params.accountId,
       action: params.action,

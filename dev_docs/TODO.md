@@ -12,7 +12,7 @@
 
 - [x] retest local
 - [x] tests for injection/XSS/oversize
-- [ ] retest sam
+- [x] retest sam
 - [x] api docs update
 - [ ] Tsdoc
 

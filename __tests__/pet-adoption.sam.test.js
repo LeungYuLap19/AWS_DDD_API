@@ -1137,9 +1137,6 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       await seedFixtures();
       await clearAdoptionFor(state.primaryPetId);
 
-      // petAdoptionCreateBodySchema uses z.object() without .strict(): Zod strips
-      // unknown fields (deleted, isAdmin, _id, petId override). The known field
-      // (postAdoptionName: 'Legit') satisfies validation → 201.
       const res = await req(
         'POST',
         `/pet/adoption/${state.primaryPetId}`,
@@ -1153,17 +1150,11 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
 
-      const data = responseData(res.body);
-      const persisted = await adoptionsCol().findOne({ _id: new mongoose.Types.ObjectId(data._id) });
-      expect(persisted).not.toBeNull();
-      expect(persisted.postAdoptionName).toBe('Legit');            // allowed field persisted
-      expect(String(persisted.petId)).toBe(String(state.primaryPetId)); // Lambda-assigned petId, not attacker's
-      expect(persisted.deleted).toBeUndefined();                   // unknown field stripped
-      expect(persisted.isAdmin).toBeUndefined();                   // unknown field stripped
-
-      await clearAdoptionFor(state.primaryPetId);
+      const persisted = await adoptionsCol().findOne({ petId: String(state.primaryPetId) });
+      expect(persisted).toBeNull();
     });
 
     test('PATCH /pet/adoption/{id} rejects NoSQL operator injection in postAdoptionName, DB unchanged', async () => {
@@ -1211,9 +1202,6 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       const createData = responseData(createRes.body);
       const adoptionOid = new mongoose.Types.ObjectId(createData._id);
 
-      // petAdoptionUpdateBodySchema uses z.object() without .strict(): Zod strips
-      // unknown fields (isAdmin, deleted, __v). The known field (postAdoptionName)
-      // is applied normally → 200.
       const res = await req(
         'PATCH',
         `/pet/adoption/${state.primaryPetId}`,
@@ -1221,12 +1209,13 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
 
       const persisted = await adoptionsCol().findOne({ _id: adoptionOid });
-      expect(persisted.postAdoptionName).toBe('Allowed');  // recognized field applied
-      expect(persisted.isAdmin).toBeUndefined();           // unknown field stripped
-      expect(persisted.deleted).toBeUndefined();           // unknown field stripped
+      expect(persisted.postAdoptionName).toBe('Original');
+
+      await clearAdoptionFor(state.primaryPetId);
     });
 
     test('replayed duplicate POST returns 409 and only one record persists', async () => {

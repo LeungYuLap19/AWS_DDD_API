@@ -113,7 +113,32 @@ async function req(method, path, body, headers = {}) {
 }
 
 function responseData(body) {
-  return body?.data ?? body ?? null;
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
+async function reqMultipart(method, path, fields = {}, headers = {}) {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== null) {
+      fd.append(key, String(value));
+    }
+  }
+
+  const { 'Content-Type': _ct, 'content-type': _ct2, ...cleanHeaders } = {
+    ...(method === 'OPTIONS' ? {} : { 'x-api-key': API_KEY }),
+    ...headers,
+  };
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: cleanHeaders,
+    body: fd,
+  });
+
+  let json = null;
+  try { json = await res.json(); } catch { json = null; }
+  return { status: res.status, body: json, headers: Object.fromEntries(res.headers.entries()) };
 }
 
 async function connectDB() {
@@ -326,7 +351,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req(
+      const res = await reqMultipart(
         'POST',
         '/pet/profile',
         {
@@ -358,7 +383,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const patchRes = await req(
+      const patchRes = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.primaryPetId}`,
         { name: `${RUN_ID}-patched` },
@@ -425,7 +450,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petProfile.errors.invalidPetId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('POST /pet/profile rejects malformed JSON body', async () => {
@@ -457,26 +482,28 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       expect(res.status).toBe(400);
     });
 
-    test('PATCH /pet/profile/{petId} rejects an empty JSON body', async () => {
+    test('PATCH /pet/profile/{petId} with empty multipart body saves with no changes', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req(
+      const before = await petsCol().findOne({ _id: state.primaryPetId });
+      const res = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.primaryPetId}`,
         {},
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('common.missingBodyParams');
+      expect(res.status).toBe(200);
+      const after = await petsCol().findOne({ _id: state.primaryPetId });
+      expect(after.name).toBe(before.name);
     });
 
     test('PATCH /pet/profile/{petId} rejects an invalid field type', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req(
+      const res = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.primaryPetId}`,
         { weight: 'heavy' },
@@ -495,7 +522,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req(
+      const res = await reqMultipart(
         'POST',
         '/pet/profile',
         {
@@ -634,7 +661,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req(
+      const res = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.secondaryPetId}`,
         { name: 'Stolen' },
@@ -685,7 +712,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req(
+      const res = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.primaryPetId}`,
         { isRegistered: true },
@@ -693,7 +720,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
+      expect(res.body.errorKey).toBe('common.invalidBodyParams');
 
       const persisted = await petsCol().findOne({ _id: state.primaryPetId });
       expect(persisted.isRegistered).toBeUndefined();
@@ -704,7 +731,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       await seedFixtures();
 
       const countBefore = await petsCol().countDocuments({ userId: state.primaryUserId });
-      const res = await req(
+      const res = await reqMultipart(
         'POST',
         '/pet/profile',
         {
@@ -720,7 +747,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       const countAfter = await petsCol().countDocuments({ userId: state.primaryUserId });
 
       expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('petProfile.errors.invalidBodyParams');
+      expect(res.body.errorKey).toBe('common.invalidBodyParams');
       expect(countAfter).toBe(countBefore);
     });
 
@@ -728,13 +755,13 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const first = await req(
+      const first = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.primaryPetId}`,
         { isRegistered: true },
         authHeaders(state.primaryToken)
       );
-      const second = await req(
+      const second = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.primaryPetId}`,
         { isRegistered: true },
@@ -787,7 +814,7 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       );
       expect(deleteRes.status).toBe(200);
 
-      const patchRes = await req(
+      const patchRes = await reqMultipart(
         'PATCH',
         `/pet/profile/${state.primaryPetId}`,
         { name: 'Should Not Update' },

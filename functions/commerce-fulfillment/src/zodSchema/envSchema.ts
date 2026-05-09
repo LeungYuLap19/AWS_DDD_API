@@ -15,9 +15,6 @@ const baseEnvSchema = z.object({
 });
 
 export const envSchema = baseEnvSchema.extend({
-  AWS_BUCKET_NAME: requiredString,
-  AWS_BUCKET_BASE_URL: requiredString,
-  AWS_BUCKET_REGION: requiredString,
   SMTP_HOST: requiredString,
   SMTP_PORT: requiredString,
   SMTP_USER: requiredString,
