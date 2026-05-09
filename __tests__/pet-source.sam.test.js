@@ -123,6 +123,10 @@ async function req(method, path, body, headers = {}) {
   return { status: res.status, body: json, headers: Object.fromEntries(res.headers.entries()) };
 }
 
+function responseData(body) {
+  return body?.data ?? body ?? null;
+}
+
 async function connectDB() {
   if (!MONGODB_URI) throw new Error('env.json missing PetSourceFunction.MONGODB_URI');
   if (dbReady) return;
@@ -320,10 +324,10 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(res.body.form).toBeNull();
-      expect(String(res.body.petId)).toBe(String(state.primaryPetId));
+      expect(data).toBeNull();
       expect(res.headers['access-control-allow-origin']).toBe('*');
     });
 
@@ -343,11 +347,12 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         },
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(201);
-      expect(res.body.sourceId).toBeDefined();
+      expect(data._id).toBeDefined();
 
-      const sourceOid = new mongoose.Types.ObjectId(res.body.sourceId);
+      const sourceOid = new mongoose.Types.ObjectId(data._id);
       state.createdSourceIds.push(sourceOid);
 
       const persisted = await sourcesCol().findOne({ _id: sourceOid });
@@ -371,7 +376,8 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      state.createdSourceIds.push(new mongoose.Types.ObjectId(createRes.body.sourceId));
+      const createData = responseData(createRes.body);
+      state.createdSourceIds.push(new mongoose.Types.ObjectId(createData._id));
 
       const getRes = await req(
         'GET',
@@ -379,12 +385,13 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const getData = responseData(getRes.body);
 
       expect(getRes.status).toBe(200);
-      expect(getRes.body.form).not.toBeNull();
-      expect(getRes.body.form.placeofOrigin).toBe('Shelter');
-      expect(getRes.body.form.channel).toBe('Referral');
-      expect(getRes.body.sourceId).toBe(createRes.body.sourceId);
+      expect(getData).not.toBeNull();
+      expect(getData.placeofOrigin).toBe('Shelter');
+      expect(getData.channel).toBe('Referral');
+      expect(getData._id).toBe(createData._id);
     });
 
     test('PATCH /pet/source/{petId} updates only provided fields and DB reflects the change', async () => {
@@ -399,7 +406,8 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const sourceOid = new mongoose.Types.ObjectId(createRes.body.sourceId);
+      const createData = responseData(createRes.body);
+      const sourceOid = new mongoose.Types.ObjectId(createData._id);
       state.createdSourceIds.push(sourceOid);
 
       const patchRes = await req(
@@ -410,7 +418,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
       );
 
       expect(patchRes.status).toBe(200);
-      expect(patchRes.body.sourceId).toBe(createRes.body.sourceId);
+      expect(responseData(patchRes.body)._id).toBe(createData._id);
 
       const persisted = await sourcesCol().findOne({ _id: sourceOid });
       expect(persisted.causeOfInjury).toBe('Recovered');
@@ -438,8 +446,8 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body.form).toBeNull();
-      expect(second.body.form).toBeNull();
+      expect(responseData(first.body)).toBeNull();
+      expect(responseData(second.body)).toBeNull();
     });
   });
 
@@ -510,7 +518,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      state.createdSourceIds.push(new mongoose.Types.ObjectId(createRes.body.sourceId));
+      state.createdSourceIds.push(new mongoose.Types.ObjectId(responseData(createRes.body)._id));
 
       const res = await req(
         'PATCH',
@@ -560,7 +568,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(first.status).toBe(201);
-      state.createdSourceIds.push(new mongoose.Types.ObjectId(first.body.sourceId));
+      state.createdSourceIds.push(new mongoose.Types.ObjectId(responseData(first.body)._id));
 
       const second = await req(
         'POST',
@@ -760,8 +768,8 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.ngoToken)
       );
       expect(okRes.status).toBe(200);
-      expect(okRes.body.form.placeofOrigin).toBe('NGO intake');
-      expect(okRes.body.sourceId).toBe(String(ngoSourceId));
+      expect(responseData(okRes.body).placeofOrigin).toBe('NGO intake');
+      expect(responseData(okRes.body)._id).toBe(String(ngoSourceId));
 
       // A user without the matching ngoId on their token must be denied.
       const denyRes = await req(
@@ -824,7 +832,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const sourceOid = new mongoose.Types.ObjectId(createRes.body.sourceId);
+      const sourceOid = new mongoose.Types.ObjectId(responseData(createRes.body)._id);
       state.createdSourceIds.push(sourceOid);
 
       const before = await sourcesCol().findOne({ _id: sourceOid });
@@ -878,7 +886,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const sourceOid = new mongoose.Types.ObjectId(createRes.body.sourceId);
+      const sourceOid = new mongoose.Types.ObjectId(responseData(createRes.body)._id);
       state.createdSourceIds.push(sourceOid);
 
       const res = await req(
@@ -909,7 +917,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const sourceOid = new mongoose.Types.ObjectId(createRes.body.sourceId);
+      const sourceOid = new mongoose.Types.ObjectId(responseData(createRes.body)._id);
       state.createdSourceIds.push(sourceOid);
 
       const first = await req(
@@ -946,7 +954,7 @@ describe('Tier 3 - /pet/source via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(first.status).toBe(201);
-      state.createdSourceIds.push(new mongoose.Types.ObjectId(first.body.sourceId));
+      state.createdSourceIds.push(new mongoose.Types.ObjectId(responseData(first.body)._id));
 
       const replay = await req(
         'POST',

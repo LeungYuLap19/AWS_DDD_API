@@ -10,7 +10,10 @@
 - [x] S3 and multipart
   - formadata only in mutipart route (do not mix json + multipart)
 
-- [ ] retest, api docs update
+- [x] retest local
+- [x] tests for injection/XSS/oversize
+- [ ] retest sam
+- [x] api docs update
 - [ ] Tsdoc
 
 ## Optimization, Security Scan and Hardening
@@ -30,7 +33,7 @@
   - [x] P0: shared path-param validators (objectId/tempId) applied to all path params used in DB queries
   - [x] P1: `.max()` on strings/arrays; replace `.passthrough()` with `.strict()` (pet-profile, pet-analysis, ngo); shared `paginationQuerySchema`; enums for gender/status/lang
   - [x] P2: consolidate `bootstrap/validators/` + `bootstrap/sanitizers/`
-  - [ ] P3: integration tests for injection/XSS/oversize — deferred; will run after all optimization, hardening, and standardization passes are complete
+  - [x] P3: integration tests for injection/XSS/oversize — deferred; will run after all optimization, hardening, and standardization passes are complete
 - [x] Layered rate limiting + per-flow failure cooldowns
   - Shared `requireMongoRateLimit` now accepts `policies: RateLimitPolicy[]` (scopes: `ip`, `identifier`, `ip+identifier`, `account`, `global`); request is rejected on the first lane that trips. Legacy `{ limit, windowSeconds }` shorthand preserved.
   - Added `requireMongoRateLimitNotInCooldown` + `recordMongoRateLimitFailure` (auth wrapper exports `requireFailureCooldown` / `recordFailure`) for failure-only counters that do not consume legitimate-traffic quota.

@@ -121,6 +121,10 @@ async function req(method, path, body, headers = {}) {
   return { status: res.status, body: json, headers: Object.fromEntries(res.headers.entries()) };
 }
 
+function responseData(body) {
+  return body?.data ?? body ?? null;
+}
+
 async function connectDB() {
   if (!MONGODB_URI) throw new Error('env.json missing CommerceFulfillmentFunction.MONGODB_URI');
   if (dbReady) return;
@@ -257,10 +261,11 @@ describe('Tier 3 - /commerce/fulfillment via SAM local + UAT DB', () => {
       await seedFixtures();
 
       const res = await req('GET', '/commerce/fulfillment', undefined, authHeaders(state.adminToken));
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.orderVerification)).toBe(true);
+      expect(Array.isArray(data)).toBe(true);
       expect(res.body.pagination).toBeDefined();
       expect(typeof res.body.pagination.total).toBe('number');
       expect(res.headers['access-control-allow-origin']).toBe('*');
@@ -276,11 +281,12 @@ describe('Tier 3 - /commerce/fulfillment via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.adminToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.orderVerification).toBeDefined();
-      expect(res.body.orderVerification.tagId).toBe(state.tagIdA);
+      expect(data).toBeDefined();
+      expect(data.tagId).toBe(state.tagIdA);
     });
 
     test('PATCH /commerce/fulfillment/tags/{tagId} updates petName and persists to DB', async () => {

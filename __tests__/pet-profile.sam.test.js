@@ -112,6 +112,10 @@ async function req(method, path, body, headers = {}) {
   return { status: res.status, body: json, headers: Object.fromEntries(res.headers.entries()) };
 }
 
+function responseData(body) {
+  return body?.data ?? body ?? null;
+}
+
 async function connectDB() {
   if (!MONGODB_URI) throw new Error('env.json missing PetProfileFunction.MONGODB_URI');
   if (dbReady) return;
@@ -278,10 +282,11 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.form.name).toBe('Mochi');
+      expect(data.name).toBe('Mochi');
       expect(res.headers['access-control-allow-origin']).toBe('*');
     });
 
@@ -295,12 +300,13 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body.pets)).toBe(true);
-      expect(res.body.pets.length).toBeGreaterThan(0);
-      expect(res.body.pets.every((p) => p.ownerContact1 === undefined)).toBe(true);
-      expect(res.body.pets.every((p) => p.tagId === undefined)).toBe(true);
+      expect(Array.isArray(data)).toBe(true);
+      expect(data.length).toBeGreaterThan(0);
+      expect(data.every((p) => p.ownerContact1 === undefined)).toBe(true);
+      expect(data.every((p) => p.tagId === undefined)).toBe(true);
     });
 
     test('GET /pet/profile/by-tag/{tagId} returns public data without auth', async () => {
@@ -308,11 +314,12 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       await seedFixtures();
 
       const res = await req('GET', `/pet/profile/by-tag/${state.tagId}`);
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(res.body.form.name).toBe('Tagged Pet');
-      expect(res.body.form.userId).toBeUndefined();
-      expect(res.body.form.ngoId).toBeUndefined();
+      expect(data.name).toBe('Tagged Pet');
+      expect(data.userId).toBeUndefined();
+      expect(data.ngoId).toBeUndefined();
     });
 
     test('POST /pet/profile creates a pet via JSON body and DB has the persisted document', async () => {
@@ -330,11 +337,12 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
         },
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
 
-      const createdId = res.body.petId || res.body.form?._id;
+      const createdId = data?.id || data?._id;
       if (createdId) {
         const oid = new mongoose.Types.ObjectId(createdId);
         state.createdPetIds.push(oid);
@@ -368,8 +376,9 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const getData = responseData(getRes.body);
       expect(getRes.status).toBe(200);
-      expect(getRes.body.form.name).toBe(`${RUN_ID}-patched`);
+      expect(getData.name).toBe(`${RUN_ID}-patched`);
     });
 
     test('DELETE /pet/profile/{petId} soft deletes and DB shows deleted=true with tagId cleared', async () => {

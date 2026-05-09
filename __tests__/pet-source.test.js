@@ -602,6 +602,35 @@ describe('pet-source handler Tier 2 integration', () => {
     expect(sourceModel.updateOne).not.toHaveBeenCalled();
   });
 
+  test('returns 400 on PATCH when placeofOrigin is a NoSQL-style operator object', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const { handler, sourceModel } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: { _id: petId, userId, deleted: false },
+      sourceDoc: buildSourceDocument({ petId }),
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'PATCH',
+        path: `/pet/source/${petId}`,
+        resource: '/pet/source/{petId}',
+        pathParameters: { petId },
+        authorizer: createAuthorizer({ userId }),
+        body: JSON.stringify({
+          placeofOrigin: { $set: 'Injected origin' },
+        }),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+    expect(sourceModel.updateOne).not.toHaveBeenCalled();
+  });
+
   test('returns 403 when caller does not own the pet on PATCH', async () => {
     const userId = new mongoose.Types.ObjectId().toString();
     const ownerId = new mongoose.Types.ObjectId().toString();
@@ -680,6 +709,35 @@ describe('pet-source handler Tier 2 integration', () => {
     expect(parsed.statusCode).toBe(404);
     expect(parsed.body.errorKey).toBe('petSource.errors.recordNotFound');
     expect(sourceModel.updateOne).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 on POST when channel exceeds the max length', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const petId = new mongoose.Types.ObjectId().toString();
+    const { handler, sourceModel } = loadHandlerWithMocks({
+      authUserId: userId,
+      petDoc: { _id: petId, userId, deleted: false },
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: `/pet/source/${petId}`,
+        resource: '/pet/source/{petId}',
+        pathParameters: { petId },
+        authorizer: createAuthorizer({ userId }),
+        body: JSON.stringify({
+          placeofOrigin: 'Shelter',
+          channel: 'A'.repeat(201),
+        }),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+    expect(sourceModel.create).not.toHaveBeenCalled();
   });
 
   test('updates a pet source record by petId and returns the current sourceId', async () => {

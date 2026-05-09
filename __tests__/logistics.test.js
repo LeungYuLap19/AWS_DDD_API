@@ -509,6 +509,25 @@ describe('POST /logistics/lookups/areas', () => {
     expect(parsed.body.errorKey).toBe('logistics.validation.tokenRequired');
   });
 
+  test('returns 400 when token is a NoSQL-style operator object', async () => {
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/lookups/areas',
+        body: { token: { $gt: '' } },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(['logistics.validation.tokenRequired', 'common.invalidBodyParams']).toContain(
+      parsed.body.errorKey
+    );
+  });
+
   test('returns 400 when body is missing entirely', async () => {
     const { handler } = loadHandlerWithMocks();
 
@@ -831,6 +850,49 @@ describe('POST /logistics/shipments', () => {
     expect(parsed.body.errorKey).toBe('logistics.validation.addressRequired');
   });
 
+  test('returns 400 when shipment lastName is a NoSQL-style operator object', async () => {
+    const { handler, orderModel } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/shipments',
+        body: {
+          lastName: { $ne: null },
+          phoneNumber: '+85291234567',
+          address: '1 Test Road',
+        },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(orderModel.updateMany).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 when shipment address exceeds the max length', async () => {
+    const { handler, orderModel } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/shipments',
+        body: {
+          lastName: 'Chan',
+          phoneNumber: '+85291234567',
+          address: 'X'.repeat(501),
+        },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('logistics.validation.addressRequired');
+    expect(orderModel.updateMany).not.toHaveBeenCalled();
+  });
+
   test('returns 500 when SF API returns no waybill', async () => {
     const { handler } = loadHandlerWithMocks({
       callSfServiceResult: { msgData: { waybillNoInfoList: [] } },
@@ -925,6 +987,25 @@ describe('POST /logistics/cloud-waybill', () => {
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
     expect(parsed.body.errorKey).toBe('logistics.validation.waybillNoRequired');
+  });
+
+  test('returns 400 when waybillNo is a NoSQL-style operator object', async () => {
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/cloud-waybill',
+        body: { waybillNo: { $gt: '' } },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(['logistics.validation.waybillNoRequired', 'common.invalidBodyParams']).toContain(
+      parsed.body.errorKey
+    );
   });
 
   test('returns 400 when body is null', async () => {

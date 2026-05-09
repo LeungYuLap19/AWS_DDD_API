@@ -107,6 +107,11 @@ function authHeaders(token, extra = {}) {
   };
 }
 
+function responseData(body) {
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
 function expectedUnauthenticatedStatuses() {
   return AUTH_BYPASS === 'true' ? [401, 403, 404] : [401, 403];
 }
@@ -397,12 +402,13 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body.transferId).toBeDefined();
-      expect(String(res.body.petId)).toBe(String(state.primaryPetId));
-      expect(res.body.form.regPlace).toBe('Hong Kong');
+      const createData = responseData(res.body);
+      expect(createData.id).toBeDefined();
+      expect(String(createData.petId)).toBe(String(state.primaryPetId));
+      expect(createData.regPlace).toBe('Hong Kong');
 
       const transferArr = await getTransferArray(state.primaryPetId);
-      const record = transferArr.find((t) => String(t._id) === res.body.transferId);
+      const record = transferArr.find((t) => String(t._id) === createData.id);
       expect(record).toBeDefined();
       expect(record.regPlace).toBe('Hong Kong');
       expect(record.transferOwner).toBe('Alice');
@@ -410,7 +416,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       // Clean up the transfer record for later tests
       await petsCol().updateOne(
         { _id: state.primaryPetId },
-        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(res.body.transferId) } } }
+        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(createData.id) } } }
       );
     });
 
@@ -429,10 +435,11 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body.transferId).toBeDefined();
+      const createData = responseData(res.body);
+      expect(createData.id).toBeDefined();
 
       const transferArr = await getTransferArray(state.primaryPetId);
-      const record = transferArr.find((t) => String(t._id) === res.body.transferId);
+      const record = transferArr.find((t) => String(t._id) === createData.id);
       expect(record).toBeDefined();
       expect(record.regPlace).toBeNull();
       expect(record.regDate).toBeNull();
@@ -440,7 +447,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
 
       await petsCol().updateOne(
         { _id: state.primaryPetId },
-        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(res.body.transferId) } } }
+        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(createData.id) } } }
       );
     });
 
@@ -456,11 +463,12 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(201);
-      expect(res.body.transferId).toBeDefined();
+      const createData = responseData(res.body);
+      expect(createData.id).toBeDefined();
 
       await petsCol().updateOne(
         { _id: state.ngoPetId },
-        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(res.body.transferId) } } }
+        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(createData.id) } } }
       );
     });
 
@@ -476,7 +484,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petTransfer.errors.invalidPetId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 400 for invalid date format', async () => {
@@ -568,10 +576,12 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
 
       expect(res1.status).toBe(201);
       expect(res2.status).toBe(201);
-      expect(res1.body.transferId).not.toBe(res2.body.transferId);
+      const res1Data = responseData(res1.body);
+      const res2Data = responseData(res2.body);
+      expect(res1Data.id).not.toBe(res2Data.id);
 
       const transferArr = await getTransferArray(state.primaryPetId);
-      const ids = [res1.body.transferId, res2.body.transferId];
+      const ids = [res1Data.id, res2Data.id];
       for (const id of ids) {
         expect(transferArr.find((t) => String(t._id) === id)).toBeDefined();
         await petsCol().updateOne(
@@ -596,7 +606,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const patchRes = await req(
         'PATCH',
@@ -630,7 +640,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const patchRes = await req(
         'PATCH',
@@ -663,7 +673,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       // An empty body {} is rejected by parseBody's requireNonEmpty check before reaching
       // the noFieldsToUpdate check. Send a body with an unrecognized field: Zod strips it,
@@ -695,7 +705,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const patchRes = await req(
         'PATCH',
@@ -740,7 +750,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.secondaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
       const originalRegPlace = 'Secondary';
 
       const res = await req(
@@ -775,7 +785,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petTransfer.errors.transfer.invalidTransferId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
   });
 
@@ -793,7 +803,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const deleteRes = await req(
         'DELETE',
@@ -803,7 +813,8 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(deleteRes.status).toBe(200);
-      expect(deleteRes.body.transferId).toBe(transferId);
+      expect(deleteRes.body.success).toBe(true);
+      expect(responseData(deleteRes.body)).toBeNull();
 
       const transferArr = await getTransferArray(state.primaryPetId);
       const record = transferArr.find((t) => String(t._id) === transferId);
@@ -837,7 +848,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.secondaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const res = await req(
         'DELETE',
@@ -870,7 +881,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const first = await req(
         'DELETE',
@@ -912,7 +923,8 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(String(res.body.petId)).toBe(String(state.ngoPetId));
+      expect(res.body.success).toBe(true);
+      expect(responseData(res.body)).toBeNull();
 
       const pet = await petsCol().findOne({ _id: state.ngoPetId });
       expect(String(pet.userId)).toBe(String(state.targetUserId));
@@ -988,7 +1000,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(res.body?.petId).toBeDefined();
+      expect(res.body.success).toBe(true);
     });
 
     test('succeeds with 200 when only UserContact is provided (UserEmail not required)', async () => {
@@ -1003,7 +1015,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(res.body?.petId).toBeDefined();
+      expect(res.body.success).toBe(true);
     });
 
     test('returns 400 for invalid email format', async () => {
@@ -1287,14 +1299,14 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
       expect(after).toBe(before + 1);
 
       const transferArr = await getTransferArray(state.primaryPetId);
-      const record = transferArr.find((t) => String(t._id) === res.body.transferId);
+      const record = transferArr.find((t) => String(t._id) === responseData(res.body).id);
       expect(record.regPlace).toBe('Legit');
       expect(record.deleted).toBeUndefined();
       expect(record.isAdmin).toBeUndefined();
 
       await petsCol().updateOne(
         { _id: state.primaryPetId },
-        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(res.body.transferId) } } }
+        { $pull: { transfer: { _id: new mongoose.Types.ObjectId(responseData(res.body).id) } } }
       );
     });
 
@@ -1309,7 +1321,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const res = await req(
         'PATCH',
@@ -1341,7 +1353,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       // transferUpdateBodySchema uses z.object() without .strict(): Zod strips
       // unknown fields. The recognized field (regPlace) is still applied → 200.
@@ -1378,7 +1390,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const first = await req(
         'PATCH',
@@ -1471,7 +1483,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       const patchRes = await req(
         'PATCH',
@@ -1511,7 +1523,7 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const transferId = createRes.body.transferId;
+      const transferId = responseData(createRes.body).id;
 
       await req(
         'DELETE',
@@ -1552,14 +1564,14 @@ describe('Tier 3 - /pet/transfer via SAM local + UAT DB', () => {
 
       expect(res1.status).toBe(201);
       expect(res2.status).toBe(201);
-      expect(res1.body.transferId).not.toBe(res2.body.transferId);
+      expect(responseData(res1.body).id).not.toBe(responseData(res2.body).id);
 
       // Both records persisted independently
       const transferArr = await getTransferArray(state.primaryPetId);
-      expect(transferArr.find((t) => String(t._id) === res1.body.transferId)).toBeDefined();
-      expect(transferArr.find((t) => String(t._id) === res2.body.transferId)).toBeDefined();
+      expect(transferArr.find((t) => String(t._id) === responseData(res1.body).id)).toBeDefined();
+      expect(transferArr.find((t) => String(t._id) === responseData(res2.body).id)).toBeDefined();
 
-      for (const id of [res1.body.transferId, res2.body.transferId]) {
+      for (const id of [responseData(res1.body).id, responseData(res2.body).id]) {
         await petsCol().updateOne(
           { _id: state.primaryPetId },
           { $pull: { transfer: { _id: new mongoose.Types.ObjectId(id) } } }

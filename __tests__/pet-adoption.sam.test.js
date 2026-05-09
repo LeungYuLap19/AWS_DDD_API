@@ -141,6 +141,11 @@ async function req(method, path, body, headers = {}) {
   return { status: res.status, body: json, headers: Object.fromEntries(res.headers.entries()) };
 }
 
+function responseData(body) {
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
 async function connectDB() {
   if (!MONGODB_URI) throw new Error('env.json missing PetAdoptionFunction.MONGODB_URI');
   if (dbReady) return;
@@ -389,32 +394,34 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
   describe('GET /pet/adoption — public browse list', () => {
     test('returns 200 with expected shape', async () => {
       const res = await req('GET', '/pet/adoption', undefined, publicHeaders());
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body.adoptionList)).toBe(true);
-      expect(typeof res.body.totalResult).toBe('number');
-      expect(typeof res.body.maxPage).toBe('number');
+      expect(Array.isArray(data)).toBe(true);
+      expect(typeof res.body.pagination.total).toBe('number');
+      expect(typeof res.body.pagination.totalPages).toBe('number');
     });
 
     test('returns 200 with pagination when page=1 is provided', async () => {
       const res = await req('GET', '/pet/adoption?page=1', undefined, publicHeaders());
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body.adoptionList)).toBe(true);
+      expect(Array.isArray(data)).toBe(true);
     });
 
     test('returns 400 for non-numeric page param', async () => {
       const res = await req('GET', '/pet/adoption?page=abc', undefined, publicHeaders());
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAdoption.errors.browse.invalidPage');
+      expect(res.body?.errorKey).toBe('common.invalidQueryParams');
     });
 
     test('returns 400 for zero page param', async () => {
       const res = await req('GET', '/pet/adoption?page=0', undefined, publicHeaders());
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAdoption.errors.browse.invalidPage');
+      expect(res.body?.errorKey).toBe('common.invalidQueryParams');
     });
 
     test('returns 400 when search param exceeds 100 chars', async () => {
@@ -437,9 +444,10 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         undefined,
         publicHeaders()
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body.adoptionList)).toBe(true);
+      expect(Array.isArray(data)).toBe(true);
     });
 
     test('returns 200 with animal_type filter', async () => {
@@ -459,7 +467,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body.totalResult).toBe(second.body.totalResult);
+      expect(first.body.pagination.total).toBe(second.body.pagination.total);
     });
   });
 
@@ -474,7 +482,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       const res = await req('GET', '/pet/adoption/not-a-valid-id', undefined, publicHeaders());
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAdoption.errors.managed.invalidPetId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 200 or 404 for a valid ObjectId (no data guarantee for browse DB)', async () => {
@@ -506,10 +514,10 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
-      expect(res.body.form).toBeNull();
-      expect(String(res.body.petId)).toBe(String(state.primaryPetId));
+      expect(data).toBeNull();
     });
 
     test('returns the persisted form after a record is created', async () => {
@@ -524,6 +532,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
+      const createData = responseData(createRes.body);
 
       const getRes = await req(
         'GET',
@@ -531,12 +540,13 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         undefined,
         authHeaders(state.primaryToken)
       );
+      const getData = responseData(getRes.body);
 
       expect(getRes.status).toBe(200);
-      expect(getRes.body.form).not.toBeNull();
-      expect(getRes.body.form.postAdoptionName).toBe('Luna');
-      expect(getRes.body.form.isNeutered).toBe(true);
-      expect(getRes.body.adoptionId).toBe(createRes.body.adoptionId);
+      expect(getData).not.toBeNull();
+      expect(getData.postAdoptionName).toBe('Luna');
+      expect(getData.isNeutered).toBe(true);
+      expect(getData._id).toBe(createData._id);
     });
 
     test('returns 400 for invalid petId format', async () => {
@@ -551,7 +561,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAdoption.errors.managed.invalidPetId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 403 when caller reads another owner\'s managed record', async () => {
@@ -626,12 +636,13 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         },
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(201);
-      expect(res.body.adoptionId).toBeDefined();
-      expect(String(res.body.petId)).toBe(String(state.primaryPetId));
+      expect(data._id).toBeDefined();
+      expect(String(data.petId)).toBe(String(state.primaryPetId));
 
-      const adoptionOid = new mongoose.Types.ObjectId(res.body.adoptionId);
+      const adoptionOid = new mongoose.Types.ObjectId(data._id);
       const persisted = await adoptionsCol().findOne({ _id: adoptionOid });
       expect(persisted).not.toBeNull();
       expect(persisted.postAdoptionName).toBe('Mochi');
@@ -652,11 +663,12 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         { postAdoptionName: null },
         authHeaders(state.primaryToken)
       );
+      const data = responseData(res.body);
 
       expect(res.status).toBe(201);
-      expect(res.body.adoptionId).toBeDefined();
+      expect(data._id).toBeDefined();
 
-      const adoptionOid = new mongoose.Types.ObjectId(res.body.adoptionId);
+      const adoptionOid = new mongoose.Types.ObjectId(data._id);
       const persisted = await adoptionsCol().findOne({ _id: adoptionOid });
       expect(persisted).not.toBeNull();
       expect(persisted.isNeutered).toBeNull();
@@ -735,7 +747,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAdoption.errors.managed.invalidPetId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 403 when caller creates record for another owner\'s pet with no DB mutation', async () => {
@@ -795,7 +807,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const adoptionOid = new mongoose.Types.ObjectId(createRes.body.adoptionId);
+      const createData = responseData(createRes.body);
+      const adoptionOid = new mongoose.Types.ObjectId(createData._id);
 
       const patchRes = await req(
         'PATCH',
@@ -917,7 +930,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const adoptionOid = new mongoose.Types.ObjectId(createRes.body.adoptionId);
+      const createData = responseData(createRes.body);
+      const adoptionOid = new mongoose.Types.ObjectId(createData._id);
 
       const deleteRes = await req(
         'DELETE',
@@ -927,7 +941,6 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       );
 
       expect(deleteRes.status).toBe(200);
-      expect(deleteRes.body.petId).toBeDefined();
 
       const persisted = await adoptionsCol().findOne({ _id: adoptionOid });
       expect(persisted).toBeNull();
@@ -960,7 +973,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       );
 
       expect(getRes.status).toBe(200);
-      expect(getRes.body.form).toBeNull();
+      expect(responseData(getRes.body)).toBeNull();
     });
 
     test('returns 404 when no record exists to delete', async () => {
@@ -1142,7 +1155,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(201);
 
-      const persisted = await adoptionsCol().findOne({ _id: new mongoose.Types.ObjectId(res.body.adoptionId) });
+      const data = responseData(res.body);
+      const persisted = await adoptionsCol().findOne({ _id: new mongoose.Types.ObjectId(data._id) });
       expect(persisted).not.toBeNull();
       expect(persisted.postAdoptionName).toBe('Legit');            // allowed field persisted
       expect(String(persisted.petId)).toBe(String(state.primaryPetId)); // Lambda-assigned petId, not attacker's
@@ -1164,7 +1178,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const adoptionOid = new mongoose.Types.ObjectId(createRes.body.adoptionId);
+      const createData = responseData(createRes.body);
+      const adoptionOid = new mongoose.Types.ObjectId(createData._id);
 
       const before = await adoptionsCol().findOne({ _id: adoptionOid });
 
@@ -1193,7 +1208,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const adoptionOid = new mongoose.Types.ObjectId(createRes.body.adoptionId);
+      const createData = responseData(createRes.body);
+      const adoptionOid = new mongoose.Types.ObjectId(createData._id);
 
       // petAdoptionUpdateBodySchema uses z.object() without .strict(): Zod strips
       // unknown fields (isAdmin, deleted, __v). The known field (postAdoptionName)
@@ -1254,7 +1270,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const adoptionOid = new mongoose.Types.ObjectId(createRes.body.adoptionId);
+      const createData = responseData(createRes.body);
+      const adoptionOid = new mongoose.Types.ObjectId(createData._id);
 
       const first = await req(
         'PATCH',
@@ -1313,7 +1330,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(createRes.status).toBe(201);
-      const adoptionOid = new mongoose.Types.ObjectId(createRes.body.adoptionId);
+      const createData = responseData(createRes.body);
+      const adoptionOid = new mongoose.Types.ObjectId(createData._id);
 
       const patchRes = await req(
         'PATCH',
@@ -1345,7 +1363,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
       expect(getRes.status).toBe(200);
-      expect(getRes.body.form).toBeNull();
+      expect(responseData(getRes.body)).toBeNull();
     });
 
     test('PATCH after DELETE returns 404 and does not recreate the record', async () => {
@@ -1403,8 +1421,8 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body.form).toBeNull();
-      expect(second.body.form).toBeNull();
+      expect(responseData(first.body)).toBeNull();
+      expect(responseData(second.body)).toBeNull();
     });
   });
 

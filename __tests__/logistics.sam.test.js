@@ -142,6 +142,11 @@ function publicHeaders(extra = {}) {
  * unauthenticated requests never reach a 401. We accept 401/403/404 when bypass
  * is off, and skip (return early) when it is on.
  */
+function responseData(body) {
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
 function isAuthBypass() {
   return AUTH_BYPASS === 'true';
 }
@@ -773,9 +778,9 @@ describe('Tier 3+4 — /logistics via SAM local + UAT DB', () => {
       expect([200, 401, 500]).toContain(res.status);
 
       if (res.status === 200) {
-        expect(typeof res.body?.bearer_token).toBe('string');
-        sfBearerToken = res.body.bearer_token;
-        console.info(`[info] SF address bearer_token obtained: ${sfBearerToken.slice(0, 20)}…`);
+        expect(typeof responseData(res.body)?.bearerToken).toBe('string');
+        sfBearerToken = responseData(res.body).bearerToken;
+        console.info(`[info] SF address bearerToken obtained: ${sfBearerToken.slice(0, 20)}…`);
       } else {
         console.warn(`[warn] POST /logistics/token → status ${res.status}`);
       }
@@ -797,7 +802,7 @@ describe('Tier 3+4 — /logistics via SAM local + UAT DB', () => {
       expect([200, 500]).toContain(res.status);
 
       if (res.status === 200) {
-        expect(Array.isArray(res.body?.area_list)).toBe(true);
+        expect(Array.isArray(responseData(res.body)?.areaList)).toBe(true);
       } else {
         console.warn('[warn] POST /logistics/lookups/areas → SF API unavailable (status 500)');
       }
@@ -819,7 +824,7 @@ describe('Tier 3+4 — /logistics via SAM local + UAT DB', () => {
       expect([200, 500]).toContain(res.status);
 
       if (res.status === 200) {
-        expect(res.body).toHaveProperty('netCode');
+        expect(responseData(res.body)).toHaveProperty('netCode');
       }
     });
 
@@ -839,7 +844,7 @@ describe('Tier 3+4 — /logistics via SAM local + UAT DB', () => {
       expect([200, 500]).toContain(res.status);
 
       if (res.status === 200) {
-        expect(res.body).toHaveProperty('addresses');
+        expect(responseData(res.body)).toHaveProperty('addresses');
       }
     });
 
@@ -860,8 +865,8 @@ describe('Tier 3+4 — /logistics via SAM local + UAT DB', () => {
       expect([200, 500]).toContain(res.status);
 
       if (res.status === 200) {
-        expect(typeof res.body?.trackingNumber).toBe('string');
-        console.info(`[info] SF trackingNumber: ${res.body.trackingNumber}`);
+        expect(typeof responseData(res.body)?.trackingNumber).toBe('string');
+        console.info(`[info] SF trackingNumber: ${responseData(res.body).trackingNumber}`);
       } else {
         console.warn('[warn] POST /logistics/shipments → SF API unavailable (status 500)');
       }
@@ -879,7 +884,7 @@ describe('Tier 3+4 — /logistics via SAM local + UAT DB', () => {
       expect([200, 401, 500]).toContain(res.status);
 
       if (res.status === 200) {
-        expect(typeof res.body?.waybillNo).toBe('string');
+        expect(typeof responseData(res.body)?.waybillNo).toBe('string');
       }
     });
   });
@@ -910,13 +915,13 @@ describe('Tier 3+4 — /logistics via SAM local + UAT DB', () => {
       // If SF API is unavailable, the handler returns 500 before writing to DB.
       // Accept both outcomes and only assert the DB when the call succeeded.
       if (res.status === 200) {
-        expect(typeof res.body?.trackingNumber).toBe('string');
+        expect(typeof responseData(res.body)?.trackingNumber).toBe('string');
 
         // Verify the waybill was persisted in the order collection.
         const order = await ordersCol().findOne({ tempId: state.orderTempId });
         expect(order).not.toBeNull();
         expect(typeof order.sfWayBillNumber).toBe('string');
-        expect(order.sfWayBillNumber).toBe(res.body.trackingNumber);
+        expect(order.sfWayBillNumber).toBe(responseData(res.body).trackingNumber);
         console.info(`[info] DB persistence confirmed: sfWayBillNumber = ${order.sfWayBillNumber}`);
       } else {
         console.warn('[warn] SF API unavailable — DB persistence assertion skipped (status 500)');

@@ -464,6 +464,92 @@ describe('pet-medical handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(400);
     });
 
+    test('POST create rejects NoSQL operator injection in medicalPlace', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/general`,
+          resource: '/pet/medical/{petId}/general',
+          pathParameters: { petId },
+          body: JSON.stringify({ medicalPlace: { $gt: '' } }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(medicalModel.create).not.toHaveBeenCalled();
+    });
+
+    test('POST create sanitizes HTML in free-text fields before persistence', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const createdId = new mongoose.Types.ObjectId();
+
+      medicalModel.create.mockResolvedValueOnce({
+        _id: createdId,
+        toObject: () => ({
+          _id: createdId,
+          petId,
+          medicalPlace: 'alert(1)Clinic A',
+          medicalDoctor: 'Dr. Lee',
+        }),
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/general`,
+          resource: '/pet/medical/{petId}/general',
+          pathParameters: { petId },
+          body: JSON.stringify({
+            medicalPlace: '<script>alert(1)</script>Clinic A',
+            medicalDoctor: '<b>Dr. Lee</b>',
+          }),
+          authorizer,
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(201);
+      expect(medicalModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          petId,
+          medicalPlace: 'alert(1)Clinic A',
+          medicalDoctor: 'Dr. Lee',
+        })
+      );
+      expect(parsed.body.data.medicalPlace).toBe('alert(1)Clinic A');
+      expect(parsed.body.data.medicalDoctor).toBe('Dr. Lee');
+    });
+
+    test('POST create rejects oversized medicalDoctor values', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/general`,
+          resource: '/pet/medical/{petId}/general',
+          pathParameters: { petId },
+          body: JSON.stringify({ medicalDoctor: 'D'.repeat(101) }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(medicalModel.create).not.toHaveBeenCalled();
+    });
+
     test('PATCH update with invalid medicalId returns 400', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const { petId, petDoc } = ownPet(authUserId);
@@ -505,6 +591,28 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(400);
       expect(parsed.body.errorKey).toBe('common.missingBodyParams');
+    });
+
+    test('PATCH update rejects NoSQL operator injection in medicalPlace', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const { petId, petDoc } = ownPet(authUserId);
+      const medicalId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, medicalModel } = loadHandlerWithMocks({ authUserId, petDoc });
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/medical/${petId}/general/${medicalId}`,
+          resource: '/pet/medical/{petId}/general/{medicalId}',
+          pathParameters: { petId, medicalId },
+          body: JSON.stringify({ medicalPlace: { $set: 'Injected' } }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(medicalModel.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
     test('PATCH update returns 404 when record not found', async () => {

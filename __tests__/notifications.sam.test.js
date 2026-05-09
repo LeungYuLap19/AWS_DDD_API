@@ -91,6 +91,11 @@ function authHeaders(token, extra = {}) {
   };
 }
 
+function responseData(body) {
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
 // With AUTH_BYPASS=true the authorizer injects a bypass identity (no real userId),
 // so requireAuthContext may return 401/403/404 or 500 depending on the bypass payload.
 function expectedUnauthenticatedStatuses() {
@@ -278,8 +283,9 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.notifications)).toBe(true);
-      expect(res.body.count).toBe(0);
+      const data = responseData(res.body);
+      expect(Array.isArray(data)).toBe(true);
+      expect(res.body.pagination.total).toBe(0);
     });
 
     test('returns notifications seeded directly to DB', async () => {
@@ -316,9 +322,10 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       const res = await req('GET', '/notifications/me', undefined, authHeaders(state.primaryToken));
 
       expect(res.status).toBe(200);
-      expect(res.body.count).toBe(2);
-      expect(res.body.notifications.every((n) => n.__v === undefined)).toBe(true);
-      expect(res.body.notifications.some((n) => n.type === 'vaccine_reminder')).toBe(true);
+      const data = responseData(res.body);
+      expect(res.body.pagination.total).toBe(2);
+      expect(data.every((n) => n.__v === undefined)).toBe(true);
+      expect(data.some((n) => n.type === 'vaccine_reminder')).toBe(true);
     });
 
     test('only returns notifications belonging to the caller, not other users', async () => {
@@ -355,8 +362,9 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       const res = await req('GET', '/notifications/me', undefined, authHeaders(state.primaryToken));
 
       expect(res.status).toBe(200);
-      expect(res.body.count).toBe(1);
-      expect(res.body.notifications[0].type).toBe('vaccine_reminder');
+      const data = responseData(res.body);
+      expect(res.body.pagination.total).toBe(1);
+      expect(data[0].type).toBe('vaccine_reminder');
     });
 
     test('archived notifications are still returned by GET (isArchived=true)', async () => {
@@ -380,8 +388,9 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       const res = await req('GET', '/notifications/me', undefined, authHeaders(state.primaryToken));
 
       expect(res.status).toBe(200);
-      expect(res.body.count).toBe(1);
-      expect(res.body.notifications[0].isArchived).toBe(true);
+      const data = responseData(res.body);
+      expect(res.body.pagination.total).toBe(1);
+      expect(data[0].isArchived).toBe(true);
     });
 
     test('repeated GET requests are stable across warm invocations', async () => {
@@ -394,7 +403,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body.count).toBe(second.body.count);
+      expect(first.body.pagination.total).toBe(second.body.pagination.total);
     });
   });
 
@@ -428,7 +437,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.notificationId).toBe(notificationId);
+      expect(responseData(res.body)).toBeNull();
 
       const persisted = await notificationsCol().findOne({ _id: insertResult.insertedId });
       expect(persisted.isArchived).toBe(true);
@@ -463,7 +472,8 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       const getRes = await req('GET', '/notifications/me', undefined, authHeaders(state.primaryToken));
 
       expect(getRes.status).toBe(200);
-      const updated = getRes.body.notifications.find((n) => n._id.toString() === notificationId);
+      const getData = responseData(getRes.body);
+      const updated = getData.find((n) => n._id.toString() === notificationId);
       expect(updated).toBeDefined();
       expect(updated.isArchived).toBe(true);
     });
@@ -593,10 +603,11 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.notification).toBeDefined();
-      expect(res.body.notification._id).toBeDefined();
+      const data = responseData(res.body);
+      expect(data).toBeDefined();
+      expect(data._id).toBeDefined();
 
-      const createdId = new mongoose.Types.ObjectId(res.body.notification._id);
+      const createdId = new mongoose.Types.ObjectId(data._id);
       state.createdNotificationIds.push(createdId);
 
       const persisted = await notificationsCol().findOne({ _id: createdId });
@@ -628,7 +639,8 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
 
-      const createdId = new mongoose.Types.ObjectId(res.body.notification._id);
+      const data = responseData(res.body);
+      const createdId = new mongoose.Types.ObjectId(data._id);
       state.createdNotificationIds.push(createdId);
 
       const persisted = await notificationsCol().findOne({ _id: createdId });
@@ -657,7 +669,8 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
 
-      const createdId = new mongoose.Types.ObjectId(res.body.notification._id);
+      const data = responseData(res.body);
+      const createdId = new mongoose.Types.ObjectId(data._id);
       state.createdNotificationIds.push(createdId);
 
       const persisted = await notificationsCol().findOne({ _id: createdId });
@@ -681,14 +694,16 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
         authHeaders(state.adminToken)
       );
       expect(dispatchRes.status).toBe(200);
-      const createdId = new mongoose.Types.ObjectId(dispatchRes.body.notification._id);
+      const dispatchData = responseData(dispatchRes.body);
+      const createdId = new mongoose.Types.ObjectId(dispatchData._id);
       state.createdNotificationIds.push(createdId);
 
       const getRes = await req('GET', '/notifications/me', undefined, authHeaders(state.primaryToken));
 
       expect(getRes.status).toBe(200);
-      expect(getRes.body.count).toBeGreaterThanOrEqual(1);
-      const found = getRes.body.notifications.find((n) => n._id.toString() === createdId.toString());
+      expect(getRes.body.pagination.total).toBeGreaterThanOrEqual(1);
+      const getData = responseData(getRes.body);
+      const found = getData.find((n) => n._id.toString() === createdId.toString());
       expect(found).toBeDefined();
       expect(found.type).toBe('ownership_transfer');
     });
@@ -995,14 +1010,16 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
 
       const first = await req('POST', '/notifications/dispatch', body, authHeaders(state.adminToken));
       expect(first.status).toBe(200);
-      state.createdNotificationIds.push(new mongoose.Types.ObjectId(first.body.notification._id));
+      const firstData = responseData(first.body);
+      state.createdNotificationIds.push(new mongoose.Types.ObjectId(firstData._id));
 
       const second = await req('POST', '/notifications/dispatch', body, authHeaders(state.adminToken));
       expect(second.status).toBe(200);
-      state.createdNotificationIds.push(new mongoose.Types.ObjectId(second.body.notification._id));
+      const secondData = responseData(second.body);
+      state.createdNotificationIds.push(new mongoose.Types.ObjectId(secondData._id));
 
       // No deduplication — each dispatch creates its own document
-      expect(first.body.notification._id).not.toBe(second.body.notification._id);
+      expect(firstData._id).not.toBe(secondData._id);
 
       const count = await notificationsCol().countDocuments({
         userId: state.primaryUserId,

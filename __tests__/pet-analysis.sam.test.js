@@ -115,6 +115,11 @@ function publicHeaders(extra = {}) {
   };
 }
 
+function responseData(body) {
+  if (body && 'data' in body) return body.data;
+  return body ?? null;
+}
+
 function expectedUnauthenticatedStatuses() {
   return AUTH_BYPASS === 'true' ? [401, 403, 404] : [401, 403];
 }
@@ -860,7 +865,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(201);
       expect(res.body?.success).toBe(true);
-      expect(res.body?.result?.eyeDisease_eng).toBe('Cataract');
+      expect(responseData(res.body)?.eyeDisease_eng).toBe('Cataract');
     });
 
     test('returns null fields for "Normal" disease name', async () => {
@@ -873,9 +878,9 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(201);
       expect(res.body?.success).toBe(true);
-      expect(res.body?.result?.id).toBeNull();
-      expect(res.body?.result?.eyeDiseaseEng).toBeNull();
-      expect(res.body?.result?.eyeDiseaseChi).toBeNull();
+      expect(responseData(res.body)?.id).toBeNull();
+      expect(responseData(res.body)?.eyeDiseaseEng).toBeNull();
+      expect(responseData(res.body)?.eyeDiseaseChi).toBeNull();
     });
 
     test('returns 404 for unknown disease name', async () => {
@@ -933,10 +938,10 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
       expect(res.body?.success).toBe(true);
-      expect(Array.isArray(res.body?.result)).toBe(true);
-      expect(res.body.result.length).toBeGreaterThanOrEqual(2);
+      expect(Array.isArray(responseData(res.body))).toBe(true);
+      expect(responseData(res.body).length).toBeGreaterThanOrEqual(2);
 
-      const first = res.body.result[0];
+      const first = responseData(res.body)[0];
       expect(first).toHaveProperty('petId');
       expect(first).toHaveProperty('image');
       expect(first).toHaveProperty('result');
@@ -956,8 +961,8 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
       expect(res.body?.success).toBe(true);
-      expect(Array.isArray(res.body?.result)).toBe(true);
-      expect(res.body.result).toHaveLength(0);
+      expect(Array.isArray(responseData(res.body))).toBe(true);
+      expect(responseData(res.body)).toHaveLength(0);
     });
 
     test('NGO owner can access eye log for NGO-owned pet', async () => {
@@ -992,7 +997,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAnalysis.errors.invalidObjectId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 400 when no image_url and no file attached', async () => {
@@ -1064,9 +1069,8 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       expect([200, 400, 500, 502, 504]).toContain(res.status);
 
       if (res.status === 200) {
-        expect(res.body?.result).toBeDefined();
-        expect(res.body?.request_id).toBeDefined();
-        expect(res.body?.time_taken).toBeDefined();
+        expect(responseData(res.body)?.result).toBeDefined();
+        expect(responseData(res.body)?.requestId).toBeDefined();
 
         const logEntry = await eyeAnalysisCol().findOne({
           petId: state.primaryPetId.toString(),
@@ -1141,7 +1145,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAnalysis.errors.updatePetEye.invalidPetIdFormat');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 400 for invalid date format', async () => {
@@ -1206,7 +1210,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(201);
       expect(res.body?.success).toBe(true);
-      expect(res.body?.result).toBeDefined();
+      expect(responseData(res.body)).toBeDefined();
 
       const pet = await petsCol().findOne({ _id: state.primaryPetId });
       expect(pet.eyeimages).toHaveLength(1);
@@ -1395,7 +1399,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAnalysis.errors.unknownField');
+      expect(res.body?.errorKey).toBe('common.invalidBodyParams');
     });
 
     test('returns 400 for malformed JSON body', async () => {
@@ -1483,8 +1487,8 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       if (res.status === 200) {
         expect(res.body?.success).toBe(true);
-        expect(typeof res.body?.url).toBe('string');
-        expect(res.body.url).toMatch(/^https?:\/\//);
+        expect(typeof responseData(res.body)?.url).toBe('string');
+        expect(responseData(res.body).url).toMatch(/^https?:\/\//);
       }
     });
 
@@ -1499,7 +1503,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       if (res.status === 200) {
         expect(res.body?.success).toBe(true);
-        expect(typeof res.body?.url).toBe('string');
+        expect(typeof responseData(res.body)?.url).toBe('string');
       }
     });
   });
@@ -1634,8 +1638,8 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       if (res.status === 200) {
         expect(res.body?.success).toBe(true);
-        expect(typeof res.body?.url).toBe('string');
-        expect(res.body.url).toMatch(/^https?:\/\//);
+        expect(typeof responseData(res.body)?.url).toBe('string');
+        expect(responseData(res.body).url).toMatch(/^https?:\/\//);
       }
     });
 
@@ -1764,7 +1768,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAnalysis.errors.invalidObjectId');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('PATCH eye — self-access bypass: body petId targeting another pet is caught', async () => {
@@ -1787,7 +1791,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body?.errorKey).toBe('petAnalysis.errors.updatePetEye.invalidPetIdFormat');
+      expect(res.body?.errorKey).toBe('common.invalidObjectId');
 
       const after = await petsCol().findOne({ _id: state.secondaryPetId });
       expect((after?.eyeimages || []).length).toBe(beforeLen);
@@ -1883,7 +1887,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(201);
       expect(second.status).toBe(201);
-      expect(first.body?.result?.eyeDisease_eng).toBe(second.body?.result?.eyeDisease_eng);
+      expect(responseData(first.body)?.eyeDisease_eng).toBe(responseData(second.body)?.eyeDisease_eng);
     });
 
     test('warm repeated PATCH requests each append to eyeimages (no corruption)', async () => {
@@ -1934,7 +1938,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(first.body?.result?.length).toBe(second.body?.result?.length);
+      expect(responseData(first.body)?.length).toBe(responseData(second.body)?.length);
     });
   });
 

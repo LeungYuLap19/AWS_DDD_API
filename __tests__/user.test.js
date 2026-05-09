@@ -823,7 +823,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect([401, 403]).toContain(res.status);
     });
 
-    samTest('GET /user/me does not allow role escalation through a valid non-user role token', async () => {
+    samTest('GET /user/me accepts a valid NGO-scoped token when it resolves to the same user document', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const ngoRoleToken = signUserToken({

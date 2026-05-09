@@ -1,52 +1,51 @@
-<!-- markdownlint-disable MD024 -->
 # Pet Transfer API
 
 **Base URL (Development):** `https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development`
 
-Ownership-transfer record management for a pet. Transfer history is stored as subdocuments within the `Pet` document — there is no separate collection. All routes require an authenticated caller who is the individual owner or the NGO owner of the pet. The NGO reassignment route additionally requires the caller's `userRole` to be `ngo`.
+**Lambda:** `aws-ddd-api-{stage}-pet-transfer`
+
+Transfer-history management for pets plus NGO-to-user reassignment. Transfer records are stored inside the `Pet` document, not in a separate top-level collection. All routes in this document require `x-api-key`. All routes also require a Bearer JWT, and the NGO reassignment route additionally requires an NGO-scoped caller.
+
+---
 
 ## Overview
 
-| Method | Path | Auth | Lambda | Purpose |
-| --- | --- | --- | --- | --- |
-| POST | `/pet/transfer/{petId}` | `x-api-key` + Bearer JWT | `pet-transfer` | Append a new transfer history record to the pet |
-| PATCH | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | `pet-transfer` | Partially update an existing transfer record |
-| DELETE | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | `pet-transfer` | Remove a transfer record |
-| POST | `/pet/transfer/{petId}/ngo-reassignment` | `x-api-key` + Bearer JWT (role: `ngo`) | `pet-transfer` | Validate a target user by email and/or phone and reassign pet ownership from NGO to that user |
+### Route Summary
 
-## Integration-Critical Contract Notes
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| POST | `/pet/transfer/{petId}` | `x-api-key` + Bearer JWT | Append a transfer-history row to the pet |
+| PATCH | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | Update one transfer-history row |
+| DELETE | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | Remove one transfer-history row |
+| POST | `/pet/transfer/{petId}/ngo-reassignment` | `x-api-key` + Bearer JWT with NGO role | Reassign NGO-owned pet ownership to an existing user |
+
+### Integration-Critical Behavior
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Subdocument storage | Transfer records are stored inside `Pet.transfer[]`. There is no separate collection. Each record has a MongoDB-generated `_id` which serves as the `transferId`. |
-| POST with empty body | `POST /pet/transfer/{petId}` rejects an empty `{}` body with `400 common.missingBodyParams` — the `parseBody` helper defaults to `requireNonEmpty: true`. A non-empty body with all known fields is required. |
-| Unknown fields in POST/PATCH | POST and PATCH schemas are **not** strict. Unknown fields are silently stripped and do not cause a `400`. This differs from `pet-source`. |
-| PATCH response | PATCH returns `form: data` where `data` is the parsed request body, **not** the full stored record. Fields not included in the request are absent from `form`. Refetch via a separate GET endpoint if the full updated record is needed. |
-| PATCH noFieldsToUpdate | A 400 `common.noFieldsToUpdate` is returned when a non-empty body is submitted whose fields are all stripped by Zod (i.e., all fields are unknown). An empty `{}` body returns `400 common.missingBodyParams` before reaching that check. |
-| DELETE method | DELETE does not require a body. The transfer record identity is supplied via `{transferId}` in the path. |
-| NGO transfer side effects | `POST /pet/transfer/{petId}/ngo-reassignment` writes data to both `Pet.transferNGO[0]` **and** `Pet.transfer[0]` (using `$set` with index notation — existing first elements are overwritten). `pet.userId` is set to the target user's `_id` and `pet.ngoId` is cleared to `""`. |
-| NGO role check order | `requireNGORole` fires **before** pet ownership checks and `parseBody`. A non-NGO caller receives `403` regardless of whether the pet exists or the body is valid. |
-| Dual-identity user lookup | The NGO reassignment requires **at least one** of `UserEmail` or `UserContact`. When both are supplied, both must resolve to the same `User` document — `400 userIdentityMismatch` fires if they differ. A generic `404` is returned when no user is found by the supplied identifier(s) (anti-enumeration). |
-| Email normalization | `UserEmail` is trimmed and lowercased before lookup. The lookup queries `User.email` which is stored with `trim` and `lowercase` Mongoose options. |
-| Phone format | `UserContact` must be E.164 format (`+[country code][number]`, e.g. `+85291234567`). A local number without the `+` prefix will fail validation. |
-| Date format | `regDate` accepts `DD/MM/YYYY` or ISO 8601 (`YYYY-MM-DD` or with time component). Separate `errorKey`s apply in the `transfer` and `ngoTransfer` namespaces. |
-| Ownership model | Lambda authorizes access via `pet.userId === jwt.userId` **or** `pet.ngoId === jwt.ngoId`. Soft-deleted pets (`deleted: true`) are treated as non-existent. |
+| Success wrapper | All success responses use the shared `{ success, message, data?, requestId }` envelope |
+| Create response | Create returns `data: { id, petId, regDate, regPlace, transferOwner, transferContact, transferRemark }` |
+| Update response | PATCH returns no `data`; the handler only returns success metadata |
+| Delete response | DELETE returns no `data` |
+| Strict schemas | Transfer create, update, and NGO reassignment request bodies are strict; extra fields are rejected with `common.invalidBodyParams` |
+| Empty update body | Empty `{}` body is rejected by shared body parsing before update logic runs |
+| No-op PATCH | The handler has an internal `common.noFieldsToUpdate` fallback, but with current strict schemas and shared parse defaults it is not the normal outcome for `{}` |
+| NGO reassignment side effect | Reassignment changes `pet.userId`, clears `pet.ngoId`, updates `transferNGO.0`, and mirrors transfer fields into `transfer.0` |
+
+---
 
 ## API Gateway And Auth Rules
 
 ### API Gateway Requirements
 
-| Route group | API key required | API Gateway authorizer |
+| Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| `POST /pet/transfer/{petId}` | Yes | `DddTokenAuthorizer` |
-| `PATCH /pet/transfer/{petId}/{transferId}` | Yes | `DddTokenAuthorizer` |
-| `DELETE /pet/transfer/{petId}/{transferId}` | Yes | `DddTokenAuthorizer` |
-| `POST /pet/transfer/{petId}/ngo-reassignment` | Yes | `DddTokenAuthorizer` |
-| `OPTIONS /pet/transfer/{petId}` | No | None |
-| `OPTIONS /pet/transfer/{petId}/{transferId}` | No | None |
-| `OPTIONS /pet/transfer/{petId}/ngo-reassignment` | No | None |
+| `/pet/transfer/{petId}` POST | Yes | `DddTokenAuthorizer` |
+| `/pet/transfer/{petId}/{transferId}` PATCH, DELETE | Yes | `DddTokenAuthorizer` |
+| `/pet/transfer/{petId}/ngo-reassignment` POST | Yes | `DddTokenAuthorizer` |
+| `OPTIONS` for the above routes | No | None |
 
-All protected deployed requests must send:
+Protected deployed requests must send:
 
 ```http
 x-api-key: <api-gateway-api-key>
@@ -54,35 +53,72 @@ Authorization: Bearer <access-token>
 Content-Type: application/json
 ```
 
-`OPTIONS` preflight does not require `x-api-key` and returns `204` with CORS headers.
+### Authorization Rules
 
-### Authorization And Ownership
-
-Protected routes require a valid Bearer JWT issued by the platform's token authorizer.
-
-The Lambda authorizes pet access when either condition is true:
+The Lambda authorizes access when either condition is true:
 
 - `pet.userId === jwt.userId`
-- `pet.ngoId` is set and `pet.ngoId === jwt.ngoId`
+- `pet.ngoId === jwt.ngoId`
 
-A caller that does not match either condition receives `403 common.forbidden`.
+If neither matches, the route returns `403 common.forbidden`.
 
-For `POST /pet/transfer/{petId}/ngo-reassignment`, the caller's `userRole` must additionally be `ngo` (case-insensitive). This check fires **before** pet ownership authorization.
+For `POST /pet/transfer/{petId}/ngo-reassignment`, the caller must additionally have NGO role. That role check runs before body validation and before reassignment logic.
+
+### Rate Limits
+
+| Route | Policy |
+| --- | --- |
+| Create transfer | IP 120 / 5 min, identifier 60 / 5 min |
+| Update transfer | IP 120 / 5 min, identifier 60 / 5 min |
+| Delete transfer | IP 120 / 5 min, identifier 60 / 5 min |
+| NGO reassignment | IP 30 / 60 min, identifier 15 / 60 min |
+
+Rate-limit failures return `429 common.rateLimited`.
 
 ### Localization
 
-- Locale priority: query `?lang`, then `language` / `lang` cookie, then `Accept-Language`
-- Default locale: `en`
-- `errorKey` is the stable integration key; `error` and `message` are localized strings
+- Locale priority is query `?lang` or `?locale`, then `language` / `lang` cookie, then `Accept-Language`
+- Default locale is `en`
+- Use `errorKey` for frontend branching
+
+### Authentication And Parse Behavior
+
+- All protected routes require a valid Bearer JWT; missing auth returns `401 common.unauthorized`
+- POST and PATCH routes use shared `parseBody` with strict Zod schemas
+- Malformed JSON, unknown extra fields, and schema mismatches return `400 common.invalidBodyParams`
+- Empty JSON bodies return `400 common.missingBodyParams`
+
+---
+
+## Success And Error Conventions
 
 ### Success Response Shape
 
-All Lambda-produced success responses include `success: true` and `requestId`.
+Create:
 
 ```json
 {
   "success": true,
-  "message": "Transfer record created successfully",
+  "message": "Created successfully",
+  "data": {
+    "id": "665f1a2b3c4d5e6f7a8b9c0d",
+    "petId": "665f0000000000000000abcd",
+    "regDate": "2024-01-15T00:00:00.000Z",
+    "regPlace": "Hong Kong",
+    "transferOwner": "Alice",
+    "transferContact": "+85291234567",
+    "transferRemark": "Rehomed"
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Update/delete/NGO reassignment:
+
+```json
+{
+  "success": true,
+  "message": "Updated successfully",
   "requestId": "aws-lambda-request-id"
 }
 ```
@@ -92,77 +128,27 @@ All Lambda-produced success responses include `success: true` and `requestId`.
 ```json
 {
   "success": false,
-  "errorKey": "petTransfer.errors.petNotFound",
-  "error": "Pet not found",
+  "errorKey": "petTransfer.errors.transfer.notFound",
+  "error": "localized message",
   "requestId": "aws-lambda-request-id"
 }
 ```
 
-### Request Body Validation
+### Path Parameters
 
-POST and PATCH bodies are parsed as `application/json` via the shared `parseBody` helper with Zod schemas. DELETE has no body.
-
-**`POST /pet/transfer/{petId}` and `PATCH /pet/transfer/{petId}/{transferId}` allowed fields:**
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `regDate` | string (optional) | `DD/MM/YYYY` or ISO 8601 |
-| `regPlace` | string (optional) | |
-| `transferOwner` | string (optional) | |
-| `transferContact` | string (optional) | |
-| `transferRemark` | string (optional) | Defaults to `""` on create |
-
-**`POST /pet/transfer/{petId}/ngo-reassignment` allowed fields:**
-
-| Field | Type | Required | Notes |
+| Param | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `UserEmail` | string | Conditional | Email of the target user; trimmed and lowercased; at least one of `UserEmail` or `UserContact` required |
-| `UserContact` | string | Conditional | Phone number of the target user; E.164 format; at least one of `UserEmail` or `UserContact` required |
-| `regDate` | string | No | `DD/MM/YYYY` or ISO 8601 |
-| `regPlace` | string | No | |
-| `transferOwner` | string | No | |
-| `transferContact` | string | No | |
-| `transferRemark` | string | No | |
-| `isTransferred` | boolean | No | Stored in `transferNGO[0]` only |
+| `petId` | string | Yes | MongoDB ObjectId |
+| `transferId` | string | Route-dependent | MongoDB ObjectId for transfer subdocument |
 
-**Unknown fields are silently stripped** in POST and PATCH transfer schemas. No error is returned for extra keys.
+Invalid ObjectId path parameters return `400 common.invalidObjectId`.
 
-`parseBody` returns these standardized `400` `errorKey`s:
+### Date Rules
 
-| Condition | `errorKey` |
-| --- | --- |
-| Malformed JSON (body is not valid JSON) | `common.invalidBodyParams` |
-| Empty body (`{}`, `null`, or missing) when `requireNonEmpty: true` applies | `common.missingBodyParams` |
-| Zod schema rejected the body and the first issue message is a dotted i18n key | that key |
+`regDate` accepts the flexible transfer date parser used by the handler. Invalid dates return:
 
-Note: `POST /pet/transfer/{petId}`, `PATCH`, and `POST /ngo-reassignment` all use the default `requireNonEmpty: true` — an empty `{}` body returns `400 common.missingBodyParams`.
-
----
-
-## Transfer Record Shape
-
-Transfer records are stored as subdocuments in `Pet.transfer[]`. Each record has its own `_id` field (used as `transferId` in path parameters and responses).
-
-### POST create — `form` shape
-
-The `form` in the `201` response is the constructed subdocument before it is written to MongoDB:
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `_id` | string | MongoDB ObjectId — this becomes `transferId` |
-| `regDate` | string (ISO) or null | Parsed from input; `null` when not provided |
-| `regPlace` | string or null | `null` when not provided |
-| `transferOwner` | string or null | `null` when not provided |
-| `transferContact` | string or null | `null` when not provided |
-| `transferRemark` | string | `""` (empty string) when not provided |
-
-### PATCH update — `form` shape
-
-The `form` in the `200` response is the **submitted request body** after Zod parsing — not the full stored record. Only fields present in the request appear in `form`. To retrieve the full updated document, call the GET endpoint (outside this Lambda — see legacy API or a separate read path).
-
-### NGO transfer — `form` shape
-
-The `form` in the `200` response is the Zod-parsed request body. It contains whichever of `UserEmail`, `UserContact` were provided, plus any optional fields.
+- `petTransfer.errors.transfer.invalidDateFormat` on create/update
+- `petTransfer.errors.ngoTransfer.invalidDateFormat` on NGO reassignment
 
 ---
 
@@ -170,32 +156,24 @@ The `form` in the `200` response is the Zod-parsed request body. It contains whi
 
 ### POST /pet/transfer/{petId}
 
-Append a new transfer history record to a pet's `transfer[]` array. All body fields are optional but at least one must be provided (empty body returns `400`).
+Append a transfer-history row to the pet.
 
-**Lambda:** `pet-transfer`  
+**Lambda owner:** `pet-transfer`  
 **Auth:** `x-api-key` + Bearer JWT required
 
-#### Path Parameters
+#### Create Request Body
 
-| Parameter | Type | Required | Notes |
+| Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `petId` | string | Yes | MongoDB ObjectId of the pet |
+| `regDate` | string | No | Flexible date string |
+| `regPlace` | string | No | Max 200 chars |
+| `transferOwner` | string | No | Max 200 chars |
+| `transferContact` | string | No | Max 50 chars |
+| `transferRemark` | string | No | Max 2000 chars |
 
-#### Body
+**Important:** the schema is strict. Unknown fields are rejected.
 
-All fields optional but at least one must be present (empty `{}` body returns `400 common.missingBodyParams`).
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `regDate` | string | `DD/MM/YYYY` or ISO 8601; validated after Zod parse |
-| `regPlace` | string | |
-| `transferOwner` | string | |
-| `transferContact` | string | |
-| `transferRemark` | string | Stored as `""` when absent |
-
-Unknown extra fields are silently stripped.
-
-**Example request:**
+#### Create Example Request
 
 ```json
 {
@@ -207,88 +185,40 @@ Unknown extra fields are silently stripped.
 }
 ```
 
-#### Success (201)
-
-```json
-{
-  "success": true,
-  "message": "Transfer record created successfully",
-  "petId": "6820000000000000000abc01",
-  "transferId": "6820000000000000000def01",
-  "form": {
-    "_id": "6820000000000000000def01",
-    "regDate": "2024-01-15T00:00:00.000Z",
-    "regPlace": "Hong Kong",
-    "transferOwner": "Alice",
-    "transferContact": "+85291234567",
-    "transferRemark": "Rehomed"
-  },
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-Empty-body create returns `400 common.missingBodyParams`. A minimal body (at least one field present, e.g. `{ "transferRemark": "" }`) creates a record with all optional fields null:
-
-```json
-{
-  "success": true,
-  "petId": "6820000000000000000abc01",
-  "transferId": "6820000000000000000def01",
-  "form": {
-    "_id": "6820000000000000000def01",
-    "regDate": null,
-    "regPlace": null,
-    "transferOwner": null,
-    "transferContact": null,
-    "transferRemark": ""
-  },
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-#### Errors
+#### Create Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petTransfer.errors.missingPetId` | `petId` path parameter absent |
-| 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
-| 400 | `common.missingBodyParams` | Body is empty (`{}`, `null`, or absent) |
-| 400 | `common.invalidBodyParams` | Malformed JSON body |
-| 400 | `petTransfer.errors.transfer.invalidDateFormat` | `regDate` is not `DD/MM/YYYY` or ISO 8601 |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
-| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is soft-deleted |
-| 500 | `common.internalError` | Unexpected error (e.g., DB connection failure) |
-
----
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `petTransfer.errors.transfer.invalidDateFormat` | Invalid `regDate` |
+| 400 | `common.invalidObjectId` | Invalid `petId` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
+| 429 | `common.rateLimited` | Create rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### PATCH /pet/transfer/{petId}/{transferId}
 
-Partially update an existing transfer record. The handler verifies the subdocument exists before writing. Only supplied fields are updated. An empty `{}` body or a body with only unknown fields is rejected.
+Update one transfer-history row.
 
-**Lambda:** `pet-transfer`  
+**Lambda owner:** `pet-transfer`  
 **Auth:** `x-api-key` + Bearer JWT required
 
-#### Path Parameters
+#### Update Request Body
 
-| Parameter | Type | Required | Notes |
+Any subset of the same fields accepted by create may be supplied.
+
+| Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `petId` | string | Yes | MongoDB ObjectId of the pet |
-| `transferId` | string | Yes | MongoDB ObjectId of the transfer subdocument |
+| `regDate` | string | No | Flexible date string |
+| `regPlace` | string | No | Max 200 chars |
+| `transferOwner` | string | No | Max 200 chars |
+| `transferContact` | string | No | Max 50 chars |
+| `transferRemark` | string | No | Max 2000 chars |
 
-#### Body
-
-At least one recognized field must be provided.
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `regDate` | string | `DD/MM/YYYY` or ISO 8601 |
-| `regPlace` | string | |
-| `transferOwner` | string | |
-| `transferContact` | string | |
-| `transferRemark` | string | |
-
-**Example request:**
+#### Update Example Request
 
 ```json
 {
@@ -297,265 +227,119 @@ At least one recognized field must be provided.
 }
 ```
 
-#### Success (200)
-
-`form` contains only the fields that were submitted in the request — not the full stored record.
-
-```json
-{
-  "success": true,
-  "message": "Transfer record updated successfully",
-  "petId": "6820000000000000000abc01",
-  "transferId": "6820000000000000000def01",
-  "form": {
-    "regPlace": "Tsuen Wan",
-    "transferRemark": "Updated contact"
-  },
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-#### Errors
+#### Update Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petTransfer.errors.missingPetId` | `petId` path parameter absent |
-| 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
-| 400 | `petTransfer.errors.transfer.missingTransferId` | `transferId` path parameter absent |
-| 400 | `petTransfer.errors.transfer.invalidTransferId` | `transferId` is not a valid MongoDB ObjectId |
-| 400 | `common.missingBodyParams` | Body is empty (`{}`, `null`, or absent) |
-| 400 | `petTransfer.errors.transfer.invalidDateFormat` | `regDate` is not `DD/MM/YYYY` or ISO 8601 |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
-| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is soft-deleted |
-| 404 | `petTransfer.errors.transfer.notFound` | Transfer subdocument does not exist on this pet |
-| 500 | `common.internalError` | Unexpected error |
-
----
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `petTransfer.errors.transfer.invalidDateFormat` | Invalid `regDate` |
+| 400 | `common.invalidObjectId` | Invalid `petId` or `transferId` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petTransfer.errors.transfer.notFound` | Transfer record does not exist on that pet |
+| 429 | `common.rateLimited` | Update rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### DELETE /pet/transfer/{petId}/{transferId}
 
-Remove a transfer record from a pet's `transfer[]` array. No body is required.
+Delete one transfer-history row.
 
-**Lambda:** `pet-transfer`  
+**Lambda owner:** `pet-transfer`  
 **Auth:** `x-api-key` + Bearer JWT required
 
-#### Path Parameters
-
-| Parameter | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `petId` | string | Yes | MongoDB ObjectId of the pet |
-| `transferId` | string | Yes | MongoDB ObjectId of the transfer subdocument to remove |
-
-#### Body
+#### Delete Request Body
 
 None.
 
-#### Success (200)
-
-```json
-{
-  "success": true,
-  "message": "Transfer record deleted successfully",
-  "petId": "6820000000000000000abc01",
-  "transferId": "6820000000000000000def01",
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-#### Errors
+#### Delete Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petTransfer.errors.missingPetId` | `petId` path parameter absent |
-| 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
-| 400 | `petTransfer.errors.transfer.missingTransferId` | `transferId` path parameter absent |
-| 400 | `petTransfer.errors.transfer.invalidTransferId` | `transferId` is not a valid MongoDB ObjectId |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.forbidden` | Caller is not the pet owner or NGO owner |
-| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is soft-deleted |
-| 404 | `petTransfer.errors.transfer.notFound` | `$pull` matched no document — transfer record not found on this pet |
-| 500 | `common.internalError` | Unexpected error |
-
----
+| 400 | `common.invalidObjectId` | Invalid `petId` or `transferId` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petTransfer.errors.transfer.notFound` | Transfer record does not exist on that pet |
+| 429 | `common.rateLimited` | Delete rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ### POST /pet/transfer/{petId}/ngo-reassignment
 
-Transfer a pet from NGO ownership to a target individual user. The caller must have `userRole: ngo`. The target user is verified using **at least one** of `UserEmail` or `UserContact`. When both are supplied, they must resolve to the same `User` document. A generic `404` is returned if no user matches the supplied identifier(s) (anti-enumeration).
+Reassign NGO-owned pet ownership to an existing active user.
 
-On success:
-- `Pet.transferNGO[0]` is set with the submitted fields (overwrites index 0)
-- `Pet.transfer[0]` is updated with the optional shared fields (overwrites index 0)
-- `pet.userId` is set to the target user's `_id`
-- `pet.ngoId` is cleared to `""`
+**Lambda owner:** `pet-transfer`  
+**Auth:** `x-api-key` + Bearer JWT required with NGO role
 
-**Lambda:** `pet-transfer`  
-**Auth:** `x-api-key` + Bearer JWT required (caller `userRole` must be `ngo`)
+#### NGO Reassignment Request Body
 
-#### Path Parameters
-
-| Parameter | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `petId` | string | Yes | MongoDB ObjectId of the pet |
-
-#### Body
+At least one of `UserEmail` or `UserContact` is required.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `UserEmail` | string | Conditional | Email of the target user; trimmed and lowercased before lookup; at least one of `UserEmail` or `UserContact` required |
-| `UserContact` | string | Conditional | Phone of the target user; must be E.164 (e.g. `+85291234567`); at least one of `UserEmail` or `UserContact` required |
-| `regDate` | string | No | `DD/MM/YYYY` or ISO 8601 |
-| `regPlace` | string | No | |
-| `transferOwner` | string | No | |
-| `transferContact` | string | No | |
-| `transferRemark` | string | No | |
-| `isTransferred` | boolean | No | Stored in `transferNGO[0]` only |
+| `UserEmail` | string | Conditional | Valid email format if provided |
+| `UserContact` | string | Conditional | Valid phone format if provided |
+| `regDate` | string | No | Flexible date string |
+| `regPlace` | string | No | Max 200 chars |
+| `transferOwner` | string | No | Max 200 chars |
+| `transferContact` | string | No | Max 50 chars |
+| `transferRemark` | string | No | Max 2000 chars |
+| `isTransferred` | boolean | No | Stored on `transferNGO.0` |
 
-**Example request:**
+When both `UserEmail` and `UserContact` are provided, both must resolve to the same active user.
+
+#### NGO Reassignment Example Request
 
 ```json
 {
-  "UserEmail": "adopter@example.com",
+  "UserEmail": "newowner@example.com",
   "UserContact": "+85291234567",
   "regDate": "2024-03-01",
-  "regPlace": "Mong Kok",
-  "transferOwner": "Bob",
+  "transferRemark": "Transferred out from NGO",
   "isTransferred": true
 }
 ```
 
-#### Success (200)
+#### NGO Reassignment Side Effects
 
-`form` is the Zod-parsed request body. Ownership has been reassigned at this point.
+- Validates the target user from email and/or phone
+- Sets `pet.userId` to the resolved user id
+- Clears `pet.ngoId` to an empty string
+- Writes reassignment metadata into `transferNGO.0`
+- Mirrors the transfer fields into `transfer.0`
 
-```json
-{
-  "success": true,
-  "message": "NGO transfer completed successfully",
-  "petId": "6820000000000000000abc01",
-  "form": {
-    "UserEmail": "adopter@example.com",
-    "UserContact": "+85291234567",
-    "regDate": "2024-03-01",
-    "regPlace": "Mong Kok",
-    "transferOwner": "Bob",
-    "isTransferred": true
-  },
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-#### Errors
+#### NGO Reassignment Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petTransfer.errors.missingPetId` | `petId` path parameter absent |
-| 400 | `petTransfer.errors.invalidPetId` | `petId` is not a valid MongoDB ObjectId |
-| 400 | `common.missingBodyParams` | Body is empty (`{}`, `null`, or absent) |
-| 400 | `common.invalidBodyParams` | Malformed JSON body |
-| 400 | `petTransfer.errors.ngoTransfer.missingRequiredFields` | Neither `UserEmail` nor `UserContact` provided (or both are empty strings) |
-| 400 | `petTransfer.errors.ngoTransfer.invalidEmailFormat` | `UserEmail` fails regex validation or exceeds 254 characters |
-| 400 | `petTransfer.errors.ngoTransfer.invalidPhoneFormat` | `UserContact` is not E.164 format (must start with `+`) |
-| 400 | `petTransfer.errors.ngoTransfer.invalidDateFormat` | `regDate` is not `DD/MM/YYYY` or ISO 8601 |
-| 400 | `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Both `UserEmail` and `UserContact` supplied but resolve to different `User` documents |
-| 401 | `common.unauthorized` | Missing or invalid Bearer token |
-| 403 | `common.forbidden` | Caller role is not `ngo`, or caller does not own the pet |
-| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is soft-deleted |
-| 404 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | No user found matching the supplied identifier(s) (generic — anti-enumeration) |
-| 500 | `common.internalError` | Unexpected error |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `petTransfer.errors.ngoTransfer.missingRequiredFields` | Neither `UserEmail` nor `UserContact` provided |
+| 400 | `petTransfer.errors.ngoTransfer.invalidEmailFormat` | Invalid `UserEmail` |
+| 400 | `petTransfer.errors.ngoTransfer.invalidPhoneFormat` | Invalid `UserContact` |
+| 400 | `petTransfer.errors.ngoTransfer.invalidDateFormat` | Invalid `regDate` |
+| 400 | `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Email and phone resolve to different users |
+| 400 | `common.invalidObjectId` | Invalid `petId` |
+| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 403 | `common.forbidden` | Caller is not NGO-scoped, does not own the pet, or lacks NGO role |
+| 404 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | No active user matches the supplied identifier(s) |
+| 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
+| 429 | `common.rateLimited` | NGO reassignment rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
 
 ---
 
 ## Frontend Integration Guide
 
-### Typical flow — individual owner managing transfer history
-
-```
-1. POST /pet/transfer/{petId}
-   → 201 { form, petId, transferId }  → store transferId for future PATCH or DELETE
-
-2. PATCH /pet/transfer/{petId}/{transferId}
-   → 200 { form, petId, transferId }  → form shows submitted fields only; refetch full record
-                                         from a read endpoint if needed
-
-3. DELETE /pet/transfer/{petId}/{transferId}
-   → 200 { petId, transferId }        → record removed
-```
-
-### Typical flow — NGO reassigning pet to a user
-
-```
-1. POST /pet/transfer/{petId}/ngo-reassignment
-   → 200 { form, petId }  → pet ownership transferred; pet.ngoId is now ""; pet.userId is the
-                             target user's _id
-   → 403 common.forbidden  → caller is not NGO, or does not own the pet
-   → 404 targetUserNotFound → no user found matching the supplied identifier(s)
-   → 400 userIdentityMismatch → both UserEmail and UserContact supplied but point to different accounts
-```
-
-### Branch conditions
-
-| `errorKey` on POST `/ngo-reassignment` | Frontend action |
-| --- | --- |
-| `petTransfer.errors.ngoTransfer.missingRequiredFields` | Show field-level error: at least one of `UserEmail` or `UserContact` is required |
-| `petTransfer.errors.ngoTransfer.invalidEmailFormat` | Show: "Invalid email address format" |
-| `petTransfer.errors.ngoTransfer.invalidPhoneFormat` | Show: "Phone must be E.164 format (e.g. +85291234567)" |
-| `petTransfer.errors.ngoTransfer.targetUserNotFound` | Show: "No account found with these contact details" — do not specify which field failed |
-| `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Show: "Email and phone do not belong to the same account" — only applicable when both are provided |
-
-| `errorKey` on PATCH | Frontend action |
-| --- | --- |
-| `common.missingBodyParams` | At least one field must be provided |
-| `common.noFieldsToUpdate` | Body contained only unrecognized fields; check field names |
-| `petTransfer.errors.transfer.notFound` | The transfer record no longer exists; refresh the list |
-
-### Important notes for frontend
-
-- `POST /pet/transfer/{petId}` requires at least one body field — an empty `{}` body is rejected with `400 common.missingBodyParams`.
-- The `PATCH` response `form` contains only the fields submitted, not the full stored record. If a complete updated view is required, call a read endpoint after the PATCH succeeds.
-- For NGO reassignment, at least one of `UserEmail` or `UserContact` must be provided. When both are supplied, they must resolve to the same account.
-- Phone numbers must include the country code prefix (`+852...`). Local formats without `+` will be rejected.
+1. Treat transfer create as append-only history creation and PATCH as metadata correction. The current PATCH response does not return the updated record.
+2. For NGO reassignment, validate email and phone client-side before submission, but still branch on the backend keys because cross-identifier mismatch can only be proven server-side.
+3. After NGO reassignment succeeds, refetch the pet profile immediately because ownership changes and the current caller may lose access on subsequent requests.
+4. Treat empty edit submissions as `common.missingBodyParams`; `common.noFieldsToUpdate` is an internal fallback, not the normal current PATCH response for `{}`.
+5. Treat `petTransfer.errors.transfer.notFound` as a stale-client condition and refresh pet detail/history state.
 
 ---
 
-## Delta vs Legacy AWS\_API
+## Verification Snapshot
 
-The `pet-transfer` Lambda replaces the transfer and NGO-transfer routes previously housed in the legacy `PetDetailInfo` Lambda (`functions/PetDetailInfo/`).
-
-| Aspect | Legacy (`PetDetailInfo`) | DDD (`pet-transfer`) |
-| --- | --- | --- |
-| Transfer create | `POST /pets/{petID}/detail-info/transfer` → 200 | `POST /pet/transfer/{petId}` → **201** |
-| Transfer update | `PUT /pets/{petID}/detail-info/transfer/{transferId}` | `PATCH /pet/transfer/{petId}/{transferId}` (method changed) |
-| NGO transfer | `PUT /pets/{petID}/detail-info/NGOtransfer` | `POST /pet/transfer/{petId}/ngo-reassignment` (method + path changed) |
-| Error namespace | `petDetailInfo.errors.transferPath.*` | `petTransfer.errors.transfer.*` |
-| NGO error namespace | `petDetailInfo.errors.ngoTransfer.*` | `petTransfer.errors.ngoTransfer.*` |
-| Empty body on create | Not documented | Explicitly rejected; empty `{}` returns `400 common.missingBodyParams` |
-| Unknown fields | Rejected (strict schema) | **Silently stripped** |
-
----
-
-## Error Key Reference
-
-| `errorKey` | HTTP status | Meaning |
-| --- | --- | --- |
-| `petTransfer.errors.missingPetId` | 400 | `petId` path param absent |
-| `petTransfer.errors.invalidPetId` | 400 | `petId` is not a valid MongoDB ObjectId |
-| `petTransfer.errors.petNotFound` | 404 | Pet does not exist or is soft-deleted |
-| `petTransfer.errors.transfer.missingTransferId` | 400 | `transferId` path param absent |
-| `petTransfer.errors.transfer.invalidTransferId` | 400 | `transferId` is not a valid MongoDB ObjectId |
-| `petTransfer.errors.transfer.notFound` | 404 | Transfer subdocument not found on this pet |
-| `petTransfer.errors.transfer.invalidDateFormat` | 400 | `regDate` in POST/PATCH is not `DD/MM/YYYY` or ISO 8601 |
-| `petTransfer.errors.ngoTransfer.missingRequiredFields` | 400 | Neither `UserEmail` nor `UserContact` provided (or both are empty strings) |
-| `petTransfer.errors.ngoTransfer.invalidEmailFormat` | 400 | `UserEmail` fails regex or exceeds 254 chars |
-| `petTransfer.errors.ngoTransfer.invalidPhoneFormat` | 400 | `UserContact` is not E.164 |
-| `petTransfer.errors.ngoTransfer.invalidDateFormat` | 400 | `regDate` in NGO transfer is not `DD/MM/YYYY` or ISO 8601 |
-| `petTransfer.errors.ngoTransfer.targetUserNotFound` | 404 | No user found matching the supplied identifier(s) (anti-enumeration) |
-| `petTransfer.errors.ngoTransfer.userIdentityMismatch` | 400 | Both `UserEmail` and `UserContact` supplied but resolve to different users |
-| `common.missingBodyParams` | 400 | Empty body when one is required |
-| `common.invalidBodyParams` | 400 | Malformed JSON body |
-| `common.noFieldsToUpdate` | 400 | Valid body but all fields stripped (only unknown fields sent) |
-| `common.forbidden` | 403 | Caller is not the pet owner/NGO owner, or role is not `ngo` |
-| `common.unauthorized` | 401 | Missing or invalid Bearer token |
-| `common.routeNotFound` | 404 | Path/method not registered in the Lambda router |
-| `common.methodNotAllowed` | 405 | Known path but wrong HTTP method |
-| `common.internalError` | 500 | Unhandled error |
+This document is grounded in the current DDD handlers in `functions/pet-transfer/src/services/transfer.ts`, the strict request schemas in `functions/pet-transfer/src/zodSchema/transferSchema.ts`, and the Tier 2 assertions in `__tests__/pet-transfer.test.js`. The previous legacy doc version that described top-level `form`, `petId`, and `transferId` success payloads is no longer accurate for the current wrapper-based implementation.

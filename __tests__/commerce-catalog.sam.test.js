@@ -75,6 +75,10 @@ async function req(method, path, body, headers = {}) {
   return { status: res.status, body: json, headers: Object.fromEntries(res.headers.entries()) };
 }
 
+function responseData(body) {
+  return body?.data ?? body ?? null;
+}
+
 async function connectDB() {
   if (!MONGODB_URI) throw new Error('env.json missing CommerceCatalogFunction.MONGODB_URI');
   if (dbReady) return;
@@ -152,19 +156,21 @@ describe('Tier 3 - /commerce/catalog via SAM local + UAT DB', () => {
   describe('happy paths', () => {
     test('GET /commerce/catalog returns 200 with items array and CORS header', async () => {
       const res = await req('GET', '/commerce/catalog');
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.items)).toBe(true);
+      expect(Array.isArray(data)).toBe(true);
       expect(res.headers['access-control-allow-origin']).toBe('*');
     });
 
     test('GET /commerce/storefront returns 200 with shops array', async () => {
       const res = await req('GET', '/commerce/storefront');
+      const data = responseData(res.body);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(Array.isArray(res.body.shops)).toBe(true);
+      expect(Array.isArray(data)).toBe(true);
     });
 
     test('POST /commerce/catalog/events creates a product log and persists it to DB', async () => {
@@ -179,12 +185,13 @@ describe('Tier 3 - /commerce/catalog via SAM local + UAT DB', () => {
       };
 
       const res = await req('POST', '/commerce/catalog/events', body);
+      const data = responseData(res.body);
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.body.id).toBeDefined();
+      expect(data.id).toBeDefined();
 
-      const oid = new mongoose.Types.ObjectId(res.body.id);
+      const oid = new mongoose.Types.ObjectId(data.id);
       state.createdLogIds.push(oid);
 
       const persisted = await productLogsCol().findOne({ _id: oid });
@@ -207,14 +214,16 @@ describe('Tier 3 - /commerce/catalog via SAM local + UAT DB', () => {
 
       const first = await req('POST', '/commerce/catalog/events', body);
       const second = await req('POST', '/commerce/catalog/events', body);
+      const firstData = responseData(first.body);
+      const secondData = responseData(second.body);
 
       expect(first.status).toBe(201);
       expect(second.status).toBe(201);
-      expect(first.body.id).not.toBe(second.body.id);
+      expect(firstData.id).not.toBe(secondData.id);
 
       state.createdLogIds.push(
-        new mongoose.Types.ObjectId(first.body.id),
-        new mongoose.Types.ObjectId(second.body.id)
+        new mongoose.Types.ObjectId(firstData.id),
+        new mongoose.Types.ObjectId(secondData.id)
       );
     });
   });
@@ -317,9 +326,10 @@ describe('Tier 3 - /commerce/catalog via SAM local + UAT DB', () => {
 
       // Extra fields beyond the schema are silently stripped — the request still
       // succeeds but must not persist the injected fields.
-      if (res.status === 201 && res.body.id) {
+      const data = responseData(res.body);
+      if (res.status === 201 && data?.id) {
         if (await ensureDbOrSkip()) {
-          const oid = new mongoose.Types.ObjectId(res.body.id);
+          const oid = new mongoose.Types.ObjectId(data.id);
           state.createdLogIds.push(oid);
           const persisted = await productLogsCol().findOne({ _id: oid });
           expect(persisted.extraMaliciousField).toBeUndefined();

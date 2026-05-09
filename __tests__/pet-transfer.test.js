@@ -1410,6 +1410,57 @@ describe('pet-transfer handler — cyberattack / abuse cases', () => {
     expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
   });
 
+  test('sanitizes HTML in NGO transfer free-text fields before updating the pet', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const ngoId = 'ngo-hk-001';
+    const petId = new mongoose.Types.ObjectId().toString();
+    const targetUserId = new mongoose.Types.ObjectId().toString();
+    const petDoc = {
+      _id: petId,
+      userId: null,
+      ngoId,
+      deleted: false,
+    };
+    const userDoc = { _id: targetUserId };
+
+    const { handler, authorizer, petModel } = loadHandlerWithMocks({
+      authUserId: userId,
+      authRole: 'ngo',
+      authNgoId: ngoId,
+      petFindOneResults: [createLeanResult(petDoc)],
+      userFindOneResults: [createLeanResult(userDoc), createLeanResult(userDoc)],
+      petUpdateOneResult: { matchedCount: 1 },
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        pathValue: `/pet/transfer/${petId}/ngo-reassignment`,
+        resource: '/pet/transfer/{petId}/ngo-reassignment',
+        pathParameters: { petId },
+        body: JSON.stringify({
+          UserEmail: 'adopter@example.com',
+          UserContact: '+85291234567',
+          regPlace: '<script>alert(1)</script>Mong Kok',
+          transferOwner: '<b>Bob</b>',
+          transferRemark: 'Safe <img src=x onerror=alert(1)>remark',
+          isTransferred: true,
+        }),
+        authorizer,
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(petModel.updateOne).toHaveBeenCalledTimes(1);
+
+    const [, update] = petModel.updateOne.mock.calls[0];
+    expect(update.$set['transferNGO.0.regPlace']).toBe('alert(1)Mong Kok');
+    expect(update.$set['transferNGO.0.transferOwner']).toBe('Bob');
+    expect(update.$set['transferNGO.0.transferRemark']).toBe('Safe remark');
+  });
+
   test('unauthenticated NGO transfer attempt returns 401, not 403', async () => {
     const petId = new mongoose.Types.ObjectId().toString();
     const { handler } = loadHandlerWithMocks();
