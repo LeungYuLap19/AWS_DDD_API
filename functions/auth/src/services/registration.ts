@@ -58,6 +58,11 @@ async function consumeVerificationProofs(email?: string, phoneNumber?: string) {
   }
 }
 
+/**
+ * Creates a verified end-user account after recent email/phone challenge proof
+ * is confirmed, then consumes those verification artifacts and issues the
+ * initial access token plus refresh cookie.
+ */
 export async function handleUserRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, userRegistrationBodySchema);
   if (!parsed.ok) {
@@ -185,6 +190,11 @@ export async function handleUserRegistration(ctx: RouteContext): Promise<APIGate
   });
 }
 
+/**
+ * Creates a new NGO onboarding record set across `User`, `NGO`,
+ * `NgoUserAccess`, and `NgoCounters`, preserving duplicate checks and the
+ * approval-required post-registration state before session issuance.
+ */
 export async function handleNgoRegistration(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, ngoRegistrationBodySchema);
   if (!parsed.ok) {

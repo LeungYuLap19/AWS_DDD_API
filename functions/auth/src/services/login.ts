@@ -22,6 +22,11 @@ type NgoLoginUser = {
   verified?: boolean;
 };
 
+/**
+ * Authenticates an NGO user with email/password, applies both request and
+ * failure-cooldown limits, then issues a fresh access token plus refresh
+ * cookie when the NGO membership is active and verified.
+ */
 export async function handleNgoLogin(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, ngoLoginBodySchema);
   if (!parsed.ok) {

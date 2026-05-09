@@ -13,6 +13,10 @@ import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import { printCloudWaybillSchema } from '../zodSchema/logisticsSchema';
 
+/**
+ * Requests a cloud-print waybill PDF from SF Express, downloads the generated
+ * file, and emails it to the internal notification inbox.
+ */
 export async function printCloudWaybill({
   event,
   body,

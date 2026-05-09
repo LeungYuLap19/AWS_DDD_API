@@ -24,6 +24,10 @@ function parseDateString(dateString: string | null | undefined): Date | null {
   return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
+/**
+ * Returns the authenticated user's notifications in reverse-chronological
+ * order with shared pagination semantics.
+ */
 export async function handleListNotifications(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -53,6 +57,10 @@ export async function handleListNotifications(ctx: RouteContext): Promise<APIGat
   });
 }
 
+/**
+ * Archives one notification owned by the authenticated user. The update is
+ * ownership-scoped so other users' records cannot be toggled by id alone.
+ */
 export async function handleArchiveNotification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const idParam = parseObjectIdParam(ctx.event.pathParameters?.notificationId);
@@ -78,6 +86,10 @@ export async function handleArchiveNotification(ctx: RouteContext): Promise<APIG
   });
 }
 
+/**
+ * Admin-only notification dispatch endpoint that materializes a notification
+ * document from a validated domain event payload.
+ */
 export async function handleDispatchNotification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireRole(ctx.event, 'admin');
 

@@ -2,12 +2,14 @@ import mongoose from 'mongoose';
 import { HttpError } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 
+/** Minimal auth context required by NGO-only service helpers. */
 export type NgoAuthContext = {
   userId: string;
   userRole?: string;
   ngoId?: string;
 };
 
+/** NGO document shape consumed by access checks and sanitized profile responses. */
 export type NgoDocument = {
   _id: string | { toString(): string };
   isActive?: boolean;
@@ -15,6 +17,7 @@ export type NgoDocument = {
   [key: string]: unknown;
 };
 
+/** Active NGO membership record for one user within one NGO. */
 export type NgoUserAccessDocument = {
   _id?: string | { toString(): string };
   ngoId?: string | { toString(): string };
@@ -24,6 +27,10 @@ export type NgoUserAccessDocument = {
   [key: string]: unknown;
 };
 
+/**
+ * Loads the NGO and the caller's active NGO membership record, then enforces
+ * that the NGO exists, is active/verified, and still grants the caller access.
+ */
 export async function requireAuthorizedNgoAccess(
   ctx: RouteContext,
   authContext: NgoAuthContext
@@ -58,6 +65,7 @@ export async function requireAuthorizedNgoAccess(
   return { ngo, ngoUserAccess };
 }
 
+/** Returns whether the caller's NGO membership grants admin-level mutation rights. */
 export function hasNgoAdminAccess(ngoUserAccess: NgoUserAccessDocument): boolean {
   return ngoUserAccess.roleInNgo === 'admin';
 }

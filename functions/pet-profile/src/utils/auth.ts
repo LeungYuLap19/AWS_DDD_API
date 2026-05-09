@@ -20,6 +20,11 @@ function toStringId(value: unknown): string | null {
   return String(value);
 }
 
+/**
+ * Loads a pet by route or explicit id and enforces owner/NGO access before
+ * returning it. Throws `HttpError` for invalid ids, missing pets, or forbidden
+ * access so callers can rely on shared handler mapping.
+ */
 export async function loadAuthorizedPet(
   event: RouteContext['event'],
   options: { petId?: string; lean?: boolean; notFoundKey?: string; forbiddenKey?: string } = {}
@@ -51,6 +56,10 @@ export async function loadAuthorizedPet(
   return pet;
 }
 
+/**
+ * Builds the ownership filter used by write operations so both direct user
+ * ownership and NGO ownership stay aligned with the auth context.
+ */
 export function buildOwnershipFilter(event: RouteContext['event'], petId: string): Record<string, unknown> {
   const authContext = requireAuthContext(event);
   const ownershipFilters: Record<string, unknown>[] = [{ userId: authContext.userId }];

@@ -24,6 +24,10 @@ function issueCustomAccessToken(payload: Record<string, unknown>, options: Recor
   });
 }
 
+/**
+ * Issues the standard short-lived user access token consumed by downstream
+ * Lambdas through the API Gateway authorizer context.
+ */
 export function issueUserAccessToken(user: {
   _id: string | { toString(): string };
   email?: string;
@@ -36,6 +40,10 @@ export function issueUserAccessToken(user: {
   });
 }
 
+/**
+ * Issues the NGO variant of the access token, embedding both the user and NGO
+ * identity claims required by NGO-owned routes.
+ */
 export function issueNgoAccessToken(
   user: {
     _id: string | { toString(): string };
@@ -56,6 +64,10 @@ export function issueNgoAccessToken(
   });
 }
 
+/**
+ * Persists a single-use refresh token as a hashed DB record and returns the
+ * raw token value plus its expiry for cookie issuance.
+ */
 export async function createRefreshToken(userId: string | { toString(): string }) {
   const RefreshToken = mongoose.model('RefreshToken');
   const token = generateRefreshToken();
@@ -80,6 +92,10 @@ function getCookiePath(event: APIGatewayProxyEvent): string {
   return '/auth/tokens/refresh';
 }
 
+/**
+ * Builds the secure refresh-token cookie scoped to the refresh endpoint path
+ * for the current deployed stage.
+ */
 export function buildRefreshCookie(refreshToken: string, event: APIGatewayProxyEvent): string {
   return `refreshToken=${refreshToken}; HttpOnly; Secure; SameSite=Strict; Path=${getCookiePath(event)}; Max-Age=${env.REFRESH_TOKEN_MAX_AGE_SEC}`;
 }
@@ -102,6 +118,11 @@ function parseCookieString(cookieString: string): Record<string, string> {
     }, {});
 }
 
+/**
+ * Extracts the refresh token from either API Gateway v2-style `cookies` or the
+ * legacy `Cookie` header, returning a stable `errorKey` instead of throwing so
+ * the refresh service can rate-limit invalid sessions uniformly.
+ */
 export function readRefreshTokenFromEvent(event: CookieCapableEvent): {
   token: string | null;
   errorKey: string | null;

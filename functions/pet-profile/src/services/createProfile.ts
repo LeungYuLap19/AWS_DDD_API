@@ -18,6 +18,11 @@ import {
   resolveActiveUser,
 } from './profileHelpers';
 
+/**
+ * Creates a pet profile for the authenticated user or NGO context, including
+ * multipart normalization, optional image upload, tag/NGO identifier
+ * uniqueness checks, and transfer seed initialization.
+ */
 export async function handleCreatePetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 

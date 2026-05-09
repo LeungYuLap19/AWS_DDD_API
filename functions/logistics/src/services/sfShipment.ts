@@ -14,6 +14,11 @@ function normalizeEmail(email: string | undefined): string | null {
   return typeof email === 'string' ? email.trim().toLowerCase() : null;
 }
 
+/**
+ * Creates an SF shipment for one or more order tempIds, enforcing caller
+ * ownership unless the auth role is privileged, then backfills the resolved
+ * waybill number onto matched order records.
+ */
 export async function createShipment({
   event,
   body,

@@ -7,6 +7,10 @@ import { catalogEventBodySchema } from '../zodSchema/catalogEventBodySchema';
 import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 
+/**
+ * Returns the paginated commerce catalog from `ProductList` for storefront
+ * browsing. Query validation is limited to shared pagination parameters.
+ */
 export async function handleGetCatalog(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
@@ -30,6 +34,11 @@ export async function handleGetCatalog(ctx: RouteContext): Promise<APIGatewayPro
   });
 }
 
+/**
+ * Persists a catalog-access analytics event behind x-api-key protection plus a
+ * global/IP rate limit so leaked frontend credentials cannot flood
+ * `ProductLog`.
+ */
 export async function handleCreateCatalogEvent(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, catalogEventBodySchema);
   if (!parsed.ok) {

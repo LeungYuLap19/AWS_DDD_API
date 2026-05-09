@@ -17,6 +17,10 @@ function normalizeNumber(value: unknown): number | string | undefined {
   return Number.isFinite(n) ? n : String(value);
 }
 
+/**
+ * Normalizes multipart form fields for lost-pet reports so numeric/boolean
+ * fields match the downstream Zod schema expectations.
+ */
 export function normalizeLostMultipartBody(
   rawFields: Record<string, unknown>
 ): Record<string, unknown> {
@@ -28,6 +32,10 @@ export function normalizeLostMultipartBody(
   };
 }
 
+/**
+ * Normalizes multipart form fields for found-pet reports so numeric contact
+ * fields match the downstream Zod schema expectations.
+ */
 export function normalizeFoundMultipartBody(
   rawFields: Record<string, unknown>
 ): Record<string, unknown> {

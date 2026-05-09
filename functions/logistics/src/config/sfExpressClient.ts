@@ -55,6 +55,11 @@ async function requestJson(options: RequestJsonOptions): Promise<RequestJsonResu
   });
 }
 
+/**
+ * Exchanges the configured SF customer credentials for an OAuth access token.
+ * Any transport or malformed-response failure is normalized into an
+ * `HttpError` so callers can map it directly to a 502 flow.
+ */
 export async function getAccessToken(): Promise<string> {
   const body = querystring.stringify({
     grantType: 'password',
@@ -87,6 +92,11 @@ interface CallSfServiceOptions {
   url?: string;
 }
 
+/**
+ * Calls one SF Express form-encoded service endpoint and returns the parsed
+ * `apiResultData` payload only when both HTTP status and SF business result
+ * code indicate success.
+ */
 export async function callSfService(
   options: CallSfServiceOptions
 ): Promise<Record<string, unknown>> {
@@ -128,6 +138,10 @@ export async function callSfService(
   }
 }
 
+/**
+ * Downloads a generated SF waybill PDF using the per-file auth token returned
+ * by the cloud-print API.
+ */
 export async function downloadPdf(url: string, token: string): Promise<Buffer> {
   const parsedUrl = new URL(url);
 

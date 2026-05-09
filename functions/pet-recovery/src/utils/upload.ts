@@ -88,6 +88,10 @@ export async function uploadImageFile(
   return url;
 }
 
+/**
+ * Atomically allocates the next pet-recovery serial number from the singleton
+ * `RecoveryCounter` document used by both lost and found report flows.
+ */
 export async function getNextSerialNumber(): Promise<string> {
   const RecoveryCounter = mongoose.model('RecoveryCounter');
   const counter = (await RecoveryCounter.findOneAndUpdate(

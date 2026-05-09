@@ -56,6 +56,11 @@ async function buildAccessTokenForUser(user: {
   return { token: issueNgoAccessToken(user, ngo), errorKey: null };
 }
 
+/**
+ * Rotates the refresh session carried in cookies, enforcing replay-resistant
+ * single-use refresh tokens and NGO approval checks before minting the next
+ * access token pair.
+ */
 export async function handleRefreshToken(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 

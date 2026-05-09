@@ -26,6 +26,10 @@ import {
   type TransferUpdateBody,
 } from '../zodSchema/transferSchema';
 
+/**
+ * Appends a transfer-history entry to an owned pet after validating the route,
+ * request body, and legacy date format contract.
+ */
 export async function handleCreateTransfer(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const petId = getValidatedPetId(ctx.event);
@@ -87,6 +91,10 @@ export async function handleCreateTransfer(ctx: RouteContext): Promise<APIGatewa
   });
 }
 
+/**
+ * Updates one transfer-history subdocument on an owned pet using positional
+ * Mongo updates after the transfer id is verified to exist on that pet.
+ */
 export async function handleUpdateTransfer(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const petId = getValidatedPetId(ctx.event);
@@ -167,6 +175,9 @@ export async function handleUpdateTransfer(ctx: RouteContext): Promise<APIGatewa
   });
 }
 
+/**
+ * Deletes one transfer-history subdocument from an owned pet.
+ */
 export async function handleDeleteTransfer(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const petId = getValidatedPetId(ctx.event);
@@ -201,6 +212,11 @@ export async function handleDeleteTransfer(ctx: RouteContext): Promise<APIGatewa
   });
 }
 
+/**
+ * NGO-only ownership reassignment flow that validates the target user by phone
+ * and/or email, records transfer metadata, and moves the pet out of NGO
+ * ownership in the same update.
+ */
 export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 

@@ -10,6 +10,11 @@ import { PUBLIC_TAG_PROJECTION } from './profileHelpers';
 
 const PET_VIEWS = new Set(['basic', 'detail', 'full']);
 
+/**
+ * Returns one owned pet profile using the requested response projection. The
+ * `view` query parameter controls whether the caller receives basic, lineage,
+ * or full detail fields.
+ */
 export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -31,6 +36,10 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
   });
 }
 
+/**
+ * Resolves a public pet lookup by tag id using the restricted
+ * `PUBLIC_TAG_PROJECTION`, intentionally bypassing private ownership fields.
+ */
 export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
@@ -55,6 +64,11 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
   });
 }
 
+/**
+ * Returns the caller's pet list with shared pagination. NGO callers receive
+ * NGO-scoped searching and sorting, while standard users receive only their
+ * own active pets.
+ */
 export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();

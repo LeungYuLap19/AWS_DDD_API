@@ -17,6 +17,11 @@ import {
 } from './patchHelpers';
 import type { MutablePetDocument } from './patchHelpers';
 
+/**
+ * Updates an owned pet profile via multipart patch semantics, supporting image
+ * removals/additions, scalar field updates, and NGO-only ownership fields with
+ * explicit uniqueness enforcement.
+ */
 export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 

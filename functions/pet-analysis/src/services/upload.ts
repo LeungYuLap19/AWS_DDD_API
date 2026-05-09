@@ -10,6 +10,10 @@ import { uploadImageSchema, uploadBreedImageSchema } from '../zodSchema/uploadSc
 
 const ALLOWED_UPLOAD_PREFIXES = new Set(['breed_analysis', 'pets', 'eye', 'profile']);
 
+/**
+ * Uploads a single authenticated pet-analysis image into the standard
+ * `user-uploads/breed_analysis` prefix after multipart validation.
+ */
 export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -66,6 +70,11 @@ export async function handleUploadImage(ctx: RouteContext): Promise<APIGatewayPr
   });
 }
 
+/**
+ * Uploads a single authenticated image into a caller-supplied but allowlisted
+ * `user-uploads/*` prefix, rejecting path traversal and unknown top-level
+ * folders before the S3 write.
+ */
 export async function handleUploadPetBreedImage(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -130,4 +139,3 @@ export async function handleUploadPetBreedImage(
     data: { url },
   });
 }
-

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { requireAuthContext, HttpError } from '@aws-ddd-api/shared';
 
+/** Minimal user record shape used by pet-profile ownership and existence checks. */
 export type UserDocument = {
   _id: { toString(): string } | string;
   deleted?: boolean;
@@ -21,6 +22,7 @@ export const PUBLIC_TAG_PROJECTION = {
   receivedDate: 1,
 };
 
+/** Returns the active user document for pet-profile ownership flows. */
 export async function resolveActiveUser(userId: string): Promise<UserDocument | null> {
   const User = mongoose.model('User');
   return (await User.findOne({
@@ -29,6 +31,10 @@ export async function resolveActiveUser(userId: string): Promise<UserDocument | 
   }).lean()) as UserDocument | null;
 }
 
+/**
+ * Creates the default NGO-transfer stub stored on newly created pet documents
+ * so later NGO reassignment flows have a predictable first element.
+ */
 export function buildTransferNgoSeed() {
   return [
     {
@@ -44,7 +50,10 @@ export function buildTransferNgoSeed() {
   ];
 }
 
-// Pass excludePetId to skip the pet being updated (patch flow).
+/**
+ * Enforces uniqueness of `tagId` across non-deleted pets. Pass
+ * `excludePetId` during patch flows to skip the current pet.
+ */
 export async function ensureUniqueTag(tagId: string | undefined, excludePetId?: string): Promise<void> {
   if (!tagId) {
     return;
@@ -62,7 +71,10 @@ export async function ensureUniqueTag(tagId: string | undefined, excludePetId?: 
   }
 }
 
-// Pass excludePetId to skip the pet being updated (patch flow).
+/**
+ * Enforces uniqueness of `ngoPetId` across non-deleted pets. Pass
+ * `excludePetId` during patch flows to skip the current pet.
+ */
 export async function ensureUniqueNgoPetId(ngoPetId: string, excludePetId?: string): Promise<void> {
   if (!ngoPetId) {
     return;
@@ -80,6 +92,10 @@ export async function ensureUniqueNgoPetId(ngoPetId: string, excludePetId?: stri
   }
 }
 
+/**
+ * Generates the next NGO-local pet id from `NgoCounters` after proving that
+ * the caller is acting for the same NGO carried in the auth context.
+ */
 export async function maybeGenerateNgoPetId(params: {
   authContext: ReturnType<typeof requireAuthContext>;
   ngoId?: string;

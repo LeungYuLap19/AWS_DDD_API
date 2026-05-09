@@ -13,6 +13,10 @@ type MemberListItem = {
   ngoCounter?: { ngoPrefix?: string; seq?: number };
 };
 
+/**
+ * Builds the paginated NGO member list aggregation, including optional text
+ * search and a late lookup of NGO counter metadata used by the response view.
+ */
 export async function buildNgoMemberList({
   ngoId,
   search,

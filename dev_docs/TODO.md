@@ -14,7 +14,7 @@
 - [x] tests for injection/XSS/oversize
 - [x] retest sam
 - [x] api docs update
-- [ ] Tsdoc
+- [x] Tsdoc
 
 ## Optimization, Security Scan and Hardening
 

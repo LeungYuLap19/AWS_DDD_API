@@ -45,6 +45,11 @@ function requireNgoContext(ctx: RouteContext): NgoAuthContext {
   return authContext;
 }
 
+/**
+ * Returns the authenticated NGO member profile together with NGO, access, and
+ * counter data. Partial read failures are downgraded into warning keys so the
+ * caller still receives the sections that resolved successfully.
+ */
 export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireNgoContext(ctx);
   await connectToMongoDB();
@@ -96,6 +101,10 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
   });
 }
 
+/**
+ * Returns the paginated NGO member list for the caller's NGO, including
+ * optional search filtering after membership access is verified.
+ */
 export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireNgoContext(ctx);
   await connectToMongoDB();
@@ -124,6 +133,11 @@ export async function handleGetMembers(ctx: RouteContext): Promise<APIGatewayPro
   });
 }
 
+/**
+ * Updates the authenticated NGO member profile and, for NGO admins, selected
+ * NGO/counter/access fields in one flow with duplicate checks and role-based
+ * write restrictions.
+ */
 export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireNgoContext(ctx);
   const parsed = parseBody(ctx.body, editNgoBodySchema);

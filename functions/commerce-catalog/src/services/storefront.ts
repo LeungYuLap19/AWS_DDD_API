@@ -5,6 +5,10 @@ import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
 
+/**
+ * Returns the paginated storefront shop directory with a narrow public field
+ * projection so callers only receive the data needed for checkout selection.
+ */
 export async function handleGetStorefront(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 

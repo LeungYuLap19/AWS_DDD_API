@@ -12,6 +12,11 @@ function registerModels() {
   mongoose.models.ShopInfo || mongoose.model('ShopInfo', ShopInfoSchema, 'shopInfo');
 }
 
+/**
+ * Reuses the warm-container Mongoose connection, registers this Lambda's model
+ * set after the connection is ready, and clears the cached promise if the
+ * initial connect attempt fails.
+ */
 export async function connectToMongoDB() {
   if (mongoose.connection.readyState === 1) {
     registerModels();

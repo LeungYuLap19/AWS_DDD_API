@@ -16,6 +16,10 @@ import {
   getPickupLocationsSchema,
 } from '../zodSchema/logisticsSchema';
 
+/**
+ * Retrieves an address-service bearer token from SF Express. This route is
+ * intentionally public, so only an IP-scoped rate limit is applied.
+ */
 export async function getToken({ event }: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
@@ -39,6 +43,10 @@ export async function getToken({ event }: RouteContext): Promise<APIGatewayProxy
   return response.successResponse(200, event, { message: 'success.retrieved', data: { bearerToken } });
 }
 
+/**
+ * Resolves the SF area list for a previously issued address token after body
+ * validation and public-route throttling.
+ */
 export async function getArea({ event, body }: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(body, getAreaSchema);
   if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
@@ -64,6 +72,10 @@ export async function getArea({ event, body }: RouteContext): Promise<APIGateway
   return response.successResponse(200, event, { message: 'success.retrieved', data: { areaList } });
 }
 
+/**
+ * Resolves SF net-code metadata for the supplied address payload. Provider
+ * failures are normalized into the shared `logistics.sfApiError` contract.
+ */
 export async function getNetCode({ event, body }: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(body, getNetCodeSchema);
   if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
@@ -89,6 +101,10 @@ export async function getNetCode({ event, body }: RouteContext): Promise<APIGate
   return response.successResponse(200, event, { message: 'success.retrieved', data: { netCode } });
 }
 
+/**
+ * Returns pickup addresses from SF Express for a validated location request.
+ * The call remains public but is capped by IP to bound third-party API abuse.
+ */
 export async function getPickupLocations({
   event,
   body,
@@ -116,4 +132,3 @@ export async function getPickupLocations({
   }
   return response.successResponse(200, event, { message: 'success.retrieved', data: { addresses } });
 }
-

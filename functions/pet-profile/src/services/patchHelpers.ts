@@ -2,6 +2,10 @@ import { parseFlexibleDate } from '../utils/date';
 import { HttpError } from '@aws-ddd-api/shared';
 import { patchPetBodySchema } from '../zodSchema/patchPetProfileSchemas';
 
+/**
+ * Lean pet shape shared by patch helpers. The mutable patch flow widens this
+ * with a `save()` method when the caller loads a live Mongoose document.
+ */
 export type PetDocument = {
   _id: { toString(): string } | string;
   userId?: unknown;
@@ -12,10 +16,15 @@ export type PetDocument = {
   [key: string]: unknown;
 };
 
+/** Mutable pet document contract required by the patch flow before `save()`. */
 export type MutablePetDocument = PetDocument & {
   save: (options?: Record<string, unknown>) => Promise<void>;
 };
 
+/**
+ * Parses the JSON-encoded `removedIndices` multipart field and rejects any
+ * non-integer payload with a domain-specific `HttpError`.
+ */
 export function parseRemovedIndices(rawValue: string | undefined): number[] {
   if (!rawValue) {
     return [];
@@ -38,6 +47,10 @@ export function parseRemovedIndices(rawValue: string | undefined): number[] {
   return removedIndices;
 }
 
+/**
+ * Removes breed-image entries by index in descending order so array mutation
+ * does not shift later indices before they are processed.
+ */
 export function removeBreedImagesAtIndices(pet: MutablePetDocument, removedIndices: number[]): void {
   if (removedIndices.length === 0) {
     return;
@@ -55,6 +68,10 @@ export function removeBreedImagesAtIndices(pet: MutablePetDocument, removedIndic
   }
 }
 
+/**
+ * Applies the scalar patch-body fields onto a mutable pet document, preserving
+ * the route's partial-update semantics and date parsing rules.
+ */
 export function applyPatchScalarFields(
   pet: MutablePetDocument,
   data: ReturnType<typeof patchPetBodySchema.parse>

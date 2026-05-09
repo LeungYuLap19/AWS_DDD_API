@@ -16,6 +16,9 @@ import {
 const PROJECTION =
   'medicationDate drugName drugPurpose drugMethod drugRemark allergy petId';
 
+/**
+ * Returns paginated medication records for one owned pet.
+ */
 export async function handleListMedicationRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -46,6 +49,10 @@ export async function handleListMedicationRecords(
   });
 }
 
+/**
+ * Creates one medication record for an owned pet after validating the accepted
+ * medication date format.
+ */
 export async function handleCreateMedicationRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -103,6 +110,10 @@ export async function handleCreateMedicationRecord(
   });
 }
 
+/**
+ * Updates one medication record for an owned pet using partial-update
+ * semantics.
+ */
 export async function handleUpdateMedicationRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -184,6 +195,9 @@ export async function handleUpdateMedicationRecord(
   });
 }
 
+/**
+ * Deletes one medication record belonging to an owned pet.
+ */
 export async function handleDeleteMedicationRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {

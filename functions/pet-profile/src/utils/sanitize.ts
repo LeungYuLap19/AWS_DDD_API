@@ -121,29 +121,33 @@ function pickPetFields(raw: AnyRecord, fields: string[]): AnyRecord {
   return sanitized;
 }
 
+/** Returns the standard owner-facing basic pet projection used by list/detail reads. */
 export function sanitizePetBasic(pet: unknown): AnyRecord | null {
   const raw = asPlainRecord(pet);
   if (!raw) return null;
   return pickPetFields(raw, BASIC_FIELDS);
 }
 
+/** Returns only lineage, parentage, and transfer-related fields for detail views. */
 export function sanitizePetLineage(pet: unknown): AnyRecord | null {
   const raw = asPlainRecord(pet);
   if (!raw) return null;
   return pickPetFields(raw, LINEAGE_FIELDS);
 }
 
+/** Returns the full owner-facing pet projection used by authenticated detail reads. */
 export function sanitizePetFull(pet: unknown): AnyRecord | null {
   const raw = asPlainRecord(pet);
   if (!raw) return null;
   return pickPetFields(raw, FULL_FIELDS);
 }
 
-// Kept for patch response — always returns the full owner view.
+/** Kept for patch responses; always returns the full owner-facing projection. */
 export function sanitizePetDetail(pet: unknown): AnyRecord | null {
   return sanitizePetFull(pet);
 }
 
+/** Returns the compact pet-card projection used by paginated list responses. */
 export function sanitizePetListSummary(pets: unknown[]): AnyRecord[] {
   return pets
     .map((pet) => {
@@ -153,6 +157,7 @@ export function sanitizePetListSummary(pets: unknown[]): AnyRecord[] {
     .filter((pet): pet is AnyRecord => Boolean(pet));
 }
 
+/** Returns the public tag-lookup projection with missing fields normalized to `null`. */
 export function sanitizePublicTagLookupPet(pet: unknown): AnyRecord {
   const raw = asPlainRecord(pet);
   const sanitized: AnyRecord = {};

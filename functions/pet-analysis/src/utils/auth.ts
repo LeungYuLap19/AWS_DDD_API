@@ -11,6 +11,11 @@ interface AuthorizedPet {
   deleted?: boolean;
 }
 
+/**
+ * Loads a pet used by analysis routes and enforces either direct ownership or,
+ * when enabled, matching NGO ownership. Throws `HttpError` for invalid ids,
+ * missing pets, or forbidden access.
+ */
 export async function loadAuthorizedPet(
   event: RouteContext['event'],
   petId: string,

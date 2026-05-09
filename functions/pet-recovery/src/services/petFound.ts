@@ -11,6 +11,10 @@ import { normalizeFoundMultipartBody } from '../utils/multipart';
 import { createPetFoundSchema } from '../zodSchema/petFoundSchema';
 import { connectToMongoDB } from '../config/db';
 
+/**
+ * Returns the paginated public lost-and-found "pet found" feed for
+ * authenticated callers.
+ */
 export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -35,6 +39,11 @@ export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayP
   });
 }
 
+/**
+ * Creates a pet-found report for the authenticated user, including multipart
+ * normalization, serial-number allocation, optional image uploads, and legacy
+ * date validation.
+ */
 export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 
@@ -109,6 +118,9 @@ export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewa
   });
 }
 
+/**
+ * Deletes a pet-found report only when the authenticated user owns the record.
+ */
 export async function handleDeletePetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const idParam = parseObjectIdParam(ctx.event.pathParameters?.petFoundID);

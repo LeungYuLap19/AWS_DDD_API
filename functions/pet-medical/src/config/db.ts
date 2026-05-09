@@ -20,6 +20,11 @@ function registerModels(): void {
     mongoose.model('blood_tests', BloodTestRecordSchema, 'blood_tests');
 }
 
+/**
+ * Reuses the warm-container Mongoose connection, registers this Lambda's model
+ * set after the connection is ready, and clears the cached promise if the
+ * initial connect attempt fails.
+ */
 export async function connectToMongoDB(): Promise<typeof mongoose> {
   if (mongoose.connection.readyState === 1) {
     registerModels();

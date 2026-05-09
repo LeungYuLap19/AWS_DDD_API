@@ -28,6 +28,9 @@ async function findActiveUserById(userId: string): Promise<UserDocument | null> 
   return (await User.findOne({ _id: userId, deleted: false }).lean()) as UserDocument | null;
 }
 
+/**
+ * Returns the authenticated user's own profile after sanitization.
+ */
 export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -43,6 +46,10 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
   });
 }
 
+/**
+ * Partially updates the authenticated user's own profile, preserving duplicate
+ * email/phone conflict handling and returning the sanitized post-update view.
+ */
 export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const parsed = parseBody(ctx.body, userPatchBodySchema);
@@ -145,6 +152,10 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   });
 }
 
+/**
+ * Soft-deletes the authenticated user's account and clears all refresh-token
+ * sessions for that user in the same request.
+ */
 export async function handleDeleteMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();

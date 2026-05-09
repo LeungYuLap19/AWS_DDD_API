@@ -27,6 +27,11 @@ function isAnalysisErrorPayload(payload: Record<string, unknown>): boolean {
   return keys.includes('error') || keys.includes('400') || keys.includes('404');
 }
 
+/**
+ * Multiplexes eye-analysis reads: non-ObjectId identifiers resolve an eye
+ * disease lookup, while ObjectId identifiers return paginated analysis history
+ * for a specific pet.
+ */
 export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
@@ -89,6 +94,11 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
   });
 }
 
+/**
+ * Runs the eye-analysis upload flow for an owned pet, including multipart
+ * parsing, optional S3 upload, VM analysis + heatmap calls, API logging, and
+ * persistence of the resulting analysis record.
+ */
 export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -216,6 +226,10 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
   }
 }
 
+/**
+ * Appends manually supplied eye-image metadata onto an owned pet after
+ * validating the date and image URL fields against the legacy contract.
+ */
 export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 

@@ -16,6 +16,9 @@ import {
 const PROJECTION =
   'date vaccineBrand vaccineType typesOfInternalParasites typesOfExternalParasites frequency nextDewormDate notification petId';
 
+/**
+ * Returns paginated deworming records for one owned pet.
+ */
 export async function handleListDewormRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -46,6 +49,10 @@ export async function handleListDewormRecords(
   });
 }
 
+/**
+ * Creates one deworming record for an owned pet, validating both the treatment
+ * date and optional next-reminder date.
+ */
 export async function handleCreateDewormRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -117,6 +124,10 @@ export async function handleCreateDewormRecord(
   });
 }
 
+/**
+ * Updates one deworming record for an owned pet using partial-update
+ * semantics.
+ */
 export async function handleUpdateDewormRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -208,6 +219,9 @@ export async function handleUpdateDewormRecord(
   });
 }
 
+/**
+ * Deletes one deworming record belonging to an owned pet.
+ */
 export async function handleDeleteDewormRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {

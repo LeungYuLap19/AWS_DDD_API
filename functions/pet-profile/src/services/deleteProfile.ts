@@ -7,6 +7,10 @@ import { buildOwnershipFilter, loadAuthorizedPet } from '../utils/auth';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 
+/**
+ * Soft-deletes an owned pet profile, clearing its tag assignment while
+ * preserving explicit 404, already-deleted, and forbidden branches.
+ */
 export async function handleDeletePetProfile(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   await connectToMongoDB();

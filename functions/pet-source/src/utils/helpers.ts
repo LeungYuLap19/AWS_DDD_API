@@ -11,6 +11,7 @@ type AuthorizedPet = {
   ngoId?: unknown;
 };
 
+/** Persisted pet-source record shape returned from Mongo for sanitization/update flows. */
 export type PetSourceRecord = {
   _id: unknown;
   petId?: unknown;
@@ -23,10 +24,15 @@ export type PetSourceRecord = {
   toObject?: () => Record<string, unknown>;
 };
 
+/** Minimal duplicate-key error contract read from Mongo write failures. */
 export type MongoDuplicateError = {
   code?: number;
 };
 
+/**
+ * Returns the required `petId` path param and rejects missing or malformed
+ * Mongo object ids with `HttpError`.
+ */
 export function getValidatedPetId(event: RouteContext['event']): string {
   const petId = event.pathParameters?.petId;
 
@@ -41,6 +47,10 @@ export function getValidatedPetId(event: RouteContext['event']): string {
   return petId;
 }
 
+/**
+ * Removes Mongo internal fields from a pet-source document while preserving
+ * the business fields returned to API callers.
+ */
 export function sanitizeSource(record: PetSourceRecord | null): Record<string, unknown> | null {
   if (!record) {
     return null;
@@ -51,6 +61,11 @@ export function sanitizeSource(record: PetSourceRecord | null): Record<string, u
   return safe;
 }
 
+/**
+ * Converts known `HttpError`-shaped failures into the domain response format
+ * so route handlers can centralize error handling without widening catch
+ * blocks.
+ */
 export function toErrorResponse(
   error: unknown,
   event: RouteContext['event']
@@ -68,6 +83,10 @@ export function toErrorResponse(
   return null;
 }
 
+/**
+ * Confirms the caller owns the pet directly or via matching NGO ownership
+ * before pet-source records can be read or written.
+ */
 export async function authorizePetAccess(
   authContext: AuthContext,
   petId: string
@@ -90,6 +109,10 @@ export async function authorizePetAccess(
   }
 }
 
+/**
+ * Translates the optional patch body into Mongo `$set` fields so omitted keys
+ * remain unchanged.
+ */
 export function buildSourceUpdateFields(body: SourcePatchBody): Record<string, unknown> {
   const updateFields: Record<string, unknown> = {};
 

@@ -16,6 +16,9 @@ import {
 const PROJECTION =
   'bloodTestDate heartworm lymeDisease ehrlichiosis anaplasmosis babesiosis petId';
 
+/**
+ * Returns paginated blood-test records for one owned pet.
+ */
 export async function handleListBloodTestRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -46,6 +49,10 @@ export async function handleListBloodTestRecords(
   });
 }
 
+/**
+ * Creates one blood-test record for an owned pet after validating the accepted
+ * blood-test date format.
+ */
 export async function handleCreateBloodTestRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -105,6 +112,10 @@ export async function handleCreateBloodTestRecord(
   });
 }
 
+/**
+ * Updates one blood-test record for an owned pet using partial-update
+ * semantics.
+ */
 export async function handleUpdateBloodTestRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -186,6 +197,9 @@ export async function handleUpdateBloodTestRecord(
   });
 }
 
+/**
+ * Deletes one blood-test record belonging to an owned pet.
+ */
 export async function handleDeleteBloodTestRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {

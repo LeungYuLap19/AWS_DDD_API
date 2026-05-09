@@ -462,6 +462,11 @@ async function verifySmsChallenge(
   );
 }
 
+/**
+ * Starts the OTP challenge flow for either email or SMS based on the parsed
+ * request body. The delegated helper owns channel-specific throttling,
+ * persistence, and provider side effects.
+ */
 export async function handleCreateChallenge(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, challengeBodySchema);
   if (!parsed.ok) {
@@ -475,6 +480,11 @@ export async function handleCreateChallenge(ctx: RouteContext): Promise<APIGatew
   return createSmsChallenge(ctx.event, parsed.data);
 }
 
+/**
+ * Completes the OTP verification flow for either email or SMS. Depending on
+ * the resolved user state it may return "new user" metadata only or issue a
+ * signed access token plus refresh cookie for an existing account.
+ */
 export async function handleVerifyChallenge(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const parsed = parseBody(ctx.body, verifyChallengeBodySchema);
   if (!parsed.ok) {

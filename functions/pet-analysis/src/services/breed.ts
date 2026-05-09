@@ -7,6 +7,10 @@ import { applyRateLimit } from '../utils/rateLimit';
 import { breedAnalysisSchema } from '../zodSchema/breedAnalysisSchema';
 import env from '../config/env';
 
+/**
+ * Forwards a validated breed-analysis request to the external VM-backed ML
+ * service after authenticated per-user throttling.
+ */
 export async function handleBreedAnalysis(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 

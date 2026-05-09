@@ -13,6 +13,9 @@ import { connectToMongoDB } from '../config/db';
 
 type PetOwnershipRecord = { _id: unknown; userId?: unknown };
 
+/**
+ * Returns the paginated public lost-pet report feed for authenticated callers.
+ */
 export async function handleListPetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
   await connectToMongoDB();
@@ -37,6 +40,10 @@ export async function handleListPetLost(ctx: RouteContext): Promise<APIGatewayPr
   });
 }
 
+/**
+ * Creates a lost-pet report, optionally linking it to an owned pet and syncing
+ * that pet's status before uploading any attached images.
+ */
 export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 
@@ -136,6 +143,9 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
   });
 }
 
+/**
+ * Deletes a lost-pet report only when the authenticated user owns the record.
+ */
 export async function handleDeletePetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const idParam = parseObjectIdParam(ctx.event.pathParameters?.petLostID);

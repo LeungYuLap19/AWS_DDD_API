@@ -16,6 +16,10 @@ import {
 const PROJECTION =
   'medicalDate medicalPlace medicalDoctor medicalResult medicalSolution petId';
 
+/**
+ * Returns paginated medical records for one owned pet after ownership
+ * validation.
+ */
 export async function handleListMedicalRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -46,6 +50,10 @@ export async function handleListMedicalRecords(
   });
 }
 
+/**
+ * Creates one medical record for an owned pet after validating the legacy date
+ * format accepted by this domain.
+ */
 export async function handleCreateMedicalRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -102,6 +110,10 @@ export async function handleCreateMedicalRecord(
   });
 }
 
+/**
+ * Updates one medical record for an owned pet, mapping omitted fields to
+ * partial-update semantics rather than full replacement.
+ */
 export async function handleUpdateMedicalRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
@@ -180,6 +192,9 @@ export async function handleUpdateMedicalRecord(
   });
 }
 
+/**
+ * Deletes one medical record belonging to an owned pet.
+ */
 export async function handleDeleteMedicalRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {

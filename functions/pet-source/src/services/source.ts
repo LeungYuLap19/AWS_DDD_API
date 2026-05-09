@@ -22,6 +22,11 @@ import {
   type SourceCreateBody,
 } from '../zodSchema/sourceSchema';
 
+/**
+ * Returns the pet-source record for one owned pet. Missing records are a
+ * successful `null` payload rather than a 404 because the source slice is
+ * optional.
+ */
 export async function handleGetPetSource(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const petId = getValidatedPetId(ctx.event);
@@ -46,6 +51,10 @@ export async function handleGetPetSource(ctx: RouteContext): Promise<APIGatewayP
   });
 }
 
+/**
+ * Creates the single pet-source record allowed for one owned pet, preserving
+ * duplicate protection on both the read path and Mongo unique-key failures.
+ */
 export async function handleCreatePetSource(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 
@@ -103,6 +112,10 @@ export async function handleCreatePetSource(ctx: RouteContext): Promise<APIGatew
   });
 }
 
+/**
+ * Partially updates the existing pet-source record for one owned pet after
+ * patch-body normalization into Mongo `$set` fields.
+ */
 export async function handlePatchPetSource(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
 

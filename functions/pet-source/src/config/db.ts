@@ -10,6 +10,11 @@ function registerModels() {
   mongoose.models.pet_sources || mongoose.model('pet_sources', PetSourceSchema, 'pet_sources');
 }
 
+/**
+ * Reuses the warm-container Mongoose connection, registers this Lambda's model
+ * set after the connection is ready, and clears the cached promise if the
+ * initial connect attempt fails.
+ */
 export async function connectToMongoDB() {
   if (mongoose.connection.readyState === 1) {
     registerModels();
