@@ -127,7 +127,7 @@ export async function handleGetAdoptionList(ctx: RouteContext): Promise<APIGatew
 }
 
 /**
- * GET /pet/adoption/{id}  (when no auth context — public browse detail)
+ * GET /pet/adoption/detail/{adoptionId}
  * Public adoption browse detail for one adoption-listing pet.
  */
 export async function handleGetBrowseDetail(

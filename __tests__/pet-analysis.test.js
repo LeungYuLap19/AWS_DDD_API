@@ -29,12 +29,12 @@ function createEvent({
   pathParameters = null,
   headers = {},
 } = {}) {
-  const normalizedResource = resource === '/pet/analysis/eye/{petId}'
-    ? '/pet/analysis/eye/{identifier}'
+  const normalizedResource = resource === '/pet/analysis/eye/{identifier}'
+    ? '/pet/analysis/eye/disease/{eyeDiseaseName}'
     : resource;
   const normalizedPathParameters =
-    pathParameters && pathParameters.petId !== undefined && pathParameters.identifier === undefined
-      ? { ...pathParameters, identifier: pathParameters.petId }
+    pathParameters && pathParameters.identifier !== undefined && pathParameters.eyeDiseaseName === undefined
+      ? { ...pathParameters, eyeDiseaseName: pathParameters.identifier }
       : pathParameters;
 
   return {
@@ -309,9 +309,9 @@ describe('pet-analysis handler Tier 2 integration', () => {
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: '/pet/analysis/eye/Cataract',
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: 'Cataract' },
+        path: '/pet/analysis/eye/disease/Cataract',
+        resource: '/pet/analysis/eye/disease/{eyeDiseaseName}',
+        pathParameters: { eyeDiseaseName: 'Cataract' },
       }),
       createContext()
     );
@@ -322,16 +322,21 @@ describe('pet-analysis handler Tier 2 integration', () => {
     expect(parsed.body.data.eyeDisease_eng).toBe('Cataract');
   });
 
-  test('GET eye log list is public when identifier is a petId', async () => {
+  test('GET eye log list requires owner auth when path param is a petId', async () => {
     const petId = new mongoose.Types.ObjectId().toString();
-    const { handler } = loadHandlerWithMocks({ petDoc: { _id: petId, userId: petId } });
+    const authUserId = new mongoose.Types.ObjectId().toString();
+    const { handler, authorizer } = loadHandlerWithMocks({
+      authUserId,
+      petDoc: { _id: petId, userId: authUserId, deleted: false },
+    });
 
     const result = await handler(
       createEvent({
         method: 'GET',
         path: `/pet/analysis/eye/${petId}`,
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: petId },
+        resource: '/pet/analysis/eye/{petId}',
+        pathParameters: { petId },
+        authorizer,
       }),
       createContext()
     );
@@ -420,16 +425,16 @@ describe('pet-analysis handler Tier 2 integration', () => {
   });
 });
 
-describe('GET /pet/analysis/eye/{identifier}', () => {
+describe('GET /pet/analysis/eye/disease/{eyeDiseaseName}', () => {
   test('returns 200 with null fields for Normal eye disease when not in DB', async () => {
     const { handler } = loadHandlerWithMocks({ eyeDiseaseDoc: null });
 
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: '/pet/analysis/eye/Normal',
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: 'Normal' },
+        path: '/pet/analysis/eye/disease/Normal',
+        resource: '/pet/analysis/eye/disease/{eyeDiseaseName}',
+        pathParameters: { eyeDiseaseName: 'Normal' },
       }),
       createContext()
     );
@@ -446,9 +451,9 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: '/pet/analysis/eye/UnknownDisease',
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: 'UnknownDisease' },
+        path: '/pet/analysis/eye/disease/UnknownDisease',
+        resource: '/pet/analysis/eye/disease/{eyeDiseaseName}',
+        pathParameters: { eyeDiseaseName: 'UnknownDisease' },
       }),
       createContext()
     );
@@ -458,15 +463,15 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
     expect(parsed.body.errorKey).toBe('petAnalysis.errors.eyeDiseaseNotFound');
   });
 
-  test('returns 400 when identifier is missing/empty', async () => {
+  test('returns 400 when eyeDiseaseName is missing/empty', async () => {
     const { handler } = loadHandlerWithMocks();
 
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: '/pet/analysis/eye/',
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: '' },
+        path: '/pet/analysis/eye/disease/',
+        resource: '/pet/analysis/eye/disease/{eyeDiseaseName}',
+        pathParameters: { eyeDiseaseName: '' },
       }),
       createContext()
     );
@@ -498,8 +503,8 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
       createEvent({
         method: 'GET',
         path: `/pet/analysis/eye/${petId}`,
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: petId },
+        resource: '/pet/analysis/eye/{petId}',
+        pathParameters: { petId },
         authorizer,
       }),
       createContext()
@@ -511,7 +516,7 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
     expect(parsed.body.data[0].petId).toBe(petId);
   });
 
-  test('returns eye log list even when caller does not own the pet', async () => {
+  test('returns 403 when caller does not own the pet', async () => {
     const authUserId = new mongoose.Types.ObjectId().toString();
     const petId = new mongoose.Types.ObjectId().toString();
     const otherUserId = new mongoose.Types.ObjectId().toString();
@@ -525,16 +530,16 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
       createEvent({
         method: 'GET',
         path: `/pet/analysis/eye/${petId}`,
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: petId },
+        resource: '/pet/analysis/eye/{petId}',
+        pathParameters: { petId },
         authorizer,
       }),
       createContext()
     );
 
     const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(200);
-    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.statusCode).toBe(403);
+    expect(parsed.body.errorKey).toBe('common.forbidden');
   });
 
   test('returns eye log when NGO owns the pet', async () => {
@@ -554,8 +559,8 @@ describe('GET /pet/analysis/eye/{identifier}', () => {
       createEvent({
         method: 'GET',
         path: `/pet/analysis/eye/${petId}`,
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: petId },
+        resource: '/pet/analysis/eye/{petId}',
+        pathParameters: { petId },
         authorizer,
       }),
       createContext()
@@ -1392,21 +1397,20 @@ describe('CORS and OPTIONS behavior', () => {
 });
 
 describe('Cyberattack and abuse cases', () => {
-  test('GET eye - NoSQL operator injected as identifier is treated as disease name (no ObjectId)', async () => {
+  test('GET eye disease - NoSQL operator-like disease name is rejected as not found', async () => {
     const { handler } = loadHandlerWithMocks({ eyeDiseaseDoc: null });
 
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: '/pet/analysis/eye/%7B%24gt%3A%22%22%7D',
-        resource: '/pet/analysis/eye/{identifier}',
-        pathParameters: { identifier: '{"$gt":""}' },
+        path: '/pet/analysis/eye/disease/%7B%24gt%3A%22%22%7D',
+        resource: '/pet/analysis/eye/disease/{eyeDiseaseName}',
+        pathParameters: { eyeDiseaseName: '{"$gt":""}' },
       }),
       createContext()
     );
 
     const parsed = parseResponse(result);
-    // Non-ObjectId identifier goes to eye disease path → not found → 404
     expect(parsed.statusCode).toBe(404);
     expect(parsed.body.errorKey).toBe('petAnalysis.errors.eyeDiseaseNotFound');
   });

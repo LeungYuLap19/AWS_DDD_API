@@ -3,10 +3,11 @@
  *
  * Routes under test (explicit, no proxy):
  *   GET    /pet/adoption         → browse list (public)
- *   GET    /pet/adoption/{id}    → browse detail (no auth) OR managed GET (with auth)
- *   POST   /pet/adoption/{id}    → managed create (protected)
- *   PATCH  /pet/adoption/{id}    → managed update (protected)
- *   DELETE /pet/adoption/{id}    → managed delete (protected)
+ *   GET    /pet/adoption/detail/{adoptionId} → browse detail (public)
+ *   GET    /pet/adoption/{petId} → managed GET (protected)
+ *   POST   /pet/adoption/{petId} → managed create (protected)
+ *   PATCH  /pet/adoption/{petId} → managed update (protected)
+ *   DELETE /pet/adoption/{petId} → managed delete (protected)
  *
  * Run:  npx jest pet-adoption
  */
@@ -46,13 +47,19 @@ function createEvent({
   queryStringParameters = null,
   pathParameters = null,
 } = {}) {
+  const normalizedResource = resource === '/pet/adoption/{id}' ? '/pet/adoption/{petId}' : resource;
+  const normalizedPathParameters =
+    pathParameters && pathParameters.id !== undefined && pathParameters.petId === undefined
+      ? { ...pathParameters, petId: pathParameters.id }
+      : pathParameters;
+
   return {
     httpMethod: method,
     path: routePath,
-    resource,
+    resource: normalizedResource,
     headers: {},
     body,
-    pathParameters,
+    pathParameters: normalizedPathParameters,
     queryStringParameters,
     multiValueQueryStringParameters: null,
     multiValueHeaders: {},
@@ -217,6 +224,8 @@ function loadHandlerWithMocks({
   const mongooseMock = {
     Schema: actualMongoose.Schema,
     Types: actualMongoose.Types,
+    connection: { readyState: 1 },
+    connect: jest.fn().mockResolvedValue({}),
     isValidObjectId: actualMongoose.isValidObjectId,
     createConnection: jest.fn().mockImplementation((uri) =>
       uri.includes('adoption') ? browseConn : mainConn
@@ -301,16 +310,16 @@ describe('pet-adoption — GET /pet/adoption (browse list, public)', () => {
   });
 });
 
-describe('pet-adoption — GET /pet/adoption/{id} (no auth → browse detail)', () => {
+describe('pet-adoption — GET /pet/adoption/detail/{adoptionId} (browse detail)', () => {
   test('returns 400 for invalid ObjectId', async () => {
     const { handler } = loadHandlerWithMocks();
 
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: '/pet/adoption/not-an-id',
-        resource: '/pet/adoption/{id}',
-        pathParameters: { id: 'not-an-id' },
+        path: '/pet/adoption/detail/not-an-id',
+        resource: '/pet/adoption/detail/{adoptionId}',
+        pathParameters: { adoptionId: 'not-an-id' },
       }),
       createContext()
     );
@@ -325,9 +334,9 @@ describe('pet-adoption — GET /pet/adoption/{id} (no auth → browse detail)', 
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: `/pet/adoption/${id}`,
-        resource: '/pet/adoption/{id}',
-        pathParameters: { id },
+        path: `/pet/adoption/detail/${id}`,
+        resource: '/pet/adoption/detail/{adoptionId}',
+        pathParameters: { adoptionId: id },
       }),
       createContext()
     );
@@ -342,9 +351,9 @@ describe('pet-adoption — GET /pet/adoption/{id} (no auth → browse detail)', 
     const result = await handler(
       createEvent({
         method: 'GET',
-        path: `/pet/adoption/${id}`,
-        resource: '/pet/adoption/{id}',
-        pathParameters: { id },
+        path: `/pet/adoption/detail/${id}`,
+        resource: '/pet/adoption/detail/{adoptionId}',
+        pathParameters: { adoptionId: id },
       }),
       createContext()
     );
@@ -353,7 +362,7 @@ describe('pet-adoption — GET /pet/adoption/{id} (no auth → browse detail)', 
   });
 });
 
-describe('pet-adoption — GET /pet/adoption/{id} (with auth → managed record GET)', () => {
+describe('pet-adoption — GET /pet/adoption/{petId} (managed record GET)', () => {
   test('returns 400 for invalid petId', async () => {
     const { handler, authorizer } = loadHandlerWithMocks();
 
@@ -445,7 +454,7 @@ describe('pet-adoption — GET /pet/adoption/{id} (with auth → managed record 
   });
 });
 
-describe('pet-adoption — POST /pet/adoption/{id} (managed create)', () => {
+describe('pet-adoption — POST /pet/adoption/{petId} (managed create)', () => {
   test('returns 401 without auth', async () => {
     const petId = new mongoose.Types.ObjectId().toString();
     const { handler } = loadHandlerWithMocks();
@@ -609,7 +618,7 @@ describe('pet-adoption — POST /pet/adoption/{id} (managed create)', () => {
   });
 });
 
-describe('pet-adoption — PATCH /pet/adoption/{id} (managed update)', () => {
+describe('pet-adoption — PATCH /pet/adoption/{petId} (managed update)', () => {
   test('returns 401 without auth', async () => {
     const petId = new mongoose.Types.ObjectId().toString();
     const { handler } = loadHandlerWithMocks();
@@ -749,7 +758,7 @@ describe('pet-adoption — PATCH /pet/adoption/{id} (managed update)', () => {
   });
 });
 
-describe('pet-adoption — DELETE /pet/adoption/{id} (managed delete)', () => {
+describe('pet-adoption — DELETE /pet/adoption/{petId} (managed delete)', () => {
   test('returns 401 without auth', async () => {
     const petId = new mongoose.Types.ObjectId().toString();
     const { handler } = loadHandlerWithMocks();
@@ -865,4 +874,3 @@ describe('pet-adoption — infrastructure edge cases', () => {
     expect(parseResponse(result).statusCode).toBe(404);
   });
 });
-

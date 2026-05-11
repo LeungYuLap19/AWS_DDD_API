@@ -110,7 +110,7 @@ export async function handleCreateManagedRecord(
 }
 
 /**
- * PATCH /pet/adoption/{id}
+ * PATCH /pet/adoption/{petId}
  * Updates the managed adoption/placement record for a pet.
  * Uses petId only — each pet has at most one adoption record.
  * Protected: requires valid auth context.
@@ -156,7 +156,7 @@ export async function handleUpdateManagedRecord(
 }
 
 /**
- * DELETE /pet/adoption/{id}
+ * DELETE /pet/adoption/{petId}
  * Deletes the managed adoption/placement record linked to a pet.
  * Uses petId only — each pet has at most one adoption record.
  * Protected: requires valid auth context.
