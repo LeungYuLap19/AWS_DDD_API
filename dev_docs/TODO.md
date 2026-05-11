@@ -15,6 +15,7 @@
 - [x] retest sam
 - [x] api docs update
 - [x] Tsdoc
+- [ ] deployment tests
 
 ## Optimization, Security Scan and Hardening
 
