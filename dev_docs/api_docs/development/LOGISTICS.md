@@ -64,6 +64,8 @@ Authorization: Bearer <access-token>
 Content-Type: application/json
 ```
 
+If the API key or Bearer JWT is missing/invalid on protected logistics routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 ### Rate Limits
 
 | Route | Policy |
@@ -321,7 +323,7 @@ Create a shipment and write the returned waybill number onto matched orders.
 | 400 | `logistics.validation.phoneNumberRequired` | Missing or empty `phoneNumber` |
 | 400 | `logistics.validation.addressRequired` | Missing or empty `address` |
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Non-privileged caller does not own linked order(s) |
 | 429 | `common.rateLimited` | Shipment rate limit exceeded |
 | 500 | `logistics.missingWaybill` | SF returned no waybill number |
@@ -365,7 +367,7 @@ Generate a cloud-print PDF for a waybill and email it internally.
 | --- | --- | --- |
 | 400 | `logistics.validation.waybillNoRequired` | Missing or empty `waybillNo` |
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 429 | `common.rateLimited` | Cloud-waybill rate limit exceeded |
 | 500 | `logistics.sfApiError` | SF returned a failure state |
 | 500 | `logistics.missingPrintFile` | SF returned no PDF file entry |

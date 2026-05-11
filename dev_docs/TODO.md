@@ -15,6 +15,7 @@
 - [x] retest sam
 - [x] api docs update
 - [x] Tsdoc
+- [ ] deployment tests
 
 ## Optimization, Security Scan and Hardening
 
@@ -46,6 +47,8 @@
 - [ ] what can be extract to shared (SoC) - delay
   - db connection, service standard flow, s3 client
 - [ ] mongodb indexing - delay
+- [ ] admin protected routes need db identity checking
+- [ ] add CORS restrictions
 - [ ] business logics optimisation - delay
 - [ ] path optimization (consider move PATCH pet profile by {petId} to /pet-profile/me) - delay
 - [ ] Remove dead S3 env vars from `PetBiometricFunction` and `CommerceFulfillmentFunction`

@@ -44,7 +44,7 @@ export const userRegistrationBodySchema = z
       (value) => !value || !Number.isNaN(new Date(value).getTime()),
       { message: 'common.invalidBodyParams' }
     ),
-    gender: optionalNullableString,
+    gender: optionalNullableString(20),
   })
   .strict()
   .refine(

@@ -68,6 +68,8 @@ Authorization: Bearer <access-token>
 Content-Type: application/json
 ```
 
+If the API key or Bearer JWT is missing/invalid on managed routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 ### Authorization Rules For Managed Operations
 
 Managed operations authorize access when either condition is true:
@@ -438,7 +440,7 @@ The body schema is strict. Extra keys are rejected.
 | 400 | `common.missingBodyParams` | Missing or empty JSON body |
 | 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
 | 400 | `petAdoption.errors.managed.invalidDateFormat` | Invalid date in one of the managed date fields |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT on the protected route |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 409 | `petAdoption.errors.managed.duplicateRecord` | Managed record already exists for the pet |
@@ -474,7 +476,7 @@ Any subset of the same fields accepted by managed create may be supplied.
 | 400 | `common.missingBodyParams` | Missing or empty JSON body |
 | 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
 | 400 | `petAdoption.errors.managed.invalidDateFormat` | Invalid date in one of the managed date fields |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT on the protected route |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 404 | `petAdoption.errors.managed.recordNotFound` | No managed adoption record exists for that pet |
@@ -499,7 +501,7 @@ None.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `{id}` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT on the protected route |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 404 | `petAdoption.errors.managed.recordNotFound` | No managed adoption record exists for that pet |

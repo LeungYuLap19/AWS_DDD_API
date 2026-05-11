@@ -46,6 +46,8 @@ Eye analysis, breed analysis, and supporting image uploads. The current DDD impl
 | All other `pet-analysis` routes | Yes | `DddTokenAuthorizer` |
 | `OPTIONS` for `pet-analysis` routes | No | None |
 
+If the API key or Bearer JWT is missing/invalid on protected `pet-analysis` routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 ### Authorization Rules
 
 - `GET /pet/analysis/eye/{identifier}` is public at the Lambda level
@@ -248,7 +250,7 @@ Run eye analysis for a pet using an image URL or uploaded file.
 | 400 | `common.invalidBodyParams` | Strict-schema violation on multipart text fields |
 | 400 | `petAnalysis.errors.unsupportedFormat` | Unsupported file type |
 | 400 | `petAnalysis.errors.analysisError` | External analysis service returned error payload |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAnalysis.errors.userNotFound` | Caller user record missing or deleted |
 | 404 | `petAnalysis.errors.petNotFound` | Pet not found or deleted |
@@ -318,7 +320,7 @@ Returns the sanitized pet object in `data`. Fields may include:
 | 400 | `common.invalidBodyParams` | Malformed JSON body or unknown extra field |
 | 400 | `petAnalysis.errors.updatePetEye.invalidDateFormat` | Invalid `date` |
 | 400 | `petAnalysis.errors.updatePetEye.invalidImageUrlFormat` | Invalid image URL |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAnalysis.errors.updatePetEye.petNotFound` | Pet not found |
 | 410 | `petAnalysis.errors.updatePetEye.petDeleted` | Pet already deleted |
@@ -358,7 +360,7 @@ Run breed analysis using an uploaded image URL.
 | 400 | `petAnalysis.errors.urlRequired` | Missing `url` |
 | 400 | `petAnalysis.errors.invalidUrl` | Invalid URL |
 | 400 | `petAnalysis.errors.fieldTooLong` | `species` too long |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 429 | `common.rateLimited` | Breed analysis rate limit exceeded |
 | 502 | `petAnalysis.errors.analysisError` | External breed-analysis request failed at the network/request layer |
 
@@ -387,7 +389,7 @@ Upload one image for analysis workflows.
 | 400 | `petAnalysis.errors.noFilesUploaded` | No file supplied |
 | 400 | `petAnalysis.errors.tooManyFiles` | More than one file supplied |
 | 400 | `petAnalysis.errors.invalidImageFormat` | Unsupported file type |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 413 | `petAnalysis.errors.fileTooLarge` | File too large |
 | 429 | `common.rateLimited` | Upload rate limit exceeded |
 
@@ -424,7 +426,7 @@ Allowed uploaded image types are JPEG, PNG, WebP, and GIF. File-size limit is 4 
 | 400 | `petAnalysis.errors.invalidFolder` | Missing or invalid folder path |
 | 400 | `petAnalysis.errors.noFilesUploaded` | No file supplied |
 | 400 | `petAnalysis.errors.invalidImageFormat` | Unsupported file type |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 413 | `petAnalysis.errors.fileTooLarge` | File too large |
 | 429 | `common.rateLimited` | Upload rate limit exceeded |
 

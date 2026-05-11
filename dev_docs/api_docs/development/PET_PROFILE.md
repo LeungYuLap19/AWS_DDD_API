@@ -60,6 +60,8 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
+If the API key or Bearer JWT is missing/invalid on protected routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 Create and patch requests must use multipart form-data.
 
 ### Authorization Rules
@@ -438,7 +440,7 @@ Current implementation note: the handler switches into the NGO list branch whene
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid pagination query values |
-| 401 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected internal error |
 
 ### GET /pet/profile/{petId}

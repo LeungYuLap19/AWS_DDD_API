@@ -52,6 +52,8 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
+If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 Dispatch requests must also send `Content-Type: application/json`.
 
 ### Authorization Rules
@@ -207,7 +209,7 @@ The result is sorted by `createdAt` descending.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid pagination query |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected internal error |
 
 ### PATCH /notifications/me/{notificationId}
@@ -232,7 +234,7 @@ None required. The handler ignores body content.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `notificationId` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | Notification not found or not owned by caller |
 | 500 | `common.internalError` | Unexpected internal error |
 
@@ -277,7 +279,7 @@ The body schema is strict. Extra keys are rejected.
 | 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
 | 400 | `notifications.errors.typeRequired` | Invalid or missing notification type |
 | 400 | `notifications.errors.invalidDate` | Invalid `nextEventDate` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller is not `admin` |
 | 500 | `common.internalError` | Unexpected internal error |
 
