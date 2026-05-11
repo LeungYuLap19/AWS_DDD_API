@@ -728,7 +728,7 @@ sam deploy --config-env production
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |
 | `GET /pet/adoption` | `GET /adoption` | `GetAdoption` | public adoption list / browse feed。 |
-| `GET /pet/adoption/{adoptionId}` | `GET /adoption/{id}` | `GetAdoption` | public adoption detail。 |
+| `GET /pet/adoption/detail/{adoptionId}` | `GET /adoption/{id}` | `GetAdoption` | public adoption detail。 |
 | `GET /pet/adoption/{petId}` | `GET /v2/pets/{petID}/pet-adoption` | `PetDetailInfo` | 取得 pet-owned adoption record。 |
 | `POST /pet/adoption/{petId}` | `POST /v2/pets/{petID}/pet-adoption` | `PetDetailInfo` | 建立 pet-owned adoption record。 |
 | `PATCH /pet/adoption/{petId}` | `PUT /v2/pets/{petID}/pet-adoption/{adoptionId}` | `PetDetailInfo` | 更新 pet-owned adoption record。 |
@@ -767,7 +767,7 @@ sam deploy --config-env production
 | `GET /pet/analysis/eye/{petId}` | `GET /pets/{petID}/eyeLog` | `PetBasicInfo` | 取得 eye log / eye history。 |
 | `POST /pet/analysis/eye/{petId}` | `POST /analysis/eye-upload/{petId}` | `EyeUpload` | 執行 eye analysis。 |
 | `PATCH /pet/analysis/eye/{petId}` | `PUT /pets/updatePetEye` | `GetAllPets` | 更新/追加 eye capture history。 |
-| `GET /pet/analysis/eye/{eyeDiseaseName}` | `GET /analysis/{eyeDiseaseName}` | `GetBreed` | 取得 eye disease reference content。 |
+| `GET /pet/analysis/eye/disease/{eyeDiseaseName}` | `GET /analysis/{eyeDiseaseName}` | `GetBreed` | 取得 eye disease reference content。 |
 | `POST /pet/analysis/breed` | `POST /analysis/breed` | `EyeUpload` | 執行 breed analysis。 |
 | `POST /pet/analysis/uploads/image` | `POST /util/uploadImage` | `EyeUpload` | generic image upload helper。 |
 | `POST /pet/analysis/uploads/breed-image` | `POST /util/uploadPetBreedImage` | `EyeUpload` | breed image upload helper。 |

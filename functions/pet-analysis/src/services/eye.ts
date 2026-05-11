@@ -28,46 +28,60 @@ function isAnalysisErrorPayload(payload: Record<string, unknown>): boolean {
 }
 
 /**
- * Multiplexes eye-analysis reads: non-ObjectId identifiers resolve an eye
- * disease lookup, while ObjectId identifiers return paginated analysis history
- * for a specific pet.
+ * GET /pet/analysis/eye/disease/{eyeDiseaseName}
+ * Public eye disease lookup.
  */
-export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+export async function handleGetEyeDisease(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
-  const identifier = toTrimmedString(ctx.event.pathParameters?.identifier);
-  if (!identifier) {
+  const eyeDiseaseName = toTrimmedString(ctx.event.pathParameters?.eyeDiseaseName);
+  if (!eyeDiseaseName) {
     return response.errorResponse(400, 'petAnalysis.errors.missingEyeDiseaseName', ctx.event);
   }
 
-  if (!mongoose.isValidObjectId(identifier)) {
-    const EyeDiseaseList = mongoose.model('EyeDiseaseList');
-    const eyeDisease = (await EyeDiseaseList.findOne({ eyeDisease_eng: decodeURIComponent(identifier) }).lean()) as
-      | Record<string, unknown>
-      | null;
+  const decodedName = decodeURIComponent(eyeDiseaseName);
+  const EyeDiseaseList = mongoose.model('EyeDiseaseList');
+  const eyeDisease = (await EyeDiseaseList.findOne({ eyeDisease_eng: decodedName }).lean()) as
+    | Record<string, unknown>
+    | null;
 
-    if (!eyeDisease && decodeURIComponent(identifier) === 'Normal') {
-      return response.successResponse(200, ctx.event, {
-        message: 'success.retrieved',
-        data: {
-          id: null,
-          eyeDiseaseEng: null,
-          eyeDiseaseChi: null,
-          eyeDiseaseCause: null,
-          eyeDiseaseSolution: null,
-        },
-      });
-    }
-
-    if (!eyeDisease) {
-      return response.errorResponse(404, 'petAnalysis.errors.eyeDiseaseNotFound', ctx.event);
-    }
-
+  if (!eyeDisease && decodedName === 'Normal') {
     return response.successResponse(200, ctx.event, {
       message: 'success.retrieved',
-      data: eyeDisease,
+      data: {
+        id: null,
+        eyeDiseaseEng: null,
+        eyeDiseaseChi: null,
+        eyeDiseaseCause: null,
+        eyeDiseaseSolution: null,
+      },
     });
   }
+
+  if (!eyeDisease) {
+    return response.errorResponse(404, 'petAnalysis.errors.eyeDiseaseNotFound', ctx.event);
+  }
+
+  return response.successResponse(200, ctx.event, {
+    message: 'success.retrieved',
+    data: eyeDisease,
+  });
+}
+
+/**
+ * GET /pet/analysis/eye/{petId}
+ * Returns paginated analysis history for an owned pet.
+ */
+export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  requireAuthContext(ctx.event);
+  await connectToMongoDB();
+
+  const petId = toTrimmedString(ctx.event.pathParameters?.petId);
+  if (!petId || !mongoose.isValidObjectId(petId)) {
+    return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
+  }
+
+  await loadAuthorizedPet(ctx.event, petId, { allowNgo: true });
 
   const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
   if (!pagination.success) {
@@ -78,13 +92,13 @@ export async function handleGetEye(ctx: RouteContext): Promise<APIGatewayProxyRe
 
   const EyeAnalysis = mongoose.model('EyeAnalysisRecord');
   const [eyeAnalysisLogList, total] = (await Promise.all([
-    EyeAnalysis.find({ petId: identifier })
+    EyeAnalysis.find({ petId })
       .select('_id petId image eyeSide result createdAt updatedAt')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
-    EyeAnalysis.countDocuments({ petId: identifier }),
+    EyeAnalysis.countDocuments({ petId }),
   ])) as [Record<string, unknown>[], number];
 
   return response.successResponse(200, ctx.event, {
@@ -118,7 +132,7 @@ export async function handlePostEye(ctx: RouteContext): Promise<APIGatewayProxyR
     return rateLimitResponse;
   }
 
-  const petId = toTrimmedString(ctx.event.pathParameters?.identifier);
+  const petId = toTrimmedString(ctx.event.pathParameters?.petId);
   if (!petId || !mongoose.isValidObjectId(petId)) {
     return response.errorResponse(400, 'common.invalidObjectId', ctx.event);
   }
@@ -255,7 +269,7 @@ export async function handlePatchEye(ctx: RouteContext): Promise<APIGatewayProxy
   }
 
   const { petId, date, leftEyeImage1PublicAccessUrl, rightEyeImage1PublicAccessUrl } = parsed.data;
-  const routePetId = toTrimmedString(ctx.event.pathParameters?.identifier);
+  const routePetId = toTrimmedString(ctx.event.pathParameters?.petId);
 
   if (!mongoose.isValidObjectId(petId) || routePetId !== petId) {
     return response.errorResponse(400, 'common.invalidObjectId', ctx.event);

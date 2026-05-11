@@ -5,342 +5,210 @@ applications
 utils/response
 locales
 
+Legend
+- `x-api-key` = API key required
+- `self` = caller-authenticated route
+- `owner` = record ownership check
+- `admin` = backoffice / staff / operator access
+- `hybrid` = multiple auth branches or browse + managed split
+- all routes still require `x-api-key`
+
 /auth
-  POST /account/generate-email-code
-  POST /account/verify-email-code
-  POST /account/generate-sms-code
-  POST /account/verify-sms-code
-  POST /account/register
-  POST /auth/refresh
-  ---
-  /challenges 
-    POST
+  /challenges
+    POST [x-api-key]
     /verify
-      POST
+      POST [x-api-key, hybrid]
   /registrations
     /user
-      POST
+      POST [x-api-key]
     /ngo
-      POST
+      POST [x-api-key]
   /login
     /ngo
-      POST
+      POST [x-api-key]
   /tokens
-    /refresh 
-      POST
+    /refresh
+      POST [x-api-key]
 
 /user
-  GET /account/{userId}
-  POST /account/update-image
-  PUT /account
-  DELETE /account/{userId}
-  POST /account/delete-user-with-email
-  ---
-  /me (userId from jwt)
-    GET
-    PATCH
-    DELETE
+  /me [x-api-key, self]
+    GET [self]
+    PATCH [self]
+    DELETE [self]
 
 /ngo
-  GET /v2/account/user-list
-  GET /v2/account/edit-ngo/{ngoId}
-  GET /v2/account/edit-ngo/{ngoId}/pet-placement-options
-  POST /v2/account/register-ngo
-  PUT /v2/account/edit-ngo/{ngoId}
-  ---
-  /me (ngoId from jwt)
-    GET
-    PATCH
-    DELETE-?
+  /me [x-api-key, self]
+    GET [self]
+    PATCH [self]
+    DELETE [self]
     /members
-      GET
+      GET [self]
 
 /pet
   /profile
-    ## 1. Public tag lookup
-    GET /pets/getPetInfobyTagId/{tagId}
-
-    ## 2. Pet list queries
-    GET /pets/pet-list/{userId}
-    GET /pets/pet-list-ngo/{ngoId}
-
-    ## 3. Core pet profile read
-    GET /pets/{petID}/basic-info
-    GET /pets/{petID}/detail-info
-
-    ## 4. Core pet profile create
-    POST /pets/create-pet-basic-info
-    POST /pets/create-pet-basic-info-with-image
-
-    ## 5. Core pet profile update
-    POST /pets/updatePetImage
-    PUT /pets/{petID}/basic-info
-    POST /pets/{petID}/detail-info
-
-    ## 6. Pet delete
-    DELETE /pets/{petID}
-    POST /pets/deletePet
-    ---
-    POST
+    POST [x-api-key, self]
     /{petId}
-      GET
-      PATCH
-      DELETE
-    /me (ngoId / userId from jwt)
-      GET
+      GET [x-api-key, owner]
+      PATCH [x-api-key, owner]
+      DELETE [x-api-key, owner]
+    /me
+      GET [x-api-key, self]
     /by-tag
       /{tagId}
-        GET
-
+        GET [x-api-key]
   /source
-    x ## 0. public resource ???
-    x GET /animal/animalList/{lang} ???
-
-    ## 1. Pet source/origin
-    GET /v2/pets/{petID}/detail-info/source
-    POST /v2/pets/{petID}/detail-info/source
-    PUT /v2/pets/{petID}/detail-info/source/{sourceId}
-    ---
     /{petId}
-      GET
-      POST
-      PATCH
-
+      GET [x-api-key, owner]
+      POST [x-api-key, owner]
+      PATCH [x-api-key, owner]
   /transfer
-    POST /pets/{petID}/detail-info/transfer
-    PUT /pets/{petID}/detail-info/NGOtransfer
-    PUT /pets/{petID}/detail-info/transfer/{transferId}
-    DELETE /pets/{petID}/detail-info/transfer/{transferId}
-    ---
     /{petId}
-      POST
+      POST [x-api-key, owner]
       /{transferId}
-        PATCH
-        DELETE
+        PATCH [x-api-key, owner]
+        DELETE [x-api-key, owner]
       /ngo-reassignment
-        POST
+        POST [x-api-key, owner, hybrid]
 
+  --- * ---
   /adoption
-    GET /adoption
-    GET /adoption/{id}
-    GET /v2/pets/{petID}/pet-adoption
-    POST /v2/pets/{petID}/pet-adoption
-    PUT /v2/pets/{petID}/pet-adoption/{adoptionId}
-    DELETE /v2/pets/{petID}/pet-adoption/{adoptionId}
-    ---
-    GET
-    /{adoptionId}
-      GET
+    GET [x-api-key]
+    /detail
+      /{adoptionId}
+        GET [x-api-key]
     /{petId}
-      GET
-      POST
-      PATCH
-      DELETE
-
+      GET [x-api-key, owner]
+      POST [x-api-key, owner]
+      PATCH [x-api-key, owner]
+      DELETE [x-api-key, owner]
+  --- * ---
 
   /medical
-    GET /deworm
-
-    GET /pets/{petID}/medical-record
-    POST /pets/{petID}/medical-record
-    PUT /pets/{petID}/medical-record/{medicalID}
-    DELETE /pets/{petID}/medical-record/{medicalID}
-
-    GET /pets/{petID}/medication-record
-    POST /pets/{petID}/medication-record
-    PUT /pets/{petID}/medication-record/{medicationID}
-    DELETE /pets/{petID}/medication-record/{medicationID}
-
-    GET /pets/{petID}/deworm-record
-    POST /pets/{petID}/deworm-record
-    PUT /pets/{petID}/deworm-record/{dewormID}
-    DELETE /pets/{petID}/deworm-record/{dewormID}
-
-    GET /v2/pets/{petID}/blood-test-record
-    POST /v2/pets/{petID}/blood-test-record
-    PUT /v2/pets/{petID}/blood-test-record/{bloodTestID}
-    DELETE /v2/pets/{petID}/blood-test-record/{bloodTestID}
-
-    GET /pets/{petID}/vaccine-record
-    POST /pets/{petID}/vaccine-record
-    PUT /pets/{petID}/vaccine-record/{vaccineID}
-    DELETE /pets/{petID}/vaccine-record/{vaccineID}
-    ---
     /reference
       /deworm
-        GET
+        GET [x-api-key]
     /{petId}
       /general
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{medicalId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /medication
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{medicationId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /deworming
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{dewormId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /blood-test
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{bloodTestId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /vaccination
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{vaccineId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
 
-  /analysis (need refinement)
-    GET /analysis/{eyeDiseaseName}
-    POST /analysis/eye-upload/{petId}
-    POST /analysis/breed
-    POST /util/uploadImage
-    POST /util/uploadPetBreedImage
-    GET /pets/{petID}/eyeLog
-    PUT /pets/updatePetEye
-    ---
-     /eye
+  --- * ---
+  /analysis
+    /eye
+      /disease
+        /{eyeDiseaseName}
+          GET [x-api-key]
       /{petId}
-        GET
-        POST
-        PATCH
-      /{eyeDiseaseName}
-        GET
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
+        PATCH [x-api-key, owner]
     /breed
-      POST
+      POST [x-api-key, self]
     /uploads
       /image
-        POST
+        POST [x-api-key, self]
       /breed-image
-        POST
-
+        POST [x-api-key, self]
+  --- * ---
+  
   /recovery
-    GET /v2/pets/pet-lost
-    GET /v2/pets/pet-found
-    POST /v2/pets/pet-lost
-    POST /v2/pets/pet-found
-    DELETE /v2/pets/pet-lost/{petLostID}
-    DELETE /v2/pets/pet-found/{petFoundID}
-    ---
     /lost
-      GET
-      POST
+      GET [x-api-key, self]
+      POST [x-api-key, self]
       /{petLostID}
-        DELETE
+        DELETE [x-api-key, owner]
     /found
-      GET
-      POST
+      GET [x-api-key, self]
+      POST [x-api-key, self]
       /{petFoundID}
-        DELETE
-
-  /biometric
-    GET /petBiometrics/{petId}
-    POST /petBiometrics/register
-    POST /petBiometrics/verifyPet
-    ---
-    /{petId}
-      GET
-    /registrations
-      POST
-    /verifications
-      POST
+        DELETE [x-api-key, owner]
+  /reference
+    /breeds
+      /{species}
+        GET [x-api-key]
+        /{lang}
+          GET [x-api-key]
 
 /notifications
-  GET /v2/account/{userId}/notifications
-  POST /v2/account/{userId}/notifications
-  PUT /v2/account/{userId}/notifications/{notificationId}
-  ---
-  /me (userId from jwt)
-    GET
+  /me
+    GET [x-api-key, self]
     /{notificationId}
-      PATCH
+      PATCH [x-api-key, owner]
   /dispatch
-    POST (userId in body)
+    POST [x-api-key, admin]
 
-/commerce (need refinement)
-  GET /product/productList
-  GET /purchase/shop-info
-  GET /purchase/orders
-  GET /purchase/order-verification
-  GET /v2/orderVerification/supplier/{orderId}
-  GET /v2/orderVerification/whatsapp-order-link/{_id}
-  GET /v2/orderVerification/ordersInfo/{tempId}
-  GET /v2/orderVerification/getAllOrders
-  GET /v2/orderVerification/{tagId}
-
-  POST /product/productLog
-  POST /purchase/confirmation
-  PUT /v2/orderVerification/supplier/{orderId}
-  PUT /v2/orderVerification/{tagId}
-  POST /purchase/send-ptag-detection-email
-  DELETE /purchase/order-verification/{orderVerificationId}
-  ---
+/commerce
   /catalog
-    GET
+    GET [x-api-key]
     /events
-      POST
-
+      POST [x-api-key]
   /storefront
-    GET
-
+    GET [x-api-key]
   /orders
-    GET
-    POST
+    GET [x-api-key, admin]
+    POST [x-api-key, self]
     /{tempId}
-      GET
+      GET [x-api-key, owner, admin]
     /operations
-      GET-?
-
+      GET [x-api-key, admin]
   /fulfillment
-    GET
+    GET [x-api-key, admin]
     /{orderVerificationId}
-      DELETE
+      DELETE [x-api-key, admin]
     /tags
       /{tagId}
-        GET
-        PATCH
+        GET [x-api-key, self]
+        PATCH [x-api-key, self]
     /suppliers
       /{orderId}
-        GET
-        PATCH
+        GET [x-api-key, owner, admin]
+        PATCH [x-api-key, owner, admin]
     /share-links
       /whatsapp
-        /{_id}
-          GET
-
+        /{verificationId}
+          GET [x-api-key, owner, admin]
   /commands
     /ptag-detection-email
-      POST
+      POST [x-api-key, admin]
 
 /logistics
-  POST /sf-express-routes/get-area
-  POST /sf-express-routes/get-netCode
-  POST /sf-express-routes/get-pickup-locations
-  POST /sf-express-routes/get-token
-  POST /sf-express-routes/create-order
-  POST /v2/sf-express-routes/print-cloud-waybill
-  ---
+  /token
+    POST [x-api-key]
   /lookups
     /areas
-      POST
+      POST [x-api-key]
     /net-codes
-      POST
+      POST [x-api-key]
     /pickup-locations
-      POST
-  /token
-    POST
+      POST [x-api-key]
   /shipments
-    POST
+    POST [x-api-key, owner, admin]
   /cloud-waybill
-    POST
+    POST [x-api-key, owner, admin]

@@ -997,45 +997,60 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetAdoptionByIdGET:
+        PetAdoptionDetailGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/adoption/{id}
+            Path: /pet/adoption/detail/{adoptionId}
             Method: GET
             Auth:
               Authorizer: NONE
-        PetAdoptionByIdPOST:
+        PetAdoptionPetIdGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/adoption/{id}
+            Path: /pet/adoption/{petId}
+            Method: GET
+        PetAdoptionPetIdPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{petId}
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetAdoptionByIdPATCH:
+        PetAdoptionPetIdPATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/adoption/{id}
+            Path: /pet/adoption/{petId}
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetAdoptionByIdDELETE:
+        PetAdoptionPetIdDELETE:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/adoption/{id}
+            Path: /pet/adoption/{petId}
             Method: DELETE
-        PetAdoptionByIdOPTIONS:
+        PetAdoptionDetailOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/adoption/{id}
+            Path: /pet/adoption/detail/{adoptionId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetAdoptionPetIdOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/adoption/{petId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1277,25 +1292,31 @@ Resources:
           VM_BREED_PUBLIC_IP: !Ref PetAnalysisVmBreedPublicIp
           BREED_DOCKER_IMAGE: !Ref PetAnalysisBreedDockerImage
       Events:
+        PetAnalysisEyeDiseaseGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/eye/disease/{eyeDiseaseName}
+            Method: GET
+            Auth:
+              Authorizer: NONE
         PetAnalysisEyeGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/eye/{identifier}
+            Path: /pet/analysis/eye/{petId}
             Method: GET
-            Auth:
-              Authorizer: NONE
         PetAnalysisEyePOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/eye/{identifier}
+            Path: /pet/analysis/eye/{petId}
             Method: POST
         PetAnalysisEyePATCH:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/eye/{identifier}
+            Path: /pet/analysis/eye/{petId}
             Method: PATCH
             RequestModel:
               Model: GenericJsonObjectRequest
@@ -1323,11 +1344,20 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/uploads/breed-image
             Method: POST
+        PetAnalysisEyeDiseaseOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/analysis/eye/disease/{eyeDiseaseName}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
         PetAnalysisEyeOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/analysis/eye/{identifier}
+            Path: /pet/analysis/eye/{petId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE

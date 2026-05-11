@@ -14,9 +14,10 @@ Eye analysis, breed analysis, and supporting image uploads. The current DDD impl
 
 | Method | Path | Auth | Content-Type | Purpose |
 | --- | --- | --- | --- | --- |
-| GET | `/pet/analysis/eye/{identifier}` | `x-api-key` only | — | Public eye-disease lookup or paginated eye-analysis history list |
-| POST | `/pet/analysis/eye/{identifier}` | `x-api-key` + Bearer JWT | `multipart/form-data` | Run eye analysis for a pet |
-| PATCH | `/pet/analysis/eye/{identifier}` | `x-api-key` + Bearer JWT | `application/json` | Append left/right eye image URLs to a pet |
+| GET | `/pet/analysis/eye/disease/{eyeDiseaseName}` | `x-api-key` only | — | Public eye-disease lookup |
+| GET | `/pet/analysis/eye/{petId}` | `x-api-key` + Bearer JWT | — | Paginated eye-analysis history list for an owned pet |
+| POST | `/pet/analysis/eye/{petId}` | `x-api-key` + Bearer JWT | `multipart/form-data` | Run eye analysis for a pet |
+| PATCH | `/pet/analysis/eye/{petId}` | `x-api-key` + Bearer JWT | `application/json` | Append left/right eye image URLs to a pet |
 | POST | `/pet/analysis/breed` | `x-api-key` + Bearer JWT | `application/json` | Run breed analysis using an image URL |
 | POST | `/pet/analysis/uploads/image` | `x-api-key` + Bearer JWT | `multipart/form-data` | Upload one image to S3 for analysis flows |
 | POST | `/pet/analysis/uploads/breed-image` | `x-api-key` + Bearer JWT | `multipart/form-data` | Upload one image to an allowed S3 folder |
@@ -25,8 +26,7 @@ Eye analysis, breed analysis, and supporting image uploads. The current DDD impl
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| GET eye branch | If `{identifier}` is not a Mongo ObjectId, the route performs public disease lookup; if it is a valid ObjectId, the route returns paginated eye-analysis history for that pet id |
-| Public eye history | The ObjectId history branch currently has no ownership check in the handler |
+| Split eye reads | Disease lookup uses `/eye/disease/{eyeDiseaseName}`; pet history uses `/eye/{petId}` and requires ownership |
 | Post-eye response | Eye analysis POST returns `data: { result, heatmap, requestId }`, where `requestId` is the activity-log id, not the Lambda request id |
 | Patch-eye response | PATCH returns a sanitized pet object in `data` |
 | Upload responses | Both upload endpoints return `data: { url }` |
@@ -42,17 +42,18 @@ Eye analysis, breed analysis, and supporting image uploads. The current DDD impl
 
 | Route group | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
-| `GET /pet/analysis/eye/{identifier}` | Yes | None |
-| All other `pet-analysis` routes | Yes | `DddTokenAuthorizer` |
+| `GET /pet/analysis/eye/disease/{eyeDiseaseName}` | Yes | None |
+| All other `pet-analysis` routes, including `GET /pet/analysis/eye/{petId}` | Yes | `DddTokenAuthorizer` |
 | `OPTIONS` for `pet-analysis` routes | No | None |
 
 If the API key or Bearer JWT is missing/invalid on protected `pet-analysis` routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
 
 ### Authorization Rules
 
-- `GET /pet/analysis/eye/{identifier}` is public at the Lambda level
-- `POST /pet/analysis/eye/{identifier}` requires JWT and pet ownership; NGO ownership is allowed
-- `PATCH /pet/analysis/eye/{identifier}` requires JWT and direct `userId` ownership; NGO ownership is not allowed
+- `GET /pet/analysis/eye/disease/{eyeDiseaseName}` is public at the Lambda level
+- `GET /pet/analysis/eye/{petId}` requires JWT and pet ownership; NGO ownership is allowed
+- `POST /pet/analysis/eye/{petId}` requires JWT and pet ownership; NGO ownership is allowed
+- `PATCH /pet/analysis/eye/{petId}` requires JWT and direct `userId` ownership; NGO ownership is not allowed
 - `POST /pet/analysis/breed` and both upload routes require JWT but do not enforce pet ownership
 
 ### Rate Limits
@@ -76,8 +77,8 @@ Rate-limit failures return `429 common.rateLimited`.
 
 | Route | Current validation behavior |
 | --- | --- |
-| `POST /pet/analysis/eye/{identifier}` | Multipart body is parsed with a strict schema allowing only optional `image_url`; extra text fields fail with `common.invalidBodyParams` before the handler checks whether a file or URL is present |
-| `PATCH /pet/analysis/eye/{identifier}` | JSON body is parsed through the strict `updatePetEyeSchema`; missing required fields return `petAnalysis.errors.updatePetEye.missingRequiredFields`, while unknown fields or malformed JSON fail earlier with `common.invalidBodyParams` |
+| `POST /pet/analysis/eye/{petId}` | Multipart body is parsed with a strict schema allowing only optional `image_url`; extra text fields fail with `common.invalidBodyParams` before the handler checks whether a file or URL is present |
+| `PATCH /pet/analysis/eye/{petId}` | JSON body is parsed through the strict `updatePetEyeSchema`; missing required fields return `petAnalysis.errors.updatePetEye.missingRequiredFields`, while unknown fields or malformed JSON fail earlier with `common.invalidBodyParams` |
 | `POST /pet/analysis/breed` | JSON body is parsed through the strict `breedAnalysisSchema`; malformed JSON or unknown extra fields return `common.invalidBodyParams` |
 | Upload routes | Multipart text fields are validated by strict schemas; `POST /pet/analysis/uploads/image` allows no text fields, while `POST /pet/analysis/uploads/breed-image` requires only `url` |
 
@@ -130,18 +131,14 @@ Single-result success:
 
 ## Endpoints
 
-### GET /pet/analysis/eye/{identifier}
+### GET /pet/analysis/eye/disease/{eyeDiseaseName}
 
-Public dual-purpose endpoint.
+Public eye disease lookup.
 
 **Lambda owner:** `pet-analysis`  
 **Auth:** `x-api-key` only
 
-#### Branch 1: Eye-Disease Lookup
-
-If `{identifier}` is not a valid Mongo ObjectId, the handler treats it as an English disease name.
-
-##### Disease Lookup Success
+#### Disease Lookup Success
 
 - Known disease: returns the raw disease document inside `data`
 - `Normal`: returns
@@ -161,25 +158,28 @@ If `{identifier}` is not a valid Mongo ObjectId, the handler treats it as an Eng
 }
 ```
 
-##### Disease Lookup Errors
+#### Disease Lookup Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petAnalysis.errors.missingEyeDiseaseName` | Missing or empty identifier |
+| 400 | `petAnalysis.errors.missingEyeDiseaseName` | Missing or empty disease name |
 | 404 | `petAnalysis.errors.eyeDiseaseNotFound` | Disease name not found |
 
-#### Branch 2: Eye-Analysis History List
+### GET /pet/analysis/eye/{petId}
 
-If `{identifier}` is a valid Mongo ObjectId, the handler treats it as a pet id and returns paginated history.
+Returns paginated eye-analysis history for an owned pet.
 
-##### Query Parameters
+**Lambda owner:** `pet-analysis`  
+**Auth:** `x-api-key` + Bearer JWT required
+
+#### Query Parameters
 
 | Param | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `page` | integer | No | Shared pagination schema |
 | `limit` | integer | No | Shared pagination schema |
 
-##### Returned Eye Log Shape
+#### Returned Eye Log Shape
 
 Each list item may include:
 
@@ -191,15 +191,18 @@ Each list item may include:
 - `createdAt`
 - `updatedAt`
 
-##### History Errors
+#### History Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `petAnalysis.errors.missingEyeDiseaseName` | Missing or empty identifier |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
 | 400 | `common.invalidQueryParams` | Invalid pagination query |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petAnalysis.errors.petNotFound` | Pet not found or deleted |
 | 500 | `common.internalError` | Unexpected internal error |
 
-### POST /pet/analysis/eye/{identifier}
+### POST /pet/analysis/eye/{petId}
 
 Run eye analysis for a pet using an image URL or uploaded file.
 
@@ -214,7 +217,7 @@ Run eye analysis for a pet using an image URL or uploaded file.
 | `image_url` | string | Conditional | Required if no file is attached |
 | file part | file | Conditional | Required if `image_url` is absent |
 
-`{identifier}` must be a valid pet ObjectId.
+`{petId}` must be a valid pet ObjectId.
 
 #### Post-Eye Success (200)
 
@@ -258,7 +261,7 @@ Run eye analysis for a pet using an image URL or uploaded file.
 | 429 | `common.rateLimited` | Analysis rate limit exceeded |
 | 500 | `petAnalysis.errors.analysisError` | External analysis call failed |
 
-### PATCH /pet/analysis/eye/{identifier}
+### PATCH /pet/analysis/eye/{petId}
 
 Append one left/right eye image pair to a pet.
 
@@ -270,7 +273,7 @@ Append one left/right eye image pair to a pet.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `petId` | string | Yes | Must match path identifier |
+| `petId` | string | Yes | Must match path `{petId}` |
 | `date` | string | Yes | Date string parseable by the handler |
 | `leftEyeImage1PublicAccessUrl` | string | Yes | Valid image URL |
 | `rightEyeImage1PublicAccessUrl` | string | Yes | Valid image URL |
@@ -434,11 +437,11 @@ Allowed uploaded image types are JPEG, PNG, WebP, and GIF. File-size limit is 4 
 
 ## Frontend Integration Guide
 
-1. Treat `GET /pet/analysis/eye/{identifier}` as two different APIs: public disease lookup for non-ObjectId values, and public history listing for ObjectId values.
+1. Use `GET /pet/analysis/eye/disease/{eyeDiseaseName}` for public disease lookup and `GET /pet/analysis/eye/{petId}` for protected pet history.
 2. Use the image upload endpoints first when the client needs a stable URL before analysis.
 3. For eye analysis POST, read the ML result from `data.result` and the stored activity-log id from `data.requestId`; the top-level `requestId` is still the Lambda request id.
 4. Do not assume eye-history GET is owner-protected today. If that is a privacy concern, frontend usage should be conservative until backend auth changes.
-5. For `PATCH /pet/analysis/eye/{identifier}`, send matching path and body `petId` values or the request will fail.
+5. For `PATCH /pet/analysis/eye/{petId}`, send matching path and body `petId` values or the request will fail.
 
 ---
 

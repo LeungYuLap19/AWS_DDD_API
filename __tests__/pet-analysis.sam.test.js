@@ -13,7 +13,8 @@
 //   Tier 3 SAM + Mongo (this):    __tests__/pet-analysis.sam.test.js
 //
 // Routes under test:
-//   GET    /pet/analysis/eye/{identifier}       (public disease lookup OR auth eye log)
+//   GET    /pet/analysis/eye/disease/{eyeDiseaseName} (public disease lookup)
+//   GET    /pet/analysis/eye/{petId}            (auth + owner — eye log)
 //   POST   /pet/analysis/eye/{petId}            (auth + rate limit — eye analysis via external ML VM)
 //   PATCH  /pet/analysis/eye/{petId}            (auth + rate limit — update pet eye images)
 //   POST   /pet/analysis/breed                  (auth + rate limit — breed analysis via external ML VM)
@@ -521,6 +522,15 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       expect(res.headers['access-control-allow-headers']).toContain('x-api-key');
     });
 
+    test('OPTIONS /pet/analysis/eye/disease/{eyeDiseaseName} returns 204 with CORS headers', async () => {
+      const res = await req('OPTIONS', '/pet/analysis/eye/disease/Cataract', undefined, {
+        origin: VALID_ORIGIN,
+      });
+
+      expect(res.status).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('*');
+    });
+
     test('OPTIONS /pet/analysis/breed returns 204 with CORS headers', async () => {
       const res = await req('OPTIONS', '/pet/analysis/breed', undefined, {
         origin: VALID_ORIGIN,
@@ -759,7 +769,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       expect(expectedUnauthenticatedStatuses()).toContain(res.status);
     });
 
-    test('GET /pet/analysis/eye/{petId} returns 200 when caller accesses another owner\'s pet (no Lambda-level ownership check)', async () => {
+    test('GET /pet/analysis/eye/{petId} returns 403 when caller accesses another owner\'s pet', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
@@ -770,7 +780,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(403);
     });
 
     test('POST /pet/analysis/eye/{petId} returns 403 when caller accesses another owner\'s pet — no DB mutation', async () => {
@@ -858,16 +868,16 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
     });
   });
 
-  // ── GET /pet/analysis/eye/{identifier} — public disease lookup ──────────────
+  // ── GET /pet/analysis/eye/disease/{eyeDiseaseName} — public disease lookup ──
 
-  describe('GET /pet/analysis/eye/{identifier} — public eye disease lookup', () => {
+  describe('GET /pet/analysis/eye/disease/{eyeDiseaseName} — public eye disease lookup', () => {
     test('returns disease details for known disease name (Cataract)', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
       const res = await req(
         'GET',
-        '/pet/analysis/eye/Cataract',
+        '/pet/analysis/eye/disease/Cataract',
         undefined,
         publicHeaders()
       );
@@ -880,7 +890,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
     test('returns null fields for "Normal" disease name', async () => {
       const res = await req(
         'GET',
-        '/pet/analysis/eye/Normal',
+        '/pet/analysis/eye/disease/Normal',
         undefined,
         publicHeaders()
       );
@@ -895,7 +905,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
     test('returns 404 for unknown disease name', async () => {
       const res = await req(
         'GET',
-        '/pet/analysis/eye/NonExistentDisease999',
+        '/pet/analysis/eye/disease/NonExistentDisease999',
         undefined,
         publicHeaders()
       );
@@ -908,7 +918,7 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req('GET', '/pet/analysis/eye/Cataract', undefined, {
+      const res = await req('GET', '/pet/analysis/eye/disease/Cataract', undefined, {
         origin: VALID_ORIGIN,
         'x-forwarded-for': CLIENT_IP,
       });
@@ -921,13 +931,13 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
       // This tests the decodeURIComponent behavior; the disease may or may not exist.
       const res = await req(
         'GET',
-        '/pet/analysis/eye/Cherry%20Eye',
+        '/pet/analysis/eye/disease/Cherry%20Eye',
         undefined,
         publicHeaders()
       );
 
-      // Either 201 (found) or 404 (not in DB) — but NOT a 400 or 500
-      expect([201, 404]).toContain(res.status);
+      // Either 200 (found) or 404 (not in DB) — but NOT a 400 or 500
+      expect([200, 404]).toContain(res.status);
     });
   });
 
@@ -1689,13 +1699,13 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
   // ── Cyberattacks ───────────────────────────────────────────────────────────
 
   describe('cyberattacks', () => {
-    test('GET eye — NoSQL operator injection as identifier is treated as disease name and returns 404', async () => {
+    test('GET eye disease — NoSQL operator-like name returns 404', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
       const res = await req(
         'GET',
-        `/pet/analysis/eye/${encodeURIComponent('{"$gt":""}')}`,
+        `/pet/analysis/eye/disease/${encodeURIComponent('{"$gt":""}')}`,
         undefined,
         publicHeaders()
       );
@@ -1887,12 +1897,12 @@ describe('Tier 3+4 — /pet/analysis via SAM local + UAT DB', () => {
   // ── Repeated request stability ─────────────────────────────────────────────
 
   describe('repeated request stability', () => {
-    test('warm repeated GET /pet/analysis/eye/Cataract returns stable results', async () => {
+    test('warm repeated GET /pet/analysis/eye/disease/Cataract returns stable results', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const first = await req('GET', '/pet/analysis/eye/Cataract', undefined, publicHeaders());
-      const second = await req('GET', '/pet/analysis/eye/Cataract', undefined, publicHeaders());
+      const first = await req('GET', '/pet/analysis/eye/disease/Cataract', undefined, publicHeaders());
+      const second = await req('GET', '/pet/analysis/eye/disease/Cataract', undefined, publicHeaders());
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);

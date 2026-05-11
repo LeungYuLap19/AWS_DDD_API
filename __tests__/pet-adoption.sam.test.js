@@ -15,10 +15,11 @@
 //
 // Routes under test:
 //   GET    /pet/adoption              → public browse list (no auth)
-//   GET    /pet/adoption/{id}         → public browse detail (no auth) OR managed GET (with auth)
-//   POST   /pet/adoption/{id}         → managed create (protected)
-//   PATCH  /pet/adoption/{id}         → managed update (protected)
-//   DELETE /pet/adoption/{id}         → managed delete (protected)
+//   GET    /pet/adoption/detail/{adoptionId} → public browse detail (no auth)
+//   GET    /pet/adoption/{petId}      → managed GET (protected)
+//   POST   /pet/adoption/{petId}      → managed create (protected)
+//   PATCH  /pet/adoption/{petId}      → managed update (protected)
+//   DELETE /pet/adoption/{petId}      → managed delete (protected)
 //
 // DB collections used:
 //   pets          — MONGODB_URI (main DB)
@@ -344,7 +345,7 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       expect(res.headers['access-control-allow-headers']).toContain('x-api-key');
     });
 
-    test('OPTIONS /pet/adoption/{id} returns 204 with CORS headers', async () => {
+    test('OPTIONS /pet/adoption/{petId} returns 204 with CORS headers', async () => {
       const petId = new mongoose.Types.ObjectId().toString();
       const res = await req('OPTIONS', `/pet/adoption/${petId}`, undefined, { origin: VALID_ORIGIN });
 
@@ -352,7 +353,15 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
       expect(res.headers['access-control-allow-origin']).toBe('*');
     });
 
-    test('PUT /pet/adoption/{id} returns 405 or 403 (wrong method)', async () => {
+    test('OPTIONS /pet/adoption/detail/{adoptionId} returns 204 with CORS headers', async () => {
+      const adoptionId = new mongoose.Types.ObjectId().toString();
+      const res = await req('OPTIONS', `/pet/adoption/detail/${adoptionId}`, undefined, { origin: VALID_ORIGIN });
+
+      expect(res.status).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('*');
+    });
+
+    test('PUT /pet/adoption/{petId} returns 405 or 403 (wrong method)', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
@@ -471,38 +480,27 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
     });
   });
 
-  // ── Public browse detail — GET /pet/adoption/{id} (no auth) ─────────────────
+  // ── Public browse detail — GET /pet/adoption/detail/{adoptionId} ───────────
 
-  describe('GET /pet/adoption/{id} — public browse detail (no auth)', () => {
-    test('returns 400 for non-ObjectId id', async () => {
-      // With AUTH_BYPASS=true the authorizer injects a bypass identity even without
-      // an Authorization header, so handleGetById dispatches to the managed path.
-      // The managed handler validates the petId format first (before any DB call)
-      // and returns the managed errorKey.
-      const res = await req('GET', '/pet/adoption/not-a-valid-id', undefined, publicHeaders());
+  describe('GET /pet/adoption/detail/{adoptionId} — public browse detail', () => {
+    test('returns 400 for non-ObjectId adoptionId', async () => {
+      const res = await req('GET', '/pet/adoption/detail/not-a-valid-id', undefined, publicHeaders());
 
       expect(res.status).toBe(400);
       expect(res.body?.errorKey).toBe('common.invalidObjectId');
     });
 
     test('returns 200 or 404 for a valid ObjectId (no data guarantee for browse DB)', async () => {
-      // With AUTH_BYPASS=true, requests without an Authorization header still receive
-      // a bypass identity, so handleGetById dispatches to the managed path instead
-      // of the public browse path. The managed path requires DB access.
-      if (!(await ensureDbOrSkip())) return;
-
       const validId = new mongoose.Types.ObjectId().toString();
-      const res = await req(`GET`, `/pet/adoption/${validId}`, undefined, publicHeaders());
+      const res = await req(`GET`, `/pet/adoption/detail/${validId}`, undefined, publicHeaders());
 
-      // Managed path: pet won't exist in the seeded fixture collection → 404.
-      // A 200 is possible if the petId happens to collide with a seeded pet (extremely unlikely).
       expect([200, 404]).toContain(res.status);
     });
   });
 
-  // ── Managed GET — GET /pet/adoption/{id} (with auth) ────────────────────────
+  // ── Managed GET — GET /pet/adoption/{petId} (with auth) ─────────────────────
 
-  describe('GET /pet/adoption/{id} — managed record GET (with auth)', () => {
+  describe('GET /pet/adoption/{petId} — managed record GET (with auth)', () => {
     test('returns form=null when no adoption record exists yet for the pet', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
@@ -618,9 +616,9 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
     });
   });
 
-  // ── Managed create — POST /pet/adoption/{id} ─────────────────────────────────
+  // ── Managed create — POST /pet/adoption/{petId} ──────────────────────────────
 
-  describe('POST /pet/adoption/{id} — managed create', () => {
+  describe('POST /pet/adoption/{petId} — managed create', () => {
     test('creates a record and persists it to DB', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
@@ -792,9 +790,9 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
     });
   });
 
-  // ── Managed update — PATCH /pet/adoption/{id} ────────────────────────────────
+  // ── Managed update — PATCH /pet/adoption/{petId} ─────────────────────────────
 
-  describe('PATCH /pet/adoption/{id} — managed update', () => {
+  describe('PATCH /pet/adoption/{petId} — managed update', () => {
     test('updates only the provided fields and DB reflects the change', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
@@ -915,9 +913,9 @@ describe('Tier 3 - /pet/adoption via SAM local + UAT DB', () => {
     });
   });
 
-  // ── Managed delete — DELETE /pet/adoption/{id} ───────────────────────────────
+  // ── Managed delete — DELETE /pet/adoption/{petId} ────────────────────────────
 
-  describe('DELETE /pet/adoption/{id} — managed delete', () => {
+  describe('DELETE /pet/adoption/{petId} — managed delete', () => {
     test('deletes the record and it no longer exists in DB', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();

@@ -20,17 +20,17 @@ The current DDD implementation uses the shared `{ success, message, data, pagina
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | GET | `/pet/adoption` | `x-api-key` only | Browse public adoption listings |
-| GET | `/pet/adoption/{id}` | `x-api-key` only in deployed API Gateway; auth-sensitive in direct invocation | Browse detail or managed record read depending on auth context |
-| POST | `/pet/adoption/{id}` | `x-api-key` + Bearer JWT | Create managed adoption record for pet `{id}` |
-| PATCH | `/pet/adoption/{id}` | `x-api-key` + Bearer JWT | Update managed adoption record for pet `{id}` |
-| DELETE | `/pet/adoption/{id}` | `x-api-key` + Bearer JWT | Delete managed adoption record for pet `{id}` |
+| GET | `/pet/adoption/detail/{adoptionId}` | `x-api-key` only | Browse public adoption detail |
+| GET | `/pet/adoption/{petId}` | `x-api-key` + Bearer JWT | Read managed adoption record for pet `{petId}` |
+| POST | `/pet/adoption/{petId}` | `x-api-key` + Bearer JWT | Create managed adoption record for pet `{petId}` |
+| PATCH | `/pet/adoption/{petId}` | `x-api-key` + Bearer JWT | Update managed adoption record for pet `{petId}` |
+| DELETE | `/pet/adoption/{petId}` | `x-api-key` + Bearer JWT | Delete managed adoption record for pet `{petId}` |
 
 ### Integration-Critical Behavior
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Dual-purpose GET by id | `GET /pet/adoption/{id}` routes to browse detail when no auth context exists, and to managed record lookup when auth context exists |
-| Deployed behavior caveat | In `template.yaml`, deployed `GET /pet/adoption/{id}` uses `Authorizer: NONE`, so API Gateway does not inject auth context. In deployed development, this route effectively behaves as public browse detail |
+| Split public vs managed reads | Public detail is `GET /pet/adoption/detail/{adoptionId}`; managed reads are `GET /pet/adoption/{petId}` and require auth |
 | Managed GET empty state | Managed record GET returns `200` with `data: null` when no record exists yet |
 | One record per pet | Managed create returns `409 petAdoption.errors.managed.duplicateRecord` if a record already exists for that pet |
 | Managed PATCH response | PATCH returns no `data` payload |
@@ -48,11 +48,12 @@ The current DDD implementation uses the shared `{ success, message, data, pagina
 | Route | API key required at API Gateway | API Gateway authorizer |
 | --- | --- | --- |
 | `GET /pet/adoption` | Yes | None |
-| `GET /pet/adoption/{id}` | Yes | None |
-| `POST /pet/adoption/{id}` | Yes | `DddTokenAuthorizer` |
-| `PATCH /pet/adoption/{id}` | Yes | `DddTokenAuthorizer` |
-| `DELETE /pet/adoption/{id}` | Yes | `DddTokenAuthorizer` |
-| `OPTIONS /pet/adoption` and `OPTIONS /pet/adoption/{id}` | No | None |
+| `GET /pet/adoption/detail/{adoptionId}` | Yes | None |
+| `GET /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
+| `POST /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
+| `PATCH /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
+| `DELETE /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
+| `OPTIONS /pet/adoption`, `/pet/adoption/detail/{adoptionId}`, and `/pet/adoption/{petId}` | No | None |
 
 Public browse requests require only:
 
@@ -99,7 +100,7 @@ Rate-limit failures return `429 common.rateLimited`.
 
 ### Request Body Validation (Managed JSON Routes)
 
-`POST /pet/adoption/{id}` and `PATCH /pet/adoption/{id}` both pass the decoded JSON body through the shared `parseBody` helper with the strict adoption schemas.
+`POST /pet/adoption/{petId}` and `PATCH /pet/adoption/{petId}` both pass the decoded JSON body through the shared `parseBody` helper with the strict adoption schemas.
 
 Current practical behavior:
 
@@ -194,7 +195,7 @@ Managed delete success:
 
 ### Browse Detail Item Shape
 
-`GET /pet/adoption/{id}` without auth context returns the browse detail object with:
+`GET /pet/adoption/detail/{adoptionId}` returns the browse detail object with:
 
 - `_id`
 - `Name`
@@ -297,21 +298,14 @@ The browse list excludes adoption sites `Arc Dog Shelter`, `Tolobunny`, and `HKR
 | 400 | `petAdoption.errors.browse.invalidSearch` | `search` exceeds 100 characters |
 | 500 | `common.internalError` | Unexpected internal error |
 
-### GET /pet/adoption/{id}
+### GET /pet/adoption/detail/{adoptionId}
 
-Get one adoption record by id. Behavior depends on auth context.
+Get one public adoption browse listing by adoption id.
 
-**Lambda owner:** `pet-adoption`
-
-#### Deployed Production/Development Behavior
-
-Because API Gateway config uses `Authorizer: NONE` for this GET route, deployed requests reach the Lambda without auth context. In deployed environments, this route behaves as public browse detail.
-
-#### Browse Detail Branch
-
+**Lambda owner:** `pet-adoption`  
 **Auth:** `x-api-key` only
 
-##### Browse Detail Success (200)
+#### Browse Detail Success (200)
 
 ```json
 {
@@ -327,21 +321,22 @@ Because API Gateway config uses `Authorizer: NONE` for this GET route, deployed 
 }
 ```
 
-##### Browse Detail Errors
+#### Browse Detail Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.invalidObjectId` | Invalid `{id}` |
+| 400 | `common.invalidObjectId` | Invalid `{adoptionId}` |
 | 404 | `petAdoption.errors.browse.petNotFound` | Browse listing not found |
 | 500 | `common.internalError` | Unexpected internal error |
 
-#### Managed Detail Branch
+### GET /pet/adoption/{petId}
 
-This branch is only reachable when the Lambda receives auth context, such as direct invocation or local flows that inject auth.
+Get the managed adoption record for an owned pet.
 
-**Auth:** `x-api-key` + Bearer JWT with valid auth context
+**Lambda owner:** `pet-adoption`  
+**Auth:** `x-api-key` + Bearer JWT required
 
-##### Managed Detail Success With Record (200)
+#### Managed Detail Success With Record (200)
 
 ```json
 {
@@ -357,7 +352,7 @@ This branch is only reachable when the Lambda receives auth context, such as dir
 }
 ```
 
-##### Managed Detail Success Empty State (200)
+#### Managed Detail Success Empty State (200)
 
 ```json
 {
@@ -368,23 +363,19 @@ This branch is only reachable when the Lambda receives auth context, such as dir
 }
 ```
 
-##### Managed Detail Errors
+#### Managed Detail Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.invalidObjectId` | Invalid `{id}` |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 500 | `common.internalError` | Unexpected internal error |
 
-Auth note:
+### POST /pet/adoption/{petId}
 
-- The managed GET branch is only selected when auth context is already present on the event
-- In deployed development/production, `GET /pet/adoption/{id}` is public at API Gateway, so missing/invalid JWT failures happen before Lambda only if the route wiring changes or the function is invoked through a protected direct/local path
-
-### POST /pet/adoption/{id}
-
-Create the managed adoption record for pet `{id}`.
+Create the managed adoption record for pet `{petId}`.
 
 **Lambda owner:** `pet-adoption`  
 **Auth:** `x-api-key` + Bearer JWT required  
@@ -447,7 +438,7 @@ The body schema is strict. Extra keys are rejected.
 | 429 | `common.rateLimited` | Create rate limit exceeded |
 | 500 | `common.internalError` | Unexpected internal error |
 
-### PATCH /pet/adoption/{id}
+### PATCH /pet/adoption/{petId}
 
 Update the managed adoption record for pet `{id}`.
 
@@ -485,7 +476,7 @@ Any subset of the same fields accepted by managed create may be supplied.
 
 Current implementation note: empty `{}` update bodies fail at shared JSON parsing with `common.missingBodyParams`, and unknown-field bodies fail schema validation with `common.invalidBodyParams`, so the internal `common.noFieldsToUpdate` branch is not part of the normal deployed contract.
 
-### DELETE /pet/adoption/{id}
+### DELETE /pet/adoption/{petId}
 
 Delete the managed adoption record for pet `{id}`.
 
@@ -513,7 +504,7 @@ None.
 ## Frontend Integration Guide
 
 1. Treat browse and managed adoption as separate features even though they share the same path prefix.
-2. In deployed environments, do not rely on `GET /pet/adoption/{id}` for managed record reads unless the API Gateway auth wiring changes; it currently behaves as public browse detail.
+2. Use `GET /pet/adoption/detail/{adoptionId}` for public browse detail and `GET /pet/adoption/{petId}` for protected managed record reads.
 3. For managed create and patch, send only documented keys because the schema is strict.
 4. Use `data: null` from managed GET as the normal “record not created yet” state.
 5. After managed PATCH or DELETE, refresh the record state explicitly because those routes return no `data` payload.

@@ -16,7 +16,7 @@ export const uploadBreedImageSchema = z
 
 export type UploadBreedImageBody = z.infer<typeof uploadBreedImageSchema>;
 
-// Schema for POST /pet/analysis/eye/{identifier} — image_url is optional (file or url required, checked in handler)
+// Schema for POST /pet/analysis/eye/{petId} — image_url is optional (file or url required, checked in handler)
 export const eyePostUploadSchema = z
   .object({
     image_url: z.string().trim().max(2048, 'common.invalidBodyParams').optional(),
