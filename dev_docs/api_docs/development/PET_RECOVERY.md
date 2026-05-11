@@ -55,6 +55,8 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
+If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 For POST requests, send `multipart/form-data` and let the client set the boundary automatically.
 
 ### Authorization Rules
@@ -86,7 +88,7 @@ Exceeded limits return `429 common.rateLimited`.
 
 ### Authentication And Parse Behavior
 
-- All routes require a valid Bearer JWT; missing auth returns `401 common.unauthorized`
+- Missing/invalid API key or JWT can be rejected at API Gateway before Lambda parsing or authorization begins
 - POST routes are multipart-only and use `parseMultipartBody` with strict schemas plus route-specific normalization
 - Multipart parse failures, malformed normalized field types, and unknown extra text fields return `400 common.invalidBodyParams`
 
@@ -264,7 +266,7 @@ List lost-pet reports sorted by `lostDate` descending.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected error |
 
 ### POST /pet/recovery/lost
@@ -368,7 +370,7 @@ Delete a caller-owned lost-pet report.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `petLostID` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the record |
 | 404 | `petRecovery.errors.petLost.notFound` | Record not found |
 | 500 | `common.internalError` | Unexpected error |
@@ -408,7 +410,7 @@ List found-pet reports sorted by `foundDate` descending.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected error |
 
 ### POST /pet/recovery/found
@@ -496,7 +498,7 @@ Delete a caller-owned found-pet report.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `petFoundID` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the record |
 | 404 | `petRecovery.errors.petFound.notFound` | Record not found |
 | 500 | `common.internalError` | Unexpected error |

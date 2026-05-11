@@ -50,6 +50,8 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
+If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 For POST and PATCH, also send:
 
 ```http
@@ -73,7 +75,7 @@ If the pet does not exist or is soft-deleted, the route returns `404 petSource.e
 
 ### Authentication And Parse Behavior
 
-- All routes require a valid Bearer JWT; missing auth returns `401 common.unauthorized`
+- Missing/invalid API key or JWT can be rejected at API Gateway before Lambda parsing or authorization begins
 - `POST` and `PATCH` use shared `parseBody` with strict Zod schemas
 - Malformed JSON, unknown extra fields, and schema mismatches return `400 common.invalidBodyParams`
 - Empty JSON bodies return `400 common.missingBodyParams`
@@ -208,7 +210,7 @@ No record exists yet:
 | --- | --- | --- |
 | 400 | `common.missingPathParams` | Missing `petId` |
 | 400 | `common.invalidObjectId` | Invalid `petId` format |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petSource.errors.petNotFound` | Pet does not exist or is soft-deleted |
 | 500 | `common.internalError` | Unexpected error |
@@ -268,7 +270,7 @@ Create the pet's single source record.
 | 400 | `petSource.errors.missingRequiredFields` | Both `placeofOrigin` and `channel` missing |
 | 400 | `common.missingPathParams` | Missing `petId` |
 | 400 | `common.invalidObjectId` | Invalid `petId` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petSource.errors.petNotFound` | Pet not found |
 | 409 | `petSource.errors.duplicateRecord` | Record already exists for this pet |
@@ -316,7 +318,7 @@ Note: the current handler does not return updated source data on PATCH. Refetch 
 | 400 | `common.missingBodyParams` | Empty JSON body |
 | 400 | `common.missingPathParams` | Missing `petId` |
 | 400 | `common.invalidObjectId` | Invalid `petId` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petSource.errors.petNotFound` | Pet not found |
 | 404 | `petSource.errors.recordNotFound` | Source record does not exist for this pet |

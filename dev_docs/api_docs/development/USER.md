@@ -25,7 +25,7 @@ Authenticated self-service profile endpoints for the current user. All routes op
 | Success wrapper | GET and PATCH return the profile inside `data` |
 | Sanitization | Returned user objects do not include `password`, `deleted`, credits, `__v`, `createdAt`, or `updatedAt` |
 | PATCH semantics | Partial update only; only provided fields are changed |
-| PATCH unknown fields | Unknown top-level fields like `role`, `credit`, `password`, `deleted`, and `_id` are ignored rather than rejected; allowed fields in the same payload still update successfully |
+| PATCH unknown fields | Unknown top-level fields like `role`, `credit`, `password`, `deleted`, and `_id` are rejected with `400 common.invalidBodyParams` |
 | DELETE side effect | Marks the user as deleted and deletes all refresh tokens for that user |
 | Post-delete behavior | Future `/user/me` access returns `404 common.notFound`; future refresh returns `401 auth.refresh.invalidSession` |
 
@@ -49,6 +49,8 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
+If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 PATCH requests must also send:
 
 ```http
@@ -58,7 +60,7 @@ Content-Type: application/json
 ### Authentication Rules
 
 - The route identity comes entirely from the Bearer JWT
-- Missing or invalid JWT returns `401` or `403` before or during Lambda authorization
+- Missing/invalid API key or JWT can be rejected at API Gateway before Lambda authorization begins
 - There is no admin bypass or alternate path for reading another user through this Lambda
 - The handler does not require `userRole === "user"`; a valid NGO-scoped token can read, update, or delete its own underlying `User` document as long as the JWT `userId` resolves to that record
 
@@ -169,8 +171,7 @@ Observed validation keys:
 | Malformed JSON | `common.invalidBodyParams` |
 | Empty object or missing JSON body | `common.missingBodyParams` or generic shared missing-body behavior depending on transport path |
 | Invalid field shape on a supported field | `common.invalidBodyParams` |
-
-Current runtime behavior note: unknown top-level fields are ignored rather than rejected. The live tests prove this for payloads containing fields like `role`, `credit`, `password`, `deleted`, and `_id`.
+| Unknown top-level PATCH field | `common.invalidBodyParams` |
 
 ---
 
@@ -210,7 +211,7 @@ None.
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 / 403 | `common.unauthorized` | Missing, malformed, expired, or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | User does not exist or was already deleted |
 | 500 | `common.internalError` | Unexpected internal error |
 
@@ -264,8 +265,8 @@ Partially update the current user profile.
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.invalidBodyParams` | Malformed JSON, invalid email, invalid phone, invalid birthday, invalid image URL, or invalid field shape |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 400 | `common.invalidBodyParams` | Malformed JSON, invalid email, invalid phone, invalid birthday, invalid image URL, invalid field shape, or unknown top-level PATCH field |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | User no longer exists or is deleted |
 | 409 | `user.errors.emailExists` | Another active user already owns the email |
 | 409 | `user.errors.phoneExists` | Another active user already owns the phone number |
@@ -303,7 +304,7 @@ None.
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 / 403 | `common.unauthorized` | Missing or invalid JWT |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | User already deleted or not found |
 | 429 | `common.rateLimited` | Delete rate limit exceeded |
 | 500 | `common.internalError` | Unexpected internal error |
@@ -314,7 +315,7 @@ None.
 
 1. Load `/user/me` after authentication bootstrap and treat `body.data` as the canonical profile object.
 2. For PATCH, only send fields the user changed. The route is partial-update-safe.
-3. Do not rely on the backend to reject unknown top-level PATCH keys. The live runtime ignores them, so frontend payload shaping should stay explicit.
+3. Keep frontend PATCH payloads explicit. The backend rejects unknown top-level keys with `400 common.invalidBodyParams`.
 4. On `409 user.errors.emailExists` or `409 user.errors.phoneExists`, attach the error to the corresponding form field.
 5. On successful PATCH, replace local profile state with the returned `data` object.
 6. On successful DELETE, clear local auth state immediately. The backend also revokes refresh tokens, so token refresh will stop working.
@@ -323,4 +324,4 @@ None.
 
 ## Verification Snapshot
 
-Current verification evidence is in `__tests__/user.test.js`. That suite proves the `data` wrapper on GET/PATCH, sanitization of returned user objects, duplicate email/phone handling, PATCH mass-assignment stripping, valid NGO-role access to the same underlying user record, and the delete-then-refresh invalidation path. Deployed development-stage verification is still the authoritative final check for API Gateway auth behavior.
+Current verification evidence is in `__tests__/user.test.js`. That suite proves the `data` wrapper on GET/PATCH, sanitization of returned user objects, duplicate email/phone handling, PATCH unknown-field rejection, valid NGO-role access to the same underlying user record, and the delete-then-refresh invalidation path. Deployed development-stage verification is still the authoritative final check for API Gateway auth behavior.

@@ -53,6 +53,8 @@ Authorization: Bearer <access-token>
 Content-Type: application/json
 ```
 
+If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+
 ### Authorization Rules
 
 The Lambda authorizes access when either condition is true:
@@ -83,7 +85,7 @@ Rate-limit failures return `429 common.rateLimited`.
 
 ### Authentication And Parse Behavior
 
-- All protected routes require a valid Bearer JWT; missing auth returns `401 common.unauthorized`
+- Missing/invalid API key or JWT can be rejected at API Gateway before Lambda parsing or authorization begins
 - POST and PATCH routes use shared `parseBody` with strict Zod schemas
 - Malformed JSON, unknown extra fields, and schema mismatches return `400 common.invalidBodyParams`
 - Empty JSON bodies return `400 common.missingBodyParams`
@@ -193,7 +195,7 @@ Append a transfer-history row to the pet.
 | 400 | `common.missingBodyParams` | Missing or empty JSON body |
 | 400 | `petTransfer.errors.transfer.invalidDateFormat` | Invalid `regDate` |
 | 400 | `common.invalidObjectId` | Invalid `petId` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
 | 429 | `common.rateLimited` | Create rate limit exceeded |
@@ -235,7 +237,7 @@ Any subset of the same fields accepted by create may be supplied.
 | 400 | `common.missingBodyParams` | Missing or empty JSON body |
 | 400 | `petTransfer.errors.transfer.invalidDateFormat` | Invalid `regDate` |
 | 400 | `common.invalidObjectId` | Invalid `petId` or `transferId` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
 | 404 | `petTransfer.errors.transfer.notFound` | Transfer record does not exist on that pet |
@@ -258,7 +260,7 @@ None.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `petId` or `transferId` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
 | 404 | `petTransfer.errors.transfer.notFound` | Transfer record does not exist on that pet |
@@ -321,7 +323,7 @@ When both `UserEmail` and `UserContact` are provided, both must resolve to the s
 | 400 | `petTransfer.errors.ngoTransfer.invalidDateFormat` | Invalid `regDate` |
 | 400 | `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Email and phone resolve to different users |
 | 400 | `common.invalidObjectId` | Invalid `petId` |
-| 401 / 403 | `common.unauthorized` | Missing or invalid auth before handler authorization succeeds |
+| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller is not NGO-scoped, does not own the pet, or lacks NGO role |
 | 404 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | No active user matches the supplied identifier(s) |
 | 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
