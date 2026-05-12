@@ -2,76 +2,74 @@ COLD START OPTIMIZATION AUDIT
 ==============================
 Date: 2026-05-08
 
+Update: 2026-05-12
+- Globals.Function now uses arm64 in template.yaml.
+- Auth router now uses lazy route imports.
+- Twilio SDK loading is now lazy in auth/config/twilio.ts.
+- Auth cold start is still materially affected by VPC attachment, first MongoDB connection,
+  eager nodemailer transport initialization, and 256 MB memory on the auth Lambda.
+
 CURRENT STATE
 -------------
-Build: tsc → prepare-dist.cjs copies source + package.json → sam build runs npm install per function
+Build: tsc -> prepare-dist.cjs copies source + package.json -> sam build runs npm install per function
 Result: full unpacked node_modules inside each function's deployment package
 
 Function sizes (SAM build):
-  request-authorizer   892 KB   (jsonwebtoken only — already good)
+  request-authorizer   892 KB   (jsonwebtoken only - already good)
   auth                  26 MB   (twilio 18 MB, axios 2.9 MB, mongoose 928 KB, nodemailer 636 KB)
-  most others          ~1–4 MB  (mongoose only, estimated post-SAM install)
+  most others          ~1-4 MB  (mongoose only, estimated post-SAM install)
 
-All functions: nodejs22.x, 256 MB memory, x86_64 (no Architectures key set), no SnapStart, no provisioned concurrency
+All functions: nodejs22.x, arm64, 256 MB default memory, no SnapStart, no provisioned concurrency
 
 
 FINDINGS
 --------
 
-P0 — Biggest win
+P0 - Biggest win
 
 1. esbuild bundling
    Currently tsc + sam npm install = full node_modules per function.
    esbuild bundles + minifies + tree-shakes to a single .js per function.
-   auth: 26 MB → ~1–2 MB (Twilio is still a problem until P1-2 below)
+   auth: 26 MB -> ~1-2 MB (Twilio is still a problem until P1-2 below)
    All other functions: essentially code-only, no node_modules folder.
    Build script: replace tsc step for functions in prepare-dist.cjs; shared layer stays as-is.
    Highest single-change ROI.
 
-P1 — High impact, targeted changes
+P1 - High impact, targeted changes
 
 2. Lazy Twilio initialization (auth/src/config/twilio.ts)
-   Current: twilioClient is created at module load time (top-level require + constructor call).
-   Every cold start of auth initializes the Twilio SDK, even for /tokens/refresh or /login/ngo.
-   Twilio is only needed for challenge.ts (POST /auth/challenges and /auth/challenges/verify).
-   Fix: move client creation inside createSmsVerification / checkSmsVerification (lazy singleton),
-   or dynamic import inside challenge.ts only.
-   With esbuild: dynamic import allows tree-shaking Twilio out of non-challenge bundles entirely.
+   Status: implemented.
+   Twilio now loads lazily on first SMS use instead of at auth Lambda module load.
+   Remaining note: email challenge paths still pay eager nodemailer transport setup,
+   and auth cold start still includes VPC + first MongoDB connection cost.
 
 3. arm64 architecture
-   Add to Globals.Function in template.yaml:
-     Architectures:
-       - arm64
+   Status: implemented in Globals.Function.
    Graviton2: ~20% cheaper, comparable or faster cold start on Node.js pure-JS.
-   Caveat: bcrypt has a native addon — either compile for arm64 at build time,
+   Caveat: bcrypt has a native addon - either compile for arm64 at build time,
    or replace with bcryptjs (pure JS, no native binary, drop-in compatible for this use case).
 
 4. Memory increase for heavy functions
    More memory = proportionally more vCPU = faster module initialization.
-   auth:                          256 MB → 512 MB  (bcrypt is CPU-bound; Twilio init is module-heavy)
+   auth:                          256 MB -> 512 MB  (bcrypt is CPU-bound; init still benefits from more CPU)
    pet-profile, pet-analysis,
-   commerce-orders, pet-recovery: 256 MB → 512 MB  (S3 client + multipart parser)
+   commerce-orders, pet-recovery: 256 MB -> 512 MB  (S3 client + multipart parser)
    request-authorizer:            keep 256 MB (already fast, jwt only)
 
-P2 — Medium impact
+P2 - Medium impact
 
 5. Lazy route imports in routers
-   Current: all service handlers are statically imported at the top of each router.ts.
-   On cold start, loading auth function loads challenge.ts (twilio+nodemailer), registration.ts (bcrypt),
-   login.ts, and refresh.ts all at once — regardless of which route was hit.
-   Fix: accept RouteHandler | (() => Promise<RouteHandler>) in createRouter (shared layer change),
-   then use dynamic imports in router.ts:
-     'POST /auth/challenges': () => import('./services/challenge').then(m => m.handleCreateChallenge),
-     'POST /auth/tokens/refresh': () => import('./services/refresh').then(m => m.handleRefreshToken),
-   Highest ROI for auth (avoids Twilio/bcrypt load on refresh/login routes) and pet-medical (16 handlers).
-   This is the "lazy route" concept from legacy AWS_API — same idea, adapted to the DDD router.
+   Status: implemented for auth.
+   Auth now defers loading challenge/login/registration/refresh service modules until the route is hit.
+   Remaining cold-start work for auth is therefore concentrated in the selected route's own imports
+   plus VPC + first MongoDB connection.
 
 6. Move @aws-sdk/client-s3 to shared layer
    Currently pet-profile, pet-recovery, pet-analysis, commerce-orders each bundle their own copy (~3 MB).
    Moving to shared layer: one shared copy loaded once per execution environment.
    Less critical if esbuild is adopted (tree-shaking reduces the impact), but still clean.
 
-P3 — Infra / operational
+P3 - Infra / operational
 
 7. Provisioned concurrency on request-authorizer
    Every authenticated request invokes it. Already tiny (892 KB, jwt only).
@@ -79,25 +77,23 @@ P3 — Infra / operational
    Estimated cost: ~$1.50/month at 256 MB.
 
 8. Pre-warming via EventBridge scheduled rule
-   CloudWatch/EventBridge rule pinging low-traffic functions every 5 minutes.
+   CloudWatch/EventBridge rule pinging low-traffic functions every few minutes.
    Cheap, effective for dev/staging or infrequently hit prod routes.
 
 
 RECOMMENDED SEQUENCING
 -----------------------
-1. esbuild bundling                         — biggest size reduction across all functions
-2. Lazy Twilio init                         — removes 18 MB init penalty on non-challenge routes
-3. arm64 + memory bumps                     — ~20% cheaper + faster init; replace bcrypt → bcryptjs
-4. Lazy route imports in createRouter       — prevents loading unused service modules at cold start
-5. @aws-sdk/client-s3 to shared layer       — consolidation; lower priority with esbuild
-6. Provisioned concurrency on authorizer    — eliminates authorizer cold start spikes
+1. esbuild bundling                         - biggest size reduction across all functions
+2. auth memory bump to 512 MB               - more CPU during init; measure cost/latency tradeoff
+3. lazy nodemailer transport init           - remove eager mail setup from auth challenge cold path
+4. @aws-sdk/client-s3 to shared layer       - consolidation; lower priority with esbuild
+5. Provisioned concurrency on authorizer    - eliminates authorizer cold start spikes
+6. scheduled warming for sparse dev traffic - mitigates 2-3 minute idle re-cold behavior
 
 
 OPEN QUESTIONS
 --------------
 - bcrypt native binary: confirm arm64 build pipeline support, or decide to swap to bcryptjs first.
-- esbuild external list: zod, jsonwebtoken are already in the shared layer — must mark as external
+- esbuild external list: zod, jsonwebtoken are already in the shared layer - must mark as external
   so esbuild does not re-bundle them into function packages.
-- Twilio lazy init: decide between (a) lazy singleton in config/twilio.ts or (b) dynamic import
-  inside challenge.ts only; (b) is cleaner with esbuild tree-shaking but requires router lazy-route
-  support to be in place first to be effective.
+- nodemailer lazy init: decide whether to mirror the Twilio lazy-singleton pattern in auth/config/mail.ts.

@@ -341,7 +341,7 @@ From [TODO.md](../TODO.md), notable deferred items include:
 - MongoDB indexing improvements
 - some business-logic optimization follow-up
 - stricter CORS restrictions
-- API Gateway access logging and Lambda DLQ work that require deploy-role or manager approval
+- API Gateway access logging and Lambda DLQ work were required during migration, but are now implemented in the current template and account setup
 
 These are important, but they do not change the overall conclusion that the migrated API surface is ready for integration.
 

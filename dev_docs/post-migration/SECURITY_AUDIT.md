@@ -234,9 +234,10 @@ This means the security posture is not only implemented, but partially regressio
 
 The following items are explicitly not fully closed in the repo yet:
 
-### 6.1 Infra gaps deferred for deploy-role / manager approval
+### 6.1 Infra items completed after deploy-role / manager coordination
 
 - API Gateway access logging (`CKV_AWS_76`)
+- API Gateway account-level CloudWatch Logs role configuration
 - Lambda dead-letter queue wiring (`CKV_AWS_116`)
 
 Source:

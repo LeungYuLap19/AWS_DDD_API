@@ -24,17 +24,17 @@
   - multipart
 - [x] Cold start optimisation
 - [x] Checkov, semgrep, snyk
-  - [x] Checkov: 57 → 0 failures (see `.checkov.yaml` for skip justifications)
-  - [x] **Requires manager / deploy-role approval before applying to template:**
-    - [x] `CKV_AWS_76` — API Gateway access logging: add `AWS::Logs::LogGroup` + `AccessLogSetting` on `RestApi`; deploy role needs `logs:CreateLogGroup`, `logs:PutRetentionPolicy`; also requires one-time per-account API GW CloudWatch role (`aws apigateway update-account`)
-    - [ ] `CKV_AWS_116` — Lambda DLQ: add `AWS::SQS::Queue` + `AWS::IAM::ManagedPolicy` (sqs:SendMessage) + attach to all 6 Lambda roles + `DeadLetterQueue` in Globals; deploy role needs `sqs:CreateQueue`, `sqs:SetQueueAttributes`, `iam:CreatePolicy`
-  - [x] semgrep: 18 findings — all false positives; body inputs guarded by Zod schemas; path-param ObjectId validation applied (P0)
-  - [x] snyk: 1 high (DoS in `dicer@0.3.0` via `lambda-multipart-parser`) — fixed by replacing `lambda-multipart-parser` with `busboy@1.6.0`; 0 vulnerabilities remaining
-- [x] schema and sanitizing tightening — see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)
+  - [x] Checkov: 57 -> 0 failures (see `.checkov.yaml` for skip justifications)
+  - [x] Required manager / deploy-role coordination to apply in template/account:
+    - [x] `CKV_AWS_76` - API Gateway access logging: add `AWS::Logs::LogGroup` + `AccessLogSetting` on `RestApi`; deploy role needs `logs:CreateLogGroup`, `logs:PutRetentionPolicy`; also required one-time per-account API GW CloudWatch role (`aws apigateway update-account`)
+    - [x] `CKV_AWS_116` - Lambda DLQ: add `AWS::SQS::Queue` + inline `sqs:SendMessage` role policies on all 6 Lambda roles + `DeadLetterQueue` in Globals; deploy role needs `sqs:CreateQueue`, `sqs:SetQueueAttributes`
+  - [x] semgrep: 18 findings - all false positives; body inputs guarded by Zod schemas; path-param ObjectId validation applied (P0)
+  - [x] snyk: 1 high (DoS in `dicer@0.3.0` via `lambda-multipart-parser`) - fixed by replacing `lambda-multipart-parser` with `busboy@1.6.0`; 0 vulnerabilities remaining
+- [x] schema and sanitizing tightening - see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)
   - [x] P0: shared path-param validators (objectId/tempId) applied to all path params used in DB queries
   - [x] P1: `.max()` on strings/arrays; replace `.passthrough()` with `.strict()` (pet-profile, pet-analysis, ngo); shared `paginationQuerySchema`; enums for gender/status/lang
   - [x] P2: consolidate `bootstrap/validators/` + `bootstrap/sanitizers/`
-  - [x] P3: integration tests for injection/XSS/oversize — deferred; will run after all optimization, hardening, and standardization passes are complete
+  - [x] P3: integration tests for injection/XSS/oversize - deferred; will run after all optimization, hardening, and standardization passes are complete
 - [x] Layered rate limiting + per-flow failure cooldowns
   - Shared `requireMongoRateLimit` now accepts `policies: RateLimitPolicy[]` (scopes: `ip`, `identifier`, `ip+identifier`, `account`, `global`); request is rejected on the first lane that trips. Legacy `{ limit, windowSeconds }` shorthand preserved.
   - Added `requireMongoRateLimitNotInCooldown` + `recordMongoRateLimitFailure` (auth wrapper exports `requireFailureCooldown` / `recordFailure`) for failure-only counters that do not consume legitimate-traffic quota.

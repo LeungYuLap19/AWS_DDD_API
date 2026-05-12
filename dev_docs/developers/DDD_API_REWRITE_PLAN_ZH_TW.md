@@ -96,205 +96,220 @@ Audience:
 以下 graph 以 `structure.txt` 為基礎，並保留目前已討論完成的方向。
 
 ```text
-/auth - manual deployment tested 
+index
+router
+services
+applications
+utils/response
+locales
+
+Legend
+- `x-api-key` = API key required
+- `self` = caller-authenticated route
+- `owner` = record ownership check
+- `admin` = backoffice / staff / operator access
+- `hybrid` = multiple auth branches or browse + managed split
+- all routes still require `x-api-key`
+
+/auth
   /challenges
-    POST
+    POST [x-api-key]
     /verify
-      POST
+      POST [x-api-key, hybrid]
   /registrations
     /user
-      POST
+      POST [x-api-key]
     /ngo
-      POST
+      POST [x-api-key]
   /login
     /ngo
-      POST
+      POST [x-api-key]
   /tokens
     /refresh
-      POST
+      POST [x-api-key]
 
-/user - manual deployment tested 
-  /me
-    GET
-    PATCH
-    DELETE
+/user
+  /me [x-api-key, self]
+    GET [self]
+    PATCH [self]
+    DELETE [self]
 
-/ngo - manual deployment tested 
-  /me
-    GET
-    PATCH
-    DELETE-?
+/ngo
+  /me [x-api-key, self]
+    GET [self]
+    PATCH [self]
+    DELETE [self]
     /members
-      GET
+      GET [self]
 
 /pet
-  /profile - manual deployment tested 
-    POST
+  /profile
+    POST [x-api-key, self]
     /{petId}
-      GET
-      PATCH
-      DELETE
+      GET [x-api-key, owner]
+      PATCH [x-api-key, owner]
+      DELETE [x-api-key, owner]
     /me
-      GET
+      GET [x-api-key, self]
     /by-tag
       /{tagId}
-        GET
-
-  /source - manual deployment tested 
+        GET [x-api-key]
+  /source
     /{petId}
-      GET
-      POST
-      PATCH
-
-  /transfer - manual deployment tested
+      GET [x-api-key, owner]
+      POST [x-api-key, owner]
+      PATCH [x-api-key, owner]
+  /transfer
     /{petId}
-      POST
+      POST [x-api-key, owner]
       /{transferId}
-        PATCH
-        DELETE
+        PATCH [x-api-key, owner]
+        DELETE [x-api-key, owner]
       /ngo-reassignment
-        POST
+        POST [x-api-key, owner, hybrid]
 
-  /adoption - manual deployment tested 
-    GET
-    /{adoptionId}
-      GET
+  --- * ---
+  /adoption
+    GET [x-api-key]
+    /detail
+      /{adoptionId}
+        GET [x-api-key]
     /{petId}
-      GET
-      POST
-      PATCH
-      DELETE
+      GET [x-api-key, owner]
+      POST [x-api-key, owner]
+      PATCH [x-api-key, owner]
+      DELETE [x-api-key, owner]
+  --- * ---
 
-  /medical - manual deployment tested 
+  /medical
     /reference
       /deworm
-        GET
+        GET [x-api-key]
     /{petId}
       /general
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{medicalId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /medication
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{medicationId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /deworming
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{dewormId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /blood-test
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{bloodTestId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
       /vaccination
-        GET
-        POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
         /{vaccineId}
-          PATCH
-          DELETE
+          PATCH [x-api-key, owner]
+          DELETE [x-api-key, owner]
 
-  /analysis - manual deployment tested (ML VM server unable to reach)
+  --- * ---
+  /analysis
     /eye
+      /disease
+        /{eyeDiseaseName}
+          GET [x-api-key]
       /{petId}
-        GET
-        POST
-        PATCH
-      /{eyeDiseaseName}
-        GET
-    /breed - fully functional
-      POST
+        GET [x-api-key, owner]
+        POST [x-api-key, owner]
+        PATCH [x-api-key, owner]
+    /breed
+      POST [x-api-key, self]
     /uploads
       /image
-        POST
-      /breed-image - fully functional
-        POST
-
-  /recovery - manual deployment tested 
+        POST [x-api-key, self]
+      /breed-image
+        POST [x-api-key, self]
+  --- * ---
+  
+  /recovery
     /lost
-      GET
-      POST
+      GET [x-api-key, self]
+      POST [x-api-key, self]
       /{petLostID}
-        DELETE
+        DELETE [x-api-key, owner]
     /found
-      GET
-      POST
+      GET [x-api-key, self]
+      POST [x-api-key, self]
       /{petFoundID}
-        DELETE
+        DELETE [x-api-key, owner]
+  /reference
+    /breeds
+      /{species}
+        GET [x-api-key]
+        /{lang}
+          GET [x-api-key]
 
-  /biometric - not required 
-    /{petId}
-      GET
-    /registrations
-      POST
-    /verifications
-      POST
-
-/notifications - manual deployment tested 
+/notifications
   /me
-    GET
+    GET [x-api-key, self]
     /{notificationId}
-      PATCH
+      PATCH [x-api-key, owner]
   /dispatch
-    POST
+    POST [x-api-key, admin]
 
-/commerce - manual deployment tested 
-  /catalog [commerce-catalog]
-    GET
+/commerce
+  /catalog
+    GET [x-api-key]
     /events
-      POST
-  /storefront [commerce-catalog]
-    GET
-    
-  /orders [commerce-orders]
-    GET
-    POST
+      POST [x-api-key]
+  /storefront
+    GET [x-api-key]
+  /orders
+    GET [x-api-key, admin]
+    POST [x-api-key, self]
     /{tempId}
-      GET
+      GET [x-api-key, owner, admin]
     /operations
-      GET-?
-
-  /fulfillment [commerce-fulfillment]
-    GET
+      GET [x-api-key, admin]
+  /fulfillment
+    GET [x-api-key, admin]
     /{orderVerificationId}
-      DELETE
+      DELETE [x-api-key, admin]
     /tags
       /{tagId}
-        GET
-        PATCH
+        GET [x-api-key, self]
+        PATCH [x-api-key, self]
     /suppliers
       /{orderId}
-        GET
-        PATCH
+        GET [x-api-key, owner, admin]
+        PATCH [x-api-key, owner, admin]
     /share-links
       /whatsapp
-        /{_id}
-          GET
-  /commands [commerce-fulfillment]
+        /{verificationId}
+          GET [x-api-key, owner, admin]
+  /commands
     /ptag-detection-email
-      POST
+      POST [x-api-key, admin]
 
-/logistics - manual deployment tested 
+/logistics
+  /token
+    POST [x-api-key]
   /lookups
     /areas
-      POST
+      POST [x-api-key]
     /net-codes
-      POST
+      POST [x-api-key]
     /pickup-locations
-      POST
-  /token
-    POST
-  /shipments - no sandbox env (not tested)
-    POST
-  /cloud-waybill - no sandbox env (not tested)
-    POST
+      POST [x-api-key]
+  /shipments
+    POST [x-api-key, owner, admin]
+  /cloud-waybill
+    POST [x-api-key, owner, admin]
 ```
 
 備註：
