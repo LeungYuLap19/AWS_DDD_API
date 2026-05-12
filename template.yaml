@@ -312,25 +312,6 @@ Resources:
       KeyType: API_KEY
       UsagePlanId: !Ref RestApiUsagePlan
 
-  LambdaDeadLetterQueuePolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      ManagedPolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
-      Roles:
-        - !Ref SharedFunctionRole
-        - !Ref PetProfileFunctionRole
-        - !Ref PetRecoveryFunctionRole
-        - !Ref PetAnalysisFunctionRole
-        - !Ref AuthorizerFunctionRole
-        - !Ref CommerceOrdersFunctionRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-              - sqs:SendMessage
-            Resource: !GetAtt LambdaDeadLetterQueue.Arn
-
   SharedFunctionRole: # default app Lambda permissions, 
     Type: AWS::IAM::Role
     Properties:
@@ -347,6 +328,15 @@ Resources:
       ManagedPolicyArns: 
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # basic Lambda logging
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole # required when Lambda attaches to a VPC
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDeadLetterQueue.Arn
 
   PetProfileFunctionRole:
     Type: AWS::IAM::Role
@@ -365,6 +355,14 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDeadLetterQueue.Arn
         - PolicyName: !Sub '${ProjectName}-${StageName}-pet-profile-s3-upload'
           PolicyDocument:
             Version: '2012-10-17'
@@ -391,6 +389,14 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDeadLetterQueue.Arn
         - PolicyName: !Sub '${ProjectName}-${StageName}-pet-recovery-s3-upload'
           PolicyDocument:
             Version: '2012-10-17'
@@ -417,6 +423,14 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDeadLetterQueue.Arn
         - PolicyName: !Sub '${ProjectName}-${StageName}-pet-analysis-s3-upload'
           PolicyDocument:
             Version: '2012-10-17'
@@ -446,6 +460,15 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDeadLetterQueue.Arn
 
   RequestAuthorizerFunction:
     Type: AWS::Serverless::Function
@@ -1788,6 +1811,14 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
+        - PolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt LambdaDeadLetterQueue.Arn
         - PolicyName: !Sub '${ProjectName}-${StageName}-commerce-orders-s3-upload'
           PolicyDocument:
             Version: '2012-10-17'
