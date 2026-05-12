@@ -120,7 +120,7 @@ Legend
           DELETE [x-api-key, owner]
 
   --- * ---
-  /analysis
+  /analysis (ML VM for eye is down)
     /eye
       /disease
         /{eyeDiseaseName}
@@ -149,12 +149,15 @@ Legend
       POST [x-api-key, self]
       /{petFoundID}
         DELETE [x-api-key, owner]
-  /reference
-    /breeds
-      /{species}
-        GET [x-api-key]
-        /{lang}
-          GET [x-api-key]
+
+  /biometric
+    /{petId}
+      GET [x-api-key, owner]
+      DELETE [x-api-key, owner]
+      /registrations
+        POST [x-api-key, owner]
+      /verifications
+        POST [x-api-key, owner]
 
 /notifications
   /me

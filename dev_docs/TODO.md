@@ -42,6 +42,20 @@
   - All other Lambda call sites (commerce-orders, logistics, pet-profile, pet-recovery, pet-analysis, pet-medical) migrated to explicit `policies[]`.
   - Consider WAF rate-based rules later if infra scope allows.
 
+## TODO endpoints
+
+- [ ] pet-medical lambda
+  - GET /pet/medical/reference/deworm
+  - GET /pet/medical/{petId}/vaccination
+  - POST /pet/medical/{petId}/vaccination
+  - PATCH /pet/medical/{petId}/vaccination/{vaccineId}
+  - DELETE /pet/medical/{petId}/vaccination/{vaccineId}
+- [ ] pet-biometric
+  - GET /pet/biometric/{petId}
+  - DELETE /pet/biometric/{petId}
+  - POST /pet/biometric/{petId}/registrations
+  - POST /pet/biometric/{petId}/verifications
+
 ## Do Later / Can Set Aside
 
 - [ ] what can be extract to shared (SoC) - delay
