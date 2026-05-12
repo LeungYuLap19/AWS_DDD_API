@@ -2,6 +2,7 @@
 
 > Codebase security audition based on repository inspection.
 > Audit date: 2026-05-10.
+> Last updated: 2026-05-12 (reflects completed hardening items).
 > Scope: application-layer and infrastructure-as-code controls visible in this repository.
 > This is not a formal penetration test or production configuration review.
 
@@ -57,6 +58,9 @@ The following control families are clearly implemented in the repo:
 - CORS allowlist behavior in production
 - response sanitization / allowlisting to reduce sensitive-field leakage
 - static-analysis and dependency-hardening follow-up recorded in post-migration docs
+- API Gateway access logging and CloudWatch Logs integration
+- Lambda dead-letter queue wiring for all 6 functions
+- layered rate limiting with failure-only cooldowns on all auth and write flows
 
 ---
 
@@ -232,36 +236,47 @@ This means the security posture is not only implemented, but partially regressio
 
 ## 6. Deferred or Remaining Gaps
 
-The following items are explicitly not fully closed in the repo yet:
+The following items remain incomplete:
 
-### 6.1 Infra items completed after deploy-role / manager coordination
+### 6.1 Endpoint completion
 
-- API Gateway access logging (`CKV_AWS_76`)
-- API Gateway account-level CloudWatch Logs role configuration
-- Lambda dead-letter queue wiring (`CKV_AWS_116`)
+- **pet-biometric lambda** — not yet implemented:
+  - GET /pet/biometric/{petId}
+  - DELETE /pet/biometric/{petId}
+  - POST /pet/biometric/{petId}/registrations
+  - POST /pet/biometric/{petId}/verifications
 
 Source:
 
 - [TODO.md](../TODO.md)
 
-### 6.2 Remaining rate-limit gaps documented in post-migration notes
+### 6.2 Architectural and operational items deferred by design
 
-The post-migration notes still call out some endpoints as needing stronger per-identifier write throttles or additional hardening review.
-
-Examples listed there include:
-
-- `POST /commerce/catalog/events`
-- `PATCH /user/me`, `DELETE /user/me`
-- `PATCH /ngo/me`
-- `POST /pet/transfer/*`, `PATCH`, `DELETE`
-- `POST /pet/adoption/{id}`
-- `POST|PATCH /pet/source/{petId}`
+- Extraction of shared concerns (SoC: db connection, service standard flow, S3 client)
+- MongoDB indexing strategy
+- Admin protected routes with DB identity checking
+- Business logic optimization
+- Path optimization (e.g., move PATCH pet profile by {petId} to /pet-profile/me)
+- Removal of dead S3 environment variables from `PetBiometricFunction` and `CommerceFulfillmentFunction`
+- SF Express address client endpoint verification (currently uses SIT environment)
 
 Source:
 
-- [CHANGES.md](./CHANGES.md)
+- [TODO.md](../TODO.md)
 
-### 6.3 Boundaries of this audition
+### 6.3 Completed since initial audit
+
+The following were listed as deferred in the initial post-migration audit but have now been completed:
+
+- API Gateway access logging (`CKV_AWS_76`) — implemented with `AWS::Logs::LogGroup` + `AccessLogSetting`
+- Lambda dead-letter queue wiring (`CKV_AWS_116`) — implemented with `AWS::SQS::Queue` and role policies on all 6 functions
+- Rate-limit hardening on remaining endpoints — all auth flows (login, OTP send/verify, refresh, registration) and write operations (commerce, logistics, pet, user, ngo) now use layered policies with failure-only cooldowns
+
+Source:
+
+- [TODO.md](../TODO.md) (Optimization, Security Scan and Hardening section)
+
+### 6.4 Boundaries of this audition
 
 This document does not verify:
 
@@ -294,10 +309,11 @@ The current `AWS_DDD_API` post-migration codebase already handles a broad set of
 
 The strongest implemented areas are:
 
-- auth / session handling
-- abuse throttling
-- request validation
-- ownership enforcement
-- upload hardening
+- auth / session handling with JWT + refresh-token rotation
+- layered abuse throttling with failure-only cooldowns across all auth and write flows
+- request validation with Zod schemas and path-param guards
+- ownership enforcement at the service layer
+- upload hardening with magic-byte detection and folder allowlisting
+- infrastructure hardening with API Gateway logging, Lambda DLQs, and least-privilege S3 scoping
 
-The main unfinished areas are operational hardening at the infrastructure layer and some remaining rate-limit follow-up noted in the post-migration documents.
+Remaining work is primarily architectural refinement (SoC extraction, indexing) and endpoint completion (pet-biometric lambda).
