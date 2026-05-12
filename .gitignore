@@ -1,4 +1,5 @@
 .aws-sam/
+.sam-appdata/
 dist/
 node_modules/
 env.json

@@ -15,7 +15,7 @@
 - [x] retest sam
 - [x] api docs update
 - [x] Tsdoc
-- [ ] deployment tests
+- [x] deployment tests
 
 ## Optimization, Security Scan and Hardening
 
@@ -25,9 +25,9 @@
 - [x] Cold start optimisation
 - [x] Checkov, semgrep, snyk
   - [x] Checkov: 57 → 0 failures (see `.checkov.yaml` for skip justifications)
-  - [ ] **Requires manager / deploy-role approval before applying to template:**
-    - [ ] `CKV_AWS_76` — API Gateway access logging: add `AWS::Logs::LogGroup` + `AccessLogSetting` on `RestApi`; deploy role needs `logs:CreateLogGroup`, `logs:PutRetentionPolicy`; also requires one-time per-account API GW CloudWatch role (`aws apigateway update-account`)
-    - [ ] `CKV_AWS_116` — Lambda DLQ: add `AWS::SQS::Queue` + `AWS::IAM::ManagedPolicy` (sqs:SendMessage) + attach to all 6 Lambda roles + `DeadLetterQueue` in Globals; deploy role needs `sqs:CreateQueue`, `sqs:SetQueueAttributes`, `iam:CreatePolicy`
+  - [x] **Requires manager / deploy-role approval before applying to template:**
+    - [x] `CKV_AWS_76` — API Gateway access logging: add `AWS::Logs::LogGroup` + `AccessLogSetting` on `RestApi`; deploy role needs `logs:CreateLogGroup`, `logs:PutRetentionPolicy`; also requires one-time per-account API GW CloudWatch role (`aws apigateway update-account`)
+    - [x] `CKV_AWS_116` — Lambda DLQ: add `AWS::SQS::Queue` + `AWS::IAM::ManagedPolicy` (sqs:SendMessage) + attach to all 6 Lambda roles + `DeadLetterQueue` in Globals; deploy role needs `sqs:CreateQueue`, `sqs:SetQueueAttributes`, `iam:CreatePolicy`
   - [x] semgrep: 18 findings — all false positives; body inputs guarded by Zod schemas; path-param ObjectId validation applied (P0)
   - [x] snyk: 1 high (DoS in `dicer@0.3.0` via `lambda-multipart-parser`) — fixed by replacing `lambda-multipart-parser` with `busboy@1.6.0`; 0 vulnerabilities remaining
 - [x] schema and sanitizing tightening — see [SCHEMA_SANITIZING_PLAN.md](./SCHEMA_SANITIZING_PLAN.md)

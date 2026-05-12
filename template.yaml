@@ -215,9 +215,24 @@ Globals: # shared default settings applied to all resources of a given type, unl
         MONGODB_URI: !Ref MongoDbUri
         AUTH_BYPASS: !Ref AuthBypass
         JWT_SECRET: !Ref JwtSecret
+    DeadLetterQueue:
+      Type: SQS
+      TargetArn: !GetAtt LambdaDeadLetterQueue.Arn
     ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
 
 Resources:
+  ApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${ProjectName}-${StageName}'
+      RetentionInDays: 30
+
+  LambdaDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+      MessageRetentionPeriod: 1209600
+
   RestApi:
     Type: AWS::Serverless::Api
     Metadata:
@@ -233,6 +248,10 @@ Resources:
       EndpointConfiguration: REGIONAL
       ApiKeySourceType: HEADER
       TracingEnabled: true
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
+        Format: !Sub |
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp","caller":"$context.identity.caller","user":"$context.identity.user","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","responseLength":"$context.responseLength","integrationError":"$context.integrationErrorMessage"}
       BinaryMediaTypes:
         - 'multipart/form-data' # causes API GW to base64-encode multipart bodies (consistent 33% overhead) instead of UTF-8-encoding binary content (variable up to ~1.5x overhead), making the Lambda 6 MB invocation limit predictable
       Models: # request/response schemas, validates the request body before Lambda runs
@@ -292,6 +311,25 @@ Resources:
       KeyId: !Ref ExistingApiKeyId
       KeyType: API_KEY
       UsagePlanId: !Ref RestApiUsagePlan
+
+  LambdaDeadLetterQueuePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
+      Roles:
+        - !Ref SharedFunctionRole
+        - !Ref PetProfileFunctionRole
+        - !Ref PetRecoveryFunctionRole
+        - !Ref PetAnalysisFunctionRole
+        - !Ref AuthorizerFunctionRole
+        - !Ref CommerceOrdersFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: !GetAtt LambdaDeadLetterQueue.Arn
 
   SharedFunctionRole: # default app Lambda permissions, 
     Type: AWS::IAM::Role
