@@ -44,7 +44,7 @@
 
 ## TODO endpoints
 
-- [ ] pet-medical lambda
+- [x] pet-medical lambda
   - GET /pet/medical/reference/deworm
   - GET /pet/medical/{petId}/vaccination
   - POST /pet/medical/{petId}/vaccination
