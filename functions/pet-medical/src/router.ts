@@ -2,6 +2,13 @@ import { createRouter } from '@aws-ddd-api/shared';
 import { response } from './utils/response';
 
 const routes = {
+  // 'GET /pet/medical/reference/deworm': () => {},
+
+  // 'GET /pet/medical/{petId}/vaccination': () => {},
+  // 'POST /pet/medical/{petId}/vaccination': () => {},
+  // 'PATCH /pet/medical/{petId}/vaccination/{vaccineId}': () => {},
+  // 'DELETE /pet/medical/{petId}/vaccination/{vaccineId}': () => {},
+
   // General medical records
   'GET /pet/medical/{petId}/general': () => import('./services/medical').then(m => m.handleListMedicalRecords),
   'POST /pet/medical/{petId}/general': () => import('./services/medical').then(m => m.handleCreateMedicalRecord),
