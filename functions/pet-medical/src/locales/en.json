@@ -17,6 +17,10 @@
       "dewormRecord": {
         "notFound": "Deworm record not found",
         "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY format"
+      },
+      "vaccineRecord": {
+        "notFound": "Vaccine record not found",
+        "invalidDateFormat": "Invalid date format. Expected YYYY-MM-DD or DD/MM/YYYY format"
       }
     }
   }

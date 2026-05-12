@@ -17,6 +17,10 @@
       "dewormRecord": {
         "notFound": "未找到驅蟲記錄",
         "invalidDateFormat": "無效的日期格式，應為 YYYY-MM-DD 或 DD/MM/YYYY 格式"
+      },
+      "vaccineRecord": {
+        "notFound": "未找到疫苗記錄",
+        "invalidDateFormat": "無效的日期格式，應為 YYYY-MM-DD 或 DD/MM/YYYY 格式"
       }
     }
   }

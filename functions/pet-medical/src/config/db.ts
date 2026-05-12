@@ -5,6 +5,8 @@ import MedicalRecordSchema from '../models/MedicalRecord';
 import MedicationRecordSchema from '../models/MedicationRecord';
 import DewormRecordSchema from '../models/DewormRecord';
 import BloodTestRecordSchema from '../models/BloodTestRecord';
+import VaccineRecordSchema from '../models/VaccineRecord';
+import AnthelminticSchema from '../models/Anthelmintic';
 
 let connectionPromise: Promise<typeof mongoose> | null = null;
 
@@ -18,6 +20,10 @@ function registerModels(): void {
     mongoose.model('Deworm_Records', DewormRecordSchema, 'deworm_records');
   if (!mongoose.models.blood_tests)
     mongoose.model('blood_tests', BloodTestRecordSchema, 'blood_tests');
+  if (!mongoose.models.Vaccine_Records)
+    mongoose.model('Vaccine_Records', VaccineRecordSchema, 'vaccine_records');
+  if (!mongoose.models.Anthelmintic)
+    mongoose.model('Anthelmintic', AnthelminticSchema, 'anthelmintic');
 }
 
 /**

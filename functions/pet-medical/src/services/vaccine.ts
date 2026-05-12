@@ -13,17 +13,17 @@ import { applyRateLimit } from '../utils/rateLimit';
 import { sanitizeRecord } from '../utils/sanitize';
 import { isValidDateFormat, parseDDMMYYYY } from '../utils/date';
 import {
-  createBloodTestSchema,
-  updateBloodTestSchema,
-} from '../zodSchema/bloodTestSchema';
+  createVaccineRecordSchema,
+  updateVaccineRecordSchema,
+} from '../zodSchema/vaccineSchema';
 
 const PROJECTION =
-  'bloodTestDate heartworm lymeDisease ehrlichiosis anaplasmosis babesiosis petId';
+  'vaccineDate vaccineName vaccineNumber vaccineTimes vaccinePosition petId';
 
 /**
- * Returns paginated blood-test records for one owned pet.
+ * Returns paginated vaccination records for one owned pet.
  */
-export async function handleListBloodTestRecords(
+export async function handleListVaccineRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   requireAuthContext(ctx.event);
@@ -45,10 +45,10 @@ export async function handleListBloodTestRecords(
   const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
-  const BloodTest = mongoose.model('blood_tests');
+  const VaccineRecords = mongoose.model('Vaccine_Records');
   const [records, total] = await Promise.all([
-    BloodTest.find({ petId }).select(PROJECTION).skip(skip).limit(limit).lean(),
-    BloodTest.countDocuments({ petId }),
+    VaccineRecords.find({ petId }).select(PROJECTION).skip(skip).limit(limit).lean(),
+    VaccineRecords.countDocuments({ petId }),
   ]);
 
   return response.successResponse(200, ctx.event, {
@@ -59,10 +59,10 @@ export async function handleListBloodTestRecords(
 }
 
 /**
- * Creates one blood-test record for an owned pet after validating the accepted
- * blood-test date format.
+ * Creates one vaccination record for an owned pet after validating the legacy
+ * date format accepted by this domain.
  */
-export async function handleCreateBloodTestRecord(
+export async function handleCreateVaccineRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
@@ -73,16 +73,16 @@ export async function handleCreateBloodTestRecord(
   }
   const petId = petIdResult.data;
 
-  const parsed = parseBody(ctx.body, createBloodTestSchema);
+  const parsed = parseBody(ctx.body, createVaccineRecordSchema);
   if (!parsed.ok) {
     return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
   const data = parsed.data;
 
-  if (data.bloodTestDate && !isValidDateFormat(data.bloodTestDate)) {
+  if (data.vaccineDate && !isValidDateFormat(data.vaccineDate)) {
     return response.errorResponse(
       400,
-      'petMedical.errors.bloodTest.invalidDateFormat',
+      'petMedical.errors.vaccineRecord.invalidDateFormat',
       ctx.event
     );
   }
@@ -105,17 +105,14 @@ export async function handleCreateBloodTestRecord(
 
   await loadAuthorizedPet(ctx.event, petId);
 
-  const BloodTest = mongoose.model('blood_tests');
+  const VaccineRecords = mongoose.model('Vaccine_Records');
 
-  const parsedBloodTestDate = data.bloodTestDate ? parseDDMMYYYY(data.bloodTestDate) : null;
-
-  const newRecord = await BloodTest.create({
-    bloodTestDate: parsedBloodTestDate,
-    heartworm: data.heartworm,
-    lymeDisease: data.lymeDisease,
-    ehrlichiosis: data.ehrlichiosis,
-    anaplasmosis: data.anaplasmosis,
-    babesiosis: data.babesiosis,
+  const newRecord = await VaccineRecords.create({
+    vaccineDate: data.vaccineDate ? parseDDMMYYYY(data.vaccineDate) : null,
+    vaccineName: data.vaccineName,
+    vaccineNumber: data.vaccineNumber,
+    vaccineTimes: data.vaccineTimes,
+    vaccinePosition: data.vaccinePosition,
     petId,
   });
 
@@ -126,10 +123,10 @@ export async function handleCreateBloodTestRecord(
 }
 
 /**
- * Updates one blood-test record for an owned pet using partial-update
+ * Updates one vaccination record for an owned pet using partial-update
  * semantics.
  */
-export async function handleUpdateBloodTestRecord(
+export async function handleUpdateVaccineRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
@@ -140,22 +137,22 @@ export async function handleUpdateBloodTestRecord(
   }
   const petId = petIdResult.data;
 
-  const bloodTestIdResult = parseObjectIdParam(ctx.event.pathParameters?.bloodTestId);
-  if (!bloodTestIdResult.ok) {
-    return response.errorResponse(bloodTestIdResult.statusCode, bloodTestIdResult.errorKey, ctx.event);
+  const vaccineIdResult = parseObjectIdParam(ctx.event.pathParameters?.vaccineId);
+  if (!vaccineIdResult.ok) {
+    return response.errorResponse(vaccineIdResult.statusCode, vaccineIdResult.errorKey, ctx.event);
   }
-  const bloodTestId = bloodTestIdResult.data;
+  const vaccineId = vaccineIdResult.data;
 
-  const parsed = parseBody(ctx.body, updateBloodTestSchema);
+  const parsed = parseBody(ctx.body, updateVaccineRecordSchema);
   if (!parsed.ok) {
     return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
   const data = parsed.data;
 
-  if (data.bloodTestDate && !isValidDateFormat(data.bloodTestDate)) {
+  if (data.vaccineDate && !isValidDateFormat(data.vaccineDate)) {
     return response.errorResponse(
       400,
-      'petMedical.errors.bloodTest.invalidDateFormat',
+      'petMedical.errors.vaccineRecord.invalidDateFormat',
       ctx.event
     );
   }
@@ -179,20 +176,19 @@ export async function handleUpdateBloodTestRecord(
   await loadAuthorizedPet(ctx.event, petId);
 
   const updateFields: Record<string, unknown> = {};
-  if (data.bloodTestDate !== undefined) {
-    updateFields.bloodTestDate = data.bloodTestDate
-      ? parseDDMMYYYY(data.bloodTestDate)
+  if (data.vaccineDate !== undefined) {
+    updateFields.vaccineDate = data.vaccineDate
+      ? parseDDMMYYYY(data.vaccineDate)
       : null;
   }
-  if (data.heartworm !== undefined) updateFields.heartworm = data.heartworm;
-  if (data.lymeDisease !== undefined) updateFields.lymeDisease = data.lymeDisease;
-  if (data.ehrlichiosis !== undefined) updateFields.ehrlichiosis = data.ehrlichiosis;
-  if (data.anaplasmosis !== undefined) updateFields.anaplasmosis = data.anaplasmosis;
-  if (data.babesiosis !== undefined) updateFields.babesiosis = data.babesiosis;
+  if (data.vaccineName !== undefined) updateFields.vaccineName = data.vaccineName;
+  if (data.vaccineNumber !== undefined) updateFields.vaccineNumber = data.vaccineNumber;
+  if (data.vaccineTimes !== undefined) updateFields.vaccineTimes = data.vaccineTimes;
+  if (data.vaccinePosition !== undefined) updateFields.vaccinePosition = data.vaccinePosition;
 
-  const BloodTest = mongoose.model('blood_tests');
-  const updated = await BloodTest.findOneAndUpdate(
-    { _id: bloodTestId, petId },
+  const VaccineRecords = mongoose.model('Vaccine_Records');
+  const updated = await VaccineRecords.findOneAndUpdate(
+    { _id: vaccineId, petId },
     { $set: updateFields },
     { new: true, projection: PROJECTION }
   ).lean();
@@ -200,7 +196,7 @@ export async function handleUpdateBloodTestRecord(
   if (!updated) {
     return response.errorResponse(
       404,
-      'petMedical.errors.bloodTest.notFound',
+      'petMedical.errors.vaccineRecord.notFound',
       ctx.event
     );
   }
@@ -212,9 +208,9 @@ export async function handleUpdateBloodTestRecord(
 }
 
 /**
- * Deletes one blood-test record belonging to an owned pet.
+ * Deletes one vaccination record belonging to an owned pet.
  */
-export async function handleDeleteBloodTestRecord(
+export async function handleDeleteVaccineRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
@@ -225,11 +221,11 @@ export async function handleDeleteBloodTestRecord(
   }
   const petId = petIdResult.data;
 
-  const bloodTestIdResult = parseObjectIdParam(ctx.event.pathParameters?.bloodTestId);
-  if (!bloodTestIdResult.ok) {
-    return response.errorResponse(bloodTestIdResult.statusCode, bloodTestIdResult.errorKey, ctx.event);
+  const vaccineIdResult = parseObjectIdParam(ctx.event.pathParameters?.vaccineId);
+  if (!vaccineIdResult.ok) {
+    return response.errorResponse(vaccineIdResult.statusCode, vaccineIdResult.errorKey, ctx.event);
   }
-  const bloodTestId = bloodTestIdResult.data;
+  const vaccineId = vaccineIdResult.data;
 
   await connectToMongoDB();
 
@@ -249,13 +245,13 @@ export async function handleDeleteBloodTestRecord(
 
   await loadAuthorizedPet(ctx.event, petId);
 
-  const BloodTest = mongoose.model('blood_tests');
+  const VaccineRecords = mongoose.model('Vaccine_Records');
 
-  const deleted = await BloodTest.deleteOne({ _id: bloodTestId, petId });
+  const deleted = await VaccineRecords.deleteOne({ _id: vaccineId, petId });
   if (deleted.deletedCount === 0) {
     return response.errorResponse(
       404,
-      'petMedical.errors.bloodTest.notFound',
+      'petMedical.errors.vaccineRecord.notFound',
       ctx.event
     );
   }
