@@ -20,6 +20,8 @@ import {
 const PROJECTION =
   'vaccineDate vaccineName vaccineNumber vaccineTimes vaccinePosition petId';
 
+const ACTIVE_FILTER = { isDeleted: { $ne: true } };
+
 /**
  * Returns paginated vaccination records for one owned pet.
  */
@@ -46,9 +48,10 @@ export async function handleListVaccineRecords(
   const skip = (page - 1) * limit;
 
   const VaccineRecords = mongoose.model('Vaccine_Records');
+  const activeFilter = { petId, ...ACTIVE_FILTER };
   const [records, total] = await Promise.all([
-    VaccineRecords.find({ petId }).select(PROJECTION).skip(skip).limit(limit).lean(),
-    VaccineRecords.countDocuments({ petId }),
+    VaccineRecords.find(activeFilter).select(PROJECTION).skip(skip).limit(limit).lean(),
+    VaccineRecords.countDocuments(activeFilter),
   ]);
 
   return response.successResponse(200, ctx.event, {
@@ -188,7 +191,7 @@ export async function handleUpdateVaccineRecord(
 
   const VaccineRecords = mongoose.model('Vaccine_Records');
   const updated = await VaccineRecords.findOneAndUpdate(
-    { _id: vaccineId, petId },
+    { _id: vaccineId, petId, ...ACTIVE_FILTER },
     { $set: updateFields },
     { new: true, projection: PROJECTION }
   ).lean();
@@ -247,8 +250,12 @@ export async function handleDeleteVaccineRecord(
 
   const VaccineRecords = mongoose.model('Vaccine_Records');
 
-  const deleted = await VaccineRecords.deleteOne({ _id: vaccineId, petId });
-  if (deleted.deletedCount === 0) {
+  const deleted = await VaccineRecords.findOneAndUpdate(
+    { _id: vaccineId, petId, ...ACTIVE_FILTER },
+    { $set: { isDeleted: true, deletedAt: new Date() } },
+    { new: true }
+  ).lean();
+  if (!deleted) {
     return response.errorResponse(
       404,
       'petMedical.errors.vaccineRecord.notFound',

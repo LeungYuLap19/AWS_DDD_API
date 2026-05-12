@@ -1377,7 +1377,7 @@ describe('pet-medical handler Tier 2 integration', () => {
         authUserId,
         petDoc: { _id: petId, userId: authUserId, ngoId: null },
       });
-      vaccineModel.deleteOne.mockResolvedValueOnce({ deletedCount: 0 });
+      vaccineModel.findOneAndUpdate.mockReturnValueOnce({ lean: jest.fn().mockResolvedValue(null) });
       const result = await handler(
         createEvent({
           method: 'DELETE',
@@ -1401,7 +1401,7 @@ describe('pet-medical handler Tier 2 integration', () => {
         authUserId,
         petDoc: { _id: petId, userId: authUserId, ngoId: null },
       });
-      vaccineModel.deleteOne.mockResolvedValueOnce({ deletedCount: 1 });
+      vaccineModel.findOneAndUpdate.mockReturnValueOnce({ lean: jest.fn().mockResolvedValue({ _id: vaccineId }) });
       const result = await handler(
         createEvent({
           method: 'DELETE',
