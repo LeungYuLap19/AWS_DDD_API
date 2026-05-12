@@ -1329,6 +1329,73 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
+        PetMedicalVaccinationListGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/vaccination
+            Method: GET
+        PetMedicalVaccinationCreatePOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/vaccination
+            Method: POST
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalVaccinationListOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/vaccination
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalVaccinationItemPATCH:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/vaccination/{vaccineId}
+            Method: PATCH
+            RequestModel:
+              Model: GenericJsonObjectRequest
+              Required: false
+              ValidateBody: true
+        PetMedicalVaccinationItemDELETE:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/vaccination/{vaccineId}
+            Method: DELETE
+        PetMedicalVaccinationItemOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/{petId}/vaccination/{vaccineId}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetMedicalReferenceDewormGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/reference/deworm
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        PetMedicalReferenceDewormOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/medical/reference/deworm
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
 
   PetAnalysisFunction:
     Type: AWS::Serverless::Function

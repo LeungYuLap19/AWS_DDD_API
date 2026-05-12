@@ -247,12 +247,6 @@ Legend
       POST [x-api-key, self]
       /{petFoundID}
         DELETE [x-api-key, owner]
-  /reference
-    /breeds
-      /{species}
-        GET [x-api-key]
-        /{lang}
-          GET [x-api-key]
 
 /notifications
   /me

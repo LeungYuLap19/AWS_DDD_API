@@ -1,6 +1,10 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, paginationQuerySchema } from '@aws-ddd-api/shared';
+import {
+  parseBody,
+  paginationQuerySchema,
+  parseObjectIdParam,
+} from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -22,9 +26,14 @@ const PROJECTION =
 export async function handleListMedicationRecords(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
-  const petId = String(ctx.event.pathParameters?.petId || '');
-
   requireAuthContext(ctx.event);
+
+  const petIdResult = parseObjectIdParam(ctx.event.pathParameters?.petId);
+  if (!petIdResult.ok) {
+    return response.errorResponse(petIdResult.statusCode, petIdResult.errorKey, ctx.event);
+  }
+  const petId = petIdResult.data;
+
   await connectToMongoDB();
 
   await loadAuthorizedPet(ctx.event, petId);
@@ -56,9 +65,13 @@ export async function handleListMedicationRecords(
 export async function handleCreateMedicationRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
-  const petId = String(ctx.event.pathParameters?.petId || '');
-
   const authContext = requireAuthContext(ctx.event);
+
+  const petIdResult = parseObjectIdParam(ctx.event.pathParameters?.petId);
+  if (!petIdResult.ok) {
+    return response.errorResponse(petIdResult.statusCode, petIdResult.errorKey, ctx.event);
+  }
+  const petId = petIdResult.data;
 
   const parsed = parseBody(ctx.body, createMedicationRecordSchema);
   if (!parsed.ok) {
@@ -117,18 +130,19 @@ export async function handleCreateMedicationRecord(
 export async function handleUpdateMedicationRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
-  const petId = String(ctx.event.pathParameters?.petId || '');
-  const medicationId = String(ctx.event.pathParameters?.medicationId || '');
-
   const authContext = requireAuthContext(ctx.event);
 
-  if (!mongoose.isValidObjectId(medicationId)) {
-    return response.errorResponse(
-      400,
-      'common.invalidObjectId',
-      ctx.event
-    );
+  const petIdResult = parseObjectIdParam(ctx.event.pathParameters?.petId);
+  if (!petIdResult.ok) {
+    return response.errorResponse(petIdResult.statusCode, petIdResult.errorKey, ctx.event);
   }
+  const petId = petIdResult.data;
+
+  const medicationIdResult = parseObjectIdParam(ctx.event.pathParameters?.medicationId);
+  if (!medicationIdResult.ok) {
+    return response.errorResponse(medicationIdResult.statusCode, medicationIdResult.errorKey, ctx.event);
+  }
+  const medicationId = medicationIdResult.data;
 
   const parsed = parseBody(ctx.body, updateMedicationRecordSchema);
   if (!parsed.ok) {
@@ -201,18 +215,19 @@ export async function handleUpdateMedicationRecord(
 export async function handleDeleteMedicationRecord(
   ctx: RouteContext
 ): Promise<APIGatewayProxyResult> {
-  const petId = String(ctx.event.pathParameters?.petId || '');
-  const medicationId = String(ctx.event.pathParameters?.medicationId || '');
-
   const authContext = requireAuthContext(ctx.event);
 
-  if (!mongoose.isValidObjectId(medicationId)) {
-    return response.errorResponse(
-      400,
-      'common.invalidObjectId',
-      ctx.event
-    );
+  const petIdResult = parseObjectIdParam(ctx.event.pathParameters?.petId);
+  if (!petIdResult.ok) {
+    return response.errorResponse(petIdResult.statusCode, petIdResult.errorKey, ctx.event);
   }
+  const petId = petIdResult.data;
+
+  const medicationIdResult = parseObjectIdParam(ctx.event.pathParameters?.medicationId);
+  if (!medicationIdResult.ok) {
+    return response.errorResponse(medicationIdResult.statusCode, medicationIdResult.errorKey, ctx.event);
+  }
+  const medicationId = medicationIdResult.data;
 
   await connectToMongoDB();
 

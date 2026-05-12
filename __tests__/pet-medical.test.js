@@ -130,6 +130,10 @@ function loadHandlerWithMocks({
   const medicationModel = makeRecordModel();
   const dewormModel = makeRecordModel();
   const bloodTestModel = makeRecordModel();
+  const vaccineModel = makeRecordModel();
+  const anthelminticModel = {
+    find: jest.fn(() => createLeanResult([])),
+  };
   const rateLimitModel = {
     findOne: jest.fn(() => ({
       lean: jest.fn().mockResolvedValue(null),
@@ -150,6 +154,8 @@ function loadHandlerWithMocks({
       if (name === 'Medication_Records') return medicationModel;
       if (name === 'Deworm_Records') return dewormModel;
       if (name === 'blood_tests') return bloodTestModel;
+      if (name === 'Vaccine_Records') return vaccineModel;
+      if (name === 'Anthelmintic') return anthelminticModel;
       if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model ${name}`);
     }),
@@ -173,6 +179,8 @@ function loadHandlerWithMocks({
     medicationModel,
     dewormModel,
     bloodTestModel,
+    vaccineModel,
+    anthelminticModel,
     rateLimitModel,
     mongooseMock,
   };
@@ -1060,6 +1068,471 @@ describe('pet-medical handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(429);
       expect(parsed.body.errorKey).toBe('common.rateLimited');
       expect(medicalModel.deleteOne).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Vaccination records', () => {
+    test('GET list returns empty array for owned pet', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      vaccineModel.find.mockReturnValueOnce(createLeanResult([]));
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.message).toBe('Retrieved successfully');
+      expect(parsed.body.data).toEqual([]);
+      expect(parsed.body.pagination.total).toBe(0);
+    });
+
+    test('POST create with valid date returns 201 and never touches Pet summary counters', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel, petModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const newId = new mongoose.Types.ObjectId();
+      vaccineModel.create.mockResolvedValueOnce({
+        _id: newId,
+        toObject: () => ({
+          _id: newId,
+          petId,
+          vaccineDate: new Date('2024-05-10'),
+          vaccineName: 'Rabies',
+        }),
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({ vaccineDate: '2024-05-10', vaccineName: 'Rabies' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(201);
+      expect(parsed.body.message).toBe('Created successfully');
+      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    test('POST create with invalid date returns 400', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({ vaccineDate: 'not-a-date' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe(
+        'petMedical.errors.vaccineRecord.invalidDateFormat'
+      );
+    });
+
+    test('POST create with empty body returns 400 missingBodyParams', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({}),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.missingBodyParams');
+      expect(vaccineModel.create).not.toHaveBeenCalled();
+    });
+
+    test('POST create rejects unknown fields (Zod .strict)', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({ vaccineName: 'Rabies', $where: 'evil' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(vaccineModel.create).not.toHaveBeenCalled();
+    });
+
+    test('POST create rejects NoSQL operator injection in vaccineName', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({ vaccineName: { $gt: '' } }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(vaccineModel.create).not.toHaveBeenCalled();
+    });
+
+    test('POST create sanitizes HTML in vaccineName before persistence', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const createdId = new mongoose.Types.ObjectId();
+      vaccineModel.create.mockResolvedValueOnce({
+        _id: createdId,
+        toObject: () => ({
+          _id: createdId,
+          petId,
+          vaccineName: 'alert(1)Rabies',
+        }),
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({ vaccineName: '<script>alert(1)</script>Rabies' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(201);
+      expect(vaccineModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ vaccineName: 'alert(1)Rabies', petId })
+      );
+    });
+
+    test('POST create rejects oversized vaccineName values', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({ vaccineName: 'V'.repeat(201) }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidBodyParams');
+      expect(vaccineModel.create).not.toHaveBeenCalled();
+    });
+
+    test('PATCH update with invalid vaccineId returns 400', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/medical/${petId}/vaccination/bogus`,
+          resource: '/pet/medical/{petId}/vaccination/{vaccineId}',
+          pathParameters: { petId, vaccineId: 'bogus' },
+          body: JSON.stringify({ vaccineName: 'X' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('common.invalidObjectId');
+    });
+
+    test('PATCH update returns 404 when record not found', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const vaccineId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      vaccineModel.findOneAndUpdate.mockReturnValueOnce({
+        lean: jest.fn().mockResolvedValue(null),
+      });
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/medical/${petId}/vaccination/${vaccineId}`,
+          resource: '/pet/medical/{petId}/vaccination/{vaccineId}',
+          pathParameters: { petId, vaccineId },
+          body: JSON.stringify({ vaccineName: 'Updated' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(404);
+      expect(parsed.body.errorKey).toBe('petMedical.errors.vaccineRecord.notFound');
+    });
+
+    test('PATCH update happy path returns 200', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const vaccineId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      vaccineModel.findOneAndUpdate.mockReturnValueOnce({
+        lean: jest.fn().mockResolvedValue({
+          _id: vaccineId,
+          petId,
+          vaccineName: 'Updated',
+        }),
+      });
+      const result = await handler(
+        createEvent({
+          method: 'PATCH',
+          path: `/pet/medical/${petId}/vaccination/${vaccineId}`,
+          resource: '/pet/medical/{petId}/vaccination/{vaccineId}',
+          pathParameters: { petId, vaccineId },
+          body: JSON.stringify({ vaccineName: 'Updated' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.message).toBe('Updated successfully');
+      expect(parsed.body.data._id).toBe(vaccineId);
+    });
+
+    test('DELETE returns 404 when nothing deleted', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const vaccineId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      vaccineModel.deleteOne.mockResolvedValueOnce({ deletedCount: 0 });
+      const result = await handler(
+        createEvent({
+          method: 'DELETE',
+          path: `/pet/medical/${petId}/vaccination/${vaccineId}`,
+          resource: '/pet/medical/{petId}/vaccination/{vaccineId}',
+          pathParameters: { petId, vaccineId },
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(404);
+      expect(parsed.body.errorKey).toBe('petMedical.errors.vaccineRecord.notFound');
+    });
+
+    test('DELETE happy path returns 200 without writing summary counters', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const vaccineId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel, petModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+      });
+      vaccineModel.deleteOne.mockResolvedValueOnce({ deletedCount: 1 });
+      const result = await handler(
+        createEvent({
+          method: 'DELETE',
+          path: `/pet/medical/${petId}/vaccination/${vaccineId}`,
+          resource: '/pet/medical/{petId}/vaccination/{vaccineId}',
+          pathParameters: { petId, vaccineId },
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(vaccineModel.countDocuments).not.toHaveBeenCalled();
+      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    test('GET returns 403 when caller does not own the pet', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const otherUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: otherUserId, ngoId: null },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(403);
+      expect(parsed.body.errorKey).toBe('common.forbidden');
+    });
+
+    test('POST returns 429 when over rate limit', async () => {
+      const authUserId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const { handler, authorizer, vaccineModel } = loadHandlerWithMocks({
+        authUserId,
+        petDoc: { _id: petId, userId: authUserId, ngoId: null },
+        rateLimitEntry: {
+          count: 999,
+          expireAt: new Date(Date.now() + 30_000),
+          windowStart: new Date(),
+        },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: `/pet/medical/${petId}/vaccination`,
+          resource: '/pet/medical/{petId}/vaccination',
+          pathParameters: { petId },
+          body: JSON.stringify({ vaccineName: 'Rabies' }),
+          authorizer,
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(429);
+      expect(parsed.body.errorKey).toBe('common.rateLimited');
+      expect(vaccineModel.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Deworm reference endpoint (GET /pet/medical/reference/deworm)', () => {
+    test('returns 200 and projected brandName list without auth', async () => {
+      const { handler, anthelminticModel } = loadHandlerWithMocks();
+      const brandId = new mongoose.Types.ObjectId();
+      anthelminticModel.find.mockReturnValueOnce(
+        createLeanResult([{ _id: brandId, brandName: 'NexGard', _otherInternal: 'leak?' }])
+      );
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/medical/reference/deworm',
+          resource: '/pet/medical/reference/deworm',
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.message).toBe('Retrieved successfully');
+      expect(parsed.body.data).toEqual([
+        { _id: brandId.toString(), brandName: 'NexGard' },
+      ]);
+      // Internal fields like `_otherInternal` must not leak through the projection.
+      expect(parsed.body.data[0]).not.toHaveProperty('_otherInternal');
+    });
+
+    test('returns 429 when over per-IP rate limit', async () => {
+      const { handler, anthelminticModel } = loadHandlerWithMocks({
+        rateLimitEntry: {
+          count: 999,
+          expireAt: new Date(Date.now() + 30_000),
+          windowStart: new Date(),
+        },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/medical/reference/deworm',
+          resource: '/pet/medical/reference/deworm',
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(429);
+      expect(parsed.body.errorKey).toBe('common.rateLimited');
+      expect(anthelminticModel.find).not.toHaveBeenCalled();
+    });
+
+    test('returns 200 with empty data when the reference collection is empty', async () => {
+      const { handler, anthelminticModel } = loadHandlerWithMocks();
+      anthelminticModel.find.mockReturnValueOnce(createLeanResult([]));
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/medical/reference/deworm',
+          resource: '/pet/medical/reference/deworm',
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.data).toEqual([]);
     });
   });
 });

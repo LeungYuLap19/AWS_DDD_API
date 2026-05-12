@@ -4,14 +4,19 @@
 
 **Lambda:** `aws-ddd-api-{stage}-pet-medical`
 
-Medical record management for pets across four sub-domains:
+Medical record management for pets across five sub-domains:
 
 - general medical records
 - medication records
 - deworming records
 - blood test records
+- vaccination records
 
-All routes in this document require `x-api-key` and a Bearer JWT. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe `form.medical`, `form.medication`, or delete responses with record ids are stale.
+Plus one public reference endpoint (no Bearer JWT required):
+
+- dewormer brand reference data
+
+Most routes require `x-api-key` and a Bearer JWT. The reference endpoint requires only `x-api-key`. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe `form.medical`, `form.medication`, or delete responses with record ids are stale.
 
 ---
 
@@ -37,19 +42,26 @@ All routes in this document require `x-api-key` and a Bearer JWT. The current DD
 | POST | `/pet/medical/{petId}/blood-test` | `x-api-key` + Bearer JWT | Create blood test record |
 | PATCH | `/pet/medical/{petId}/blood-test/{bloodTestId}` | `x-api-key` + Bearer JWT | Update blood test record |
 | DELETE | `/pet/medical/{petId}/blood-test/{bloodTestId}` | `x-api-key` + Bearer JWT | Delete blood test record |
+| GET | `/pet/medical/{petId}/vaccination` | `x-api-key` + Bearer JWT | List vaccination records |
+| POST | `/pet/medical/{petId}/vaccination` | `x-api-key` + Bearer JWT | Create vaccination record |
+| PATCH | `/pet/medical/{petId}/vaccination/{vaccineId}` | `x-api-key` + Bearer JWT | Update vaccination record |
+| DELETE | `/pet/medical/{petId}/vaccination/{vaccineId}` | `x-api-key` + Bearer JWT | Delete vaccination record |
+| GET | `/pet/medical/reference/deworm` | `x-api-key` only (no JWT) | List dewormer brand reference data |
 
 ### Integration-Critical Behavior
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Shared CRUD pattern | All four sub-domains use the same list/create/update/delete contract shape |
+| Shared CRUD pattern | All five sub-domains use the same list/create/update/delete contract shape |
 | List response | Every GET list route returns `data: Record[]` plus `pagination` |
+| Reference list response | The deworm reference GET returns `data: Record[]` with no `pagination` |
 | Create response | Every POST route returns the created record in `data` |
 | Update response | Every PATCH route returns the updated record in `data` |
 | Delete response | Every DELETE route returns success metadata only, with no `data` |
 | Record sanitization | `__v`, `createdAt`, and `updatedAt` are stripped before records are returned |
 | Strict schemas | All POST and PATCH bodies are strict; extra fields are rejected with `common.invalidBodyParams` |
 | Date validation | Date strings are validated separately after body parsing; invalid values return sub-domain-specific `invalidDateFormat` keys |
+| Vaccination summary counters | The handler does **not** write `vaccineRecordsCount` or `latestVaccineDate` on the Pet document; the vaccination collection is the authoritative source |
 
 ---
 
@@ -57,18 +69,23 @@ All routes in this document require `x-api-key` and a Bearer JWT. The current DD
 
 ### API Gateway Requirements
 
-All `pet-medical` routes inherit the API-key requirement and token authorizer.
-
-| Route group | API key required at API Gateway | API Gateway authorizer |
+| Route group | API key required | API Gateway authorizer |
 | --- | --- | --- |
-| All GET / POST / PATCH / DELETE `pet-medical` routes | Yes | `DddTokenAuthorizer` |
+| All GET / POST / PATCH / DELETE `pet-medical` CRUD routes | Yes | `DddTokenAuthorizer` |
+| `GET /pet/medical/reference/deworm` | Yes | None (no JWT required) |
 | All `OPTIONS` `pet-medical` routes | No | None |
 
-Protected deployed requests must send:
+Protected CRUD requests must send:
 
 ```http
 x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
+```
+
+The reference endpoint only requires:
+
+```http
+x-api-key: <api-gateway-api-key>
 ```
 
 POST and PATCH requests must also send:
@@ -84,7 +101,9 @@ The handler loads the target pet and authorizes the caller when either condition
 - `pet.userId === jwt.userId`
 - `pet.ngoId === jwt.ngoId`
 
-If `{petId}` is missing or invalid, the route returns `400 common.invalidObjectId`.
+If `{petId}` is missing or not a valid MongoDB ObjectId, the route returns `400 common.invalidObjectId`.
+
+If any other path parameter (`{medicalId}`, `{medicationId}`, `{dewormId}`, `{bloodTestId}`, `{vaccineId}`) is missing or not a valid MongoDB ObjectId, the route returns `400 common.invalidObjectId`.
 
 If the pet does not exist or is soft-deleted, the route returns `404 petMedical.errors.petNotFound`.
 
@@ -92,13 +111,16 @@ If the pet exists but the caller does not own it, the route returns `403 common.
 
 ### Rate Limits
 
-| Action | Policy |
+| Route / Action | Policy |
 | --- | --- |
-| Create any medical record | IP 60 / 300s, identifier 30 / 300s, IP+identifier 20 / 300s |
-| Update any medical record | IP 90 / 300s, identifier 45 / 300s, IP+identifier 30 / 300s |
-| Delete any medical record | IP 30 / 60s, identifier 15 / 60s, IP+identifier 10 / 60s |
+| Create any CRUD medical record | IP 60 / 300s, identifier 30 / 300s, IP+identifier 20 / 300s |
+| Update any CRUD medical record | IP 90 / 300s, identifier 45 / 300s, IP+identifier 30 / 300s |
+| Delete any CRUD medical record | IP 30 / 60s, identifier 15 / 60s, IP+identifier 10 / 60s |
+| `GET /pet/medical/reference/deworm` | IP 60 / 60s, global 5000 / 60s |
 
 Rate-limit failures return `429 common.rateLimited`.
+
+The create/update/delete limits are shared across all five sub-domains (they share the same `petMedical.create`, `petMedical.update`, `petMedical.delete` action namespaces). Creating a vaccination record and creating a medication record in the same window both count against the same `identifier` bucket.
 
 ### Localization
 
@@ -109,8 +131,6 @@ Rate-limit failures return `429 common.rateLimited`.
 ### Request Body Validation
 
 All POST and PATCH routes use the shared `parseBody` helper with strict Zod schemas.
-
-Current shared behavior:
 
 | Condition | `errorKey` |
 | --- | --- |
@@ -127,7 +147,7 @@ After body parsing succeeds, each sub-domain validates its date fields separatel
 
 ### Success Response Shape
 
-List success:
+List success (CRUD sub-domains):
 
 ```json
 {
@@ -140,6 +160,19 @@ List success:
     "total": 0,
     "totalPages": 0
   },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+Reference list success (`GET /pet/medical/reference/deworm` — no pagination):
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": [
+    { "_id": "665f1a2b3c4d5e6f7a8b9c0d", "brandName": "Bravecto" }
+  ],
   "requestId": "aws-lambda-request-id"
 }
 ```
@@ -195,7 +228,7 @@ Delete success:
 
 ### Shared Query Parameters
 
-All list routes use shared pagination query validation.
+All CRUD list routes use shared pagination query validation.
 
 | Param | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -203,6 +236,8 @@ All list routes use shared pagination query validation.
 | `limit` | integer | No | Shared pagination schema |
 
 Invalid pagination values return `400 common.invalidQueryParams`.
+
+The reference endpoint does not support pagination; it returns the full list.
 
 ---
 
@@ -252,6 +287,21 @@ Invalid pagination values return `400 common.invalidQueryParams`.
 - `anaplasmosis`
 - `babesiosis`
 - `petId`
+
+### Vaccine Record Shape
+
+- `_id`
+- `vaccineDate`
+- `vaccineName`
+- `vaccineNumber`
+- `vaccineTimes`
+- `vaccinePosition`
+- `petId`
+
+### Deworm Reference (Anthelmintic) Shape
+
+- `_id`
+- `brandName`
 
 ---
 
@@ -614,16 +664,184 @@ Delete a blood test record.
 
 ---
 
+## Vaccination Records
+
+### GET /pet/medical/{petId}/vaccination
+
+List vaccination records.
+
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
+
+#### Vaccination List Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 400 | `common.invalidQueryParams` | Invalid pagination query |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 500 | `common.internalError` | Unexpected internal error |
+
+### POST /pet/medical/{petId}/vaccination
+
+Create a vaccination record.
+
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
+
+#### Vaccination Create Request Body
+
+All fields are optional. At least one field must be present (the schema rejects an empty `{}`  body as `common.missingBodyParams`).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `vaccineDate` | string | No | Max 64 chars; validated separately after body parse |
+| `vaccineName` | string | No | Max 200 chars; HTML-sanitized on save |
+| `vaccineNumber` | string | No | Max 100 chars; HTML-sanitized on save |
+| `vaccineTimes` | string | No | Max 100 chars; HTML-sanitized on save |
+| `vaccinePosition` | string | No | Max 100 chars; HTML-sanitized on save |
+
+#### Vaccination Create Example Request
+
+```json
+{
+  "vaccineDate": "15/06/2024",
+  "vaccineName": "Rabies",
+  "vaccineNumber": "RAB-2024-001",
+  "vaccineTimes": "1st",
+  "vaccinePosition": "Left hind leg"
+}
+```
+
+#### Vaccination Create Example Response
+
+```json
+{
+  "success": true,
+  "message": "Created successfully",
+  "data": {
+    "_id": "665f1a2b3c4d5e6f7a8b9c0d",
+    "vaccineDate": "2024-06-15T00:00:00.000Z",
+    "vaccineName": "Rabies",
+    "vaccineNumber": "RAB-2024-001",
+    "vaccineTimes": "1st",
+    "vaccinePosition": "Left hind leg",
+    "petId": "665f0000000000000000abcd"
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+#### Vaccination Create Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.vaccineRecord.invalidDateFormat` | Invalid `vaccineDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 429 | `common.rateLimited` | Create rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
+
+### PATCH /pet/medical/{petId}/vaccination/{vaccineId}
+
+Update a vaccination record.
+
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required  
+**Content-Type:** `application/json`
+
+#### Vaccination Update Request Body
+
+Any subset of the vaccination create fields may be supplied.
+
+#### Vaccination Update Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{vaccineId}` |
+| 400 | `common.missingBodyParams` | Missing or empty JSON body |
+| 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
+| 400 | `petMedical.errors.vaccineRecord.invalidDateFormat` | Invalid `vaccineDate` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.vaccineRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Update rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
+
+### DELETE /pet/medical/{petId}/vaccination/{vaccineId}
+
+Delete a vaccination record. This is a hard delete; no soft-delete or audit trail is kept.
+
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` + Bearer JWT required
+
+#### Vaccination Delete Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidObjectId` | Invalid `{petId}` or `{vaccineId}` |
+| 403 | `common.forbidden` | Caller does not own the pet |
+| 404 | `petMedical.errors.petNotFound` | Pet does not exist or is deleted |
+| 404 | `petMedical.errors.vaccineRecord.notFound` | Record does not exist for that pet |
+| 429 | `common.rateLimited` | Delete rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
+
+---
+
+## Reference Data
+
+### GET /pet/medical/reference/deworm
+
+Returns the full list of curated dewormer brand names. This endpoint is **public** — no Bearer JWT is needed. Only `x-api-key` is required.
+
+**Lambda owner:** `pet-medical`  
+**Auth:** `x-api-key` only — no `Authorization` header required  
+**Rate limits:** IP 60 / 60s, global 5000 / 60s
+
+The response data is curated by backend administrators. Clients should use the returned `brandName` values for display and the `_id` values as reference identifiers in deworming records.
+
+#### Deworm Reference Example Response
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": [
+    { "_id": "665f1a2b3c4d5e6f7a8b9c0d", "brandName": "Bravecto" },
+    { "_id": "665f1a2b3c4d5e6f7a8b9c0e", "brandName": "NexGard" }
+  ],
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+`data` is an empty array `[]` when no brands have been added.
+
+#### Deworm Reference Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 429 | `common.rateLimited` | Per-IP or global rate limit exceeded |
+| 500 | `common.internalError` | Unexpected internal error |
+
+---
+
 ## Frontend Integration Guide
 
-1. Treat all four medical sub-domains as separate resource lists under the same authorization model.
+1. Treat all five medical sub-domains as separate resource lists under the same authorization model.
 2. Read lists from `data` and paginator state from `pagination`; do not rely on old `form.medical` or `form.medication` wrappers.
 3. After create or update, replace the edited row with the returned `data` record because the backend already returns the sanitized document.
 4. After delete, remove the row locally; the backend returns no `data` payload.
 5. Validate date fields client-side when possible, but still branch on the sub-domain-specific `invalidDateFormat` keys.
+6. The deworm reference endpoint (`GET /pet/medical/reference/deworm`) does not require a Bearer JWT — it can be called before the user authenticates, for example to populate a brand picker in a form.
+7. All CRUD create/update/delete rate limits are shared across all five sub-domains per user identifier. Bulk operations across sub-domains count against the same bucket.
 
 ---
 
 ## Verification Snapshot
 
-This document is grounded in the current handlers in `functions/pet-medical/src/services/medical.ts`, `medication.ts`, `deworming.ts`, and `bloodTest.ts`, the shared auth/sanitize helpers, and the current Zod schemas under `functions/pet-medical/src/zodSchema`. The active Tier 2 suite also evidences current keys such as `petMedical.errors.petNotFound` and `petMedical.errors.medicalRecord.invalidDateFormat`.
+This document is grounded in the current handlers in `functions/pet-medical/src/services/medical.ts`, `medication.ts`, `deworming.ts`, `bloodTest.ts`, `vaccine.ts`, and `reference.ts`; the shared auth/sanitize helpers; the Zod schemas under `functions/pet-medical/src/zodSchema`; and the Mongoose models under `functions/pet-medical/src/models`. The active Tier 2 suite (52 tests) evidences current keys such as `petMedical.errors.petNotFound`, `petMedical.errors.vaccineRecord.invalidDateFormat`, and `petMedical.errors.vaccineRecord.notFound`.
