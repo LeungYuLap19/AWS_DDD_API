@@ -81,6 +81,7 @@ jobs:
             PetAnalysisVmBreedPublicIp="${{ secrets.DEV_PET_ANALYSIS_VM_BREED_PUBLIC_IP }}" \
             PetAnalysisBreedDockerImage="${{ secrets.DEV_PET_ANALYSIS_BREED_DOCKER_IMAGE }}" \
             BusinessMongoDbUri="${{ secrets.DEV_BUSINESS_MONGODB_URI }}" \
+            MlInferenceImageUri="${{ secrets.DEV_ML_INFERENCE_IMAGE_URI }}" \
             FaceIdApi="${{ secrets.DEV_FACEID_API }}" \
             CommerceSmtpHost="${{ secrets.DEV_COMMERCE_SMTP_HOST }}" \
             CommerceSmtpPort="${{ secrets.DEV_COMMERCE_SMTP_PORT }}" \

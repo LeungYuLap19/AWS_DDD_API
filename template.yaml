@@ -193,6 +193,16 @@ Parameters:
     Type: Number
     Default: 50
     Description: Reserved concurrent execution limit per Lambda function. Set to a value appropriate for your account concurrency quota.
+  MlInferenceImageUri:
+    Type: String
+    Default: ''
+    Description: ECR image URI for ml-inference Lambda container image. Leave empty to skip creating the function.
+
+Conditions:
+  HasMlInferenceImageUri: !Not
+    - !Equals
+      - !Ref MlInferenceImageUri
+      - ''
 
 Globals: # shared default settings applied to all resources of a given type, unless a resource overrides them.
   Function:
@@ -337,6 +347,22 @@ Resources:
                 Action:
                   - sqs:SendMessage
                 Resource: !GetAtt LambdaDeadLetterQueue.Arn
+        - PolicyName: !Sub '${ProjectName}-${StageName}-biometric-ml-access'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-${StageName}-ml-inference'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-${StageName}-ml-inference:*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/biometric/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
 
   PetProfileFunctionRole:
     Type: AWS::IAM::Role
@@ -1624,112 +1650,102 @@ Resources:
         Variables:
           BUSINESS_MONGODB_URI: !Ref BusinessMongoDbUri
           FACEID_API: !Ref FaceIdApi
+          ML_INFERENCE_FUNCTION_NAME: !Sub '${ProjectName}-${StageName}-ml-inference'
           AWS_BUCKET_NAME: !Ref S3BucketName
           AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
           AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
-        PetBiometricRootGET:
+        PetBiometricByPetIdGET:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/biometric
+            Path: /pet/biometric/{petId}
             Method: GET
-        PetBiometricRootDELETE:
+        PetBiometricByPetIdDELETE:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/biometric
+            Path: /pet/biometric/{petId}
             Method: DELETE
-        PetBiometricRootPOST:
+        PetBiometricRegisterPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/biometric
+            Path: /pet/biometric/{petId}/registrations
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetBiometricRootPUT:
+        PetBiometricVerifyPOST:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/biometric
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetBiometricRootPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/biometric
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetBiometricProxyGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/biometric/{proxy+}
-            Method: GET
-        PetBiometricProxyDELETE:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/biometric/{proxy+}
-            Method: DELETE
-        PetBiometricProxyPOST:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/biometric/{proxy+}
+            Path: /pet/biometric/{petId}/verifications
             Method: POST
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
-        PetBiometricProxyPUT:
+        PetBiometricByPetIdOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/biometric/{proxy+}
-            Method: PUT
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetBiometricProxyPATCH:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/biometric/{proxy+}
-            Method: PATCH
-            RequestModel:
-              Model: GenericJsonObjectRequest
-              Required: false
-              ValidateBody: true
-        PetBiometricRootOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/biometric
+            Path: /pet/biometric/{petId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetBiometricProxyOPTIONS:
+        PetBiometricRegisterOPTIONS:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
-            Path: /pet/biometric/{proxy+}
+            Path: /pet/biometric/{petId}/registrations
             Method: OPTIONS
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
+        PetBiometricVerifyOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/biometric/{petId}/verifications
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+
+  MlInferenceFunction:
+    Condition: HasMlInferenceImageUri
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-ml-inference'
+      PackageType: Image
+      Code:
+        ImageUri: !Ref MlInferenceImageUri
+      Role: !GetAtt SharedFunctionRole.Arn
+      Timeout: 25
+      MemorySize: 1024
+      Architectures:
+        - arm64
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref ProjectName
+          STAGE_NAME: !Ref StageName
+          LAMBDA_ALIAS_NAME: !Ref LambdaAliasName
+          CONFIG_NAMESPACE: !Ref ConfigNamespace
+          NODE_ENV: !Ref StageName
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          MONGODB_URI: !Ref MongoDbUri
+          AUTH_BYPASS: !Ref AuthBypass
+          JWT_SECRET: !Ref JwtSecret
+          AWS_BUCKET_NAME: !Ref S3BucketName
+          AWS_BUCKET_REGION: !Ref S3BucketRegion
+          MODEL_QUALITY_THRESHOLD: '30'
+          MODEL_VERIFY_THRESHOLD: '0.5'
 
   NotificationsFunction:
     Type: AWS::Serverless::Function
