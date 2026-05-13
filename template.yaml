@@ -284,6 +284,28 @@ Resources:
               ValidationExpression: '^Bearer .+$'
               ReauthorizeEvery: 0
 
+  RestApiDefault4xxGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: DEFAULT_4XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.Origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiDefault5xxGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: DEFAULT_5XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.Origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
   SharedRuntimeLayer: # the Lambda Layer resource you defined in the template
     Type: AWS::Serverless::LayerVersion
     Properties:
