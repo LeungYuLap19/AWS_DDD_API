@@ -56,6 +56,13 @@ Parameters:
   RefreshRateLimitWindowSec:
     Type: String
     Default: '300'
+  RefreshCookieSameSite:
+    Type: String
+    Default: Strict
+    AllowedValues:
+      - Strict
+      - Lax
+      - None
   AuthSmtpHost:
     Type: String
     Default: ''
@@ -293,6 +300,28 @@ Resources:
               Header: Authorization
               ValidationExpression: '^Bearer .+$'
               ReauthorizeEvery: 0
+
+  RestApiDefault4xxGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: DEFAULT_4XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.Origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiDefault5xxGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: DEFAULT_5XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.Origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
 
   SharedRuntimeLayer: # the Lambda Layer resource you defined in the template
     Type: AWS::Serverless::LayerVersion
@@ -606,6 +635,7 @@ Resources:
           REFRESH_TOKEN_MAX_AGE_SEC: !Ref RefreshTokenMaxAgeSec
           REFRESH_RATE_LIMIT_LIMIT: !Ref RefreshRateLimitLimit
           REFRESH_RATE_LIMIT_WINDOW_SEC: !Ref RefreshRateLimitWindowSec
+          REFRESH_COOKIE_SAME_SITE: !Ref RefreshCookieSameSite
           SMTP_HOST: !Ref AuthSmtpHost
           SMTP_PORT: !Ref AuthSmtpPort
           SMTP_USER: !Ref AuthSmtpUser

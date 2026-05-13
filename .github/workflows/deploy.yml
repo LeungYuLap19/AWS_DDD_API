@@ -61,6 +61,7 @@ jobs:
             MongoDbUri="${{ secrets.DEV_MONGODB_URI }}" \
             JwtSecret="${{ secrets.DEV_JWT_SECRET }}" \
             RefreshTokenMaxAgeSec="${{ secrets.DEV_REFRESH_TOKEN_MAX_AGE_SEC }}" \
+            RefreshCookieSameSite="${{ secrets.DEV_REFRESH_COOKIE_SAME_SITE }}" \
             RefreshRateLimitLimit="${{ secrets.DEV_REFRESH_RATE_LIMIT_LIMIT }}" \
             RefreshRateLimitWindowSec="${{ secrets.DEV_REFRESH_RATE_LIMIT_WINDOW_SEC }}" \
             AuthSmtpHost="${{ secrets.DEV_AUTH_SMTP_HOST }}" \
@@ -154,6 +155,7 @@ jobs:
             MongoDbUri="${{ secrets.PROD_MONGODB_URI }}" \
             JwtSecret="${{ secrets.PROD_JWT_SECRET }}" \
             RefreshTokenMaxAgeSec="${{ secrets.PROD_REFRESH_TOKEN_MAX_AGE_SEC }}" \
+            RefreshCookieSameSite="${{ secrets.PROD_REFRESH_COOKIE_SAME_SITE }}" \
             RefreshRateLimitLimit="${{ secrets.PROD_REFRESH_RATE_LIMIT_LIMIT }}" \
             RefreshRateLimitWindowSec="${{ secrets.PROD_REFRESH_RATE_LIMIT_WINDOW_SEC }}" \
             AuthSmtpHost="${{ secrets.PROD_AUTH_SMTP_HOST }}" \

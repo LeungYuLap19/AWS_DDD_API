@@ -105,14 +105,38 @@ Access tokens use HS256 and expire in 15 minutes.
 Verification of an existing user, user registration, NGO registration, NGO login, and refresh all set a refresh cookie.
 
 ```http
-Set-Cookie: refreshToken=<token>; HttpOnly; Secure; SameSite=Strict; Path=/development/auth/tokens/refresh; Max-Age=<seconds>
+Set-Cookie: refreshToken=<token>; HttpOnly; Secure; SameSite=<REFRESH_COOKIE_SAME_SITE>; Path=/development/auth/tokens/refresh; Max-Age=<seconds>
 ```
 
 Important behavior:
 
 - The actual cookie path is `/<stage>/auth/tokens/refresh`; with the current default deployed stage name it is `/development/auth/tokens/refresh`
+- `SameSite` is environment-configurable through `REFRESH_COOKIE_SAME_SITE` (allowed values: `Strict`, `Lax`, `None`)
 - On local invocation without a stage prefix, the fallback path is `/auth/tokens/refresh`
 - Refresh tokens are single-use; refresh deletes the old token record and creates a new one
+
+### Browser Credential Mode
+
+For browser clients using `fetch`/Axios:
+
+- `withCredentials: true` (or `credentials: "include"`) is required on auth routes that must set/send the refresh cookie
+- `withCredentials: false` (or `credentials: "omit"`) is recommended for normal Bearer-token API routes to avoid unnecessary credentialed CORS constraints
+
+Use this route policy:
+
+| Route | Cookie behavior | Browser credential mode |
+| --- | --- | --- |
+| `POST /auth/challenges/verify` (existing-user success branch) | Sets refresh cookie | `include` |
+| `POST /auth/registrations/user` | Sets refresh cookie | `include` |
+| `POST /auth/registrations/ngo` | Sets refresh cookie | `include` |
+| `POST /auth/login/ngo` | Sets refresh cookie | `include` |
+| `POST /auth/tokens/refresh` | Requires and rotates refresh cookie | `include` |
+| Other auth calls that do not set/send refresh cookie (for example `POST /auth/challenges`) | No cookie requirement | `omit` |
+
+Recommended frontend setup:
+
+- default API client: `withCredentials: false`
+- refresh/cookie-lifecycle auth client: `withCredentials: true`
 
 ---
 
@@ -692,6 +716,7 @@ Also sets a new `refreshToken` cookie.
 2. On `200`, replace the stored access token with `data.accessToken`
 3. On `401 auth.refresh.missingRefreshToken`, `auth.refresh.invalidRefreshTokenCookie`, or `auth.refresh.invalidSession`, clear local auth state and redirect to login
 4. On `403 auth.refresh.ngoApprovalRequired`, log out and show approval-required UI for NGO users
+5. Ensure the refresh call uses credentialed mode (`withCredentials: true` / `credentials: "include"`)
 
 ---
 

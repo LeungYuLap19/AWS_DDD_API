@@ -1,6 +1,7 @@
 .aws-sam/
 .sam-appdata/
 dist/
+diagnostics/
 node_modules/
 env.json
 env.local.json

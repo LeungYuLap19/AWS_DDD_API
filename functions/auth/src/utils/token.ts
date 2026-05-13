@@ -97,7 +97,7 @@ function getCookiePath(event: APIGatewayProxyEvent): string {
  * for the current deployed stage.
  */
 export function buildRefreshCookie(refreshToken: string, event: APIGatewayProxyEvent): string {
-  return `refreshToken=${refreshToken}; HttpOnly; Secure; SameSite=Strict; Path=${getCookiePath(event)}; Max-Age=${env.REFRESH_TOKEN_MAX_AGE_SEC}`;
+  return `refreshToken=${refreshToken}; HttpOnly; Secure; SameSite=${env.REFRESH_COOKIE_SAME_SITE}; Path=${getCookiePath(event)}; Max-Age=${env.REFRESH_TOKEN_MAX_AGE_SEC}`;
 }
 
 function parseCookieString(cookieString: string): Record<string, string> {
