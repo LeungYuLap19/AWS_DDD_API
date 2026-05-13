@@ -17,6 +17,7 @@ const baseEnvSchema = z.object({
 export const envSchema = baseEnvSchema.extend({
   BUSINESS_MONGODB_URI: requiredString,
   FACEID_API: requiredString,
+  ML_INFERENCE_FUNCTION_NAME: requiredString,
   AWS_BUCKET_NAME: requiredString,
   AWS_BUCKET_BASE_URL: requiredString,
   AWS_BUCKET_REGION: requiredString,
