@@ -18,6 +18,7 @@ export const envSchema = baseEnvSchema.extend({
   REFRESH_TOKEN_MAX_AGE_SEC: requiredString,
   REFRESH_RATE_LIMIT_LIMIT: requiredString,
   REFRESH_RATE_LIMIT_WINDOW_SEC: requiredString,
+  REFRESH_COOKIE_SAME_SITE: z.enum(['Strict', 'Lax', 'None'], { message: 'common.envMissing' }),
   SMTP_HOST: requiredString,
   SMTP_PORT: requiredString,
   SMTP_USER: requiredString,

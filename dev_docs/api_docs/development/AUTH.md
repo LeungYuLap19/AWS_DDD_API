@@ -105,12 +105,13 @@ Access tokens use HS256 and expire in 15 minutes.
 Verification of an existing user, user registration, NGO registration, NGO login, and refresh all set a refresh cookie.
 
 ```http
-Set-Cookie: refreshToken=<token>; HttpOnly; Secure; SameSite=Strict; Path=/development/auth/tokens/refresh; Max-Age=<seconds>
+Set-Cookie: refreshToken=<token>; HttpOnly; Secure; SameSite=<REFRESH_COOKIE_SAME_SITE>; Path=/development/auth/tokens/refresh; Max-Age=<seconds>
 ```
 
 Important behavior:
 
 - The actual cookie path is `/<stage>/auth/tokens/refresh`; with the current default deployed stage name it is `/development/auth/tokens/refresh`
+- `SameSite` is environment-configurable through `REFRESH_COOKIE_SAME_SITE` (allowed values: `Strict`, `Lax`, `None`)
 - On local invocation without a stage prefix, the fallback path is `/auth/tokens/refresh`
 - Refresh tokens are single-use; refresh deletes the old token record and creates a new one
 
