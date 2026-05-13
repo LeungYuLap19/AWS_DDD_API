@@ -51,7 +51,7 @@ jobs:
 
       - name: Deploy development
         run: |
-          sam deploy --config-env default --parameter-overrides \
+          sam deploy --config-env default --resolve-image-repos --parameter-overrides \
             StageName=development \
             ProjectName=aws-ddd-api \
             LambdaAliasName=development \
@@ -145,7 +145,7 @@ jobs:
 
       - name: Deploy production
         run: |
-          sam deploy --config-env production --parameter-overrides \
+          sam deploy --config-env production --resolve-image-repos --parameter-overrides \
             StageName=production \
             ProjectName=aws-ddd-api \
             LambdaAliasName=production \
