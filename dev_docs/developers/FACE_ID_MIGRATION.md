@@ -288,15 +288,30 @@ Do not keep for target architecture:
 - Optional hardening later: reduce to only explicit methods/paths needed.
 
 ### 8.2 Add `MlInferenceFunction` (container image)
-Use `PackageType: Image`, no API events, internal-only.
+Use `AWS::Lambda::Function` with `PackageType: Image`, no API events, internal-only.
+Current template pattern should be:
+- parameter: `MlInferenceImageUri` (default empty)
+- condition: `HasMlInferenceImageUri`
+- create `MlInferenceFunction` only when image URI is set
 
 Example:
 ```yaml
+Parameters:
+  MlInferenceImageUri:
+    Type: String
+    Default: ''
+
+Conditions:
+  HasMlInferenceImageUri: !Not [!Equals [!Ref MlInferenceImageUri, '']]
+
 MlInferenceFunction:
-  Type: AWS::Serverless::Function
+  Type: AWS::Lambda::Function
+  Condition: HasMlInferenceImageUri
   Properties:
     FunctionName: !Sub '${ProjectName}-${StageName}-ml-inference'
     PackageType: Image
+    Code:
+      ImageUri: !Ref MlInferenceImageUri
     Role: !GetAtt SharedFunctionRole.Arn
     Timeout: 25
     MemorySize: 1024
@@ -306,10 +321,6 @@ MlInferenceFunction:
       Variables:
         MODEL_VERIFY_THRESHOLD: '0.5'
         MODEL_QUALITY_THRESHOLD: '30'
-  Metadata:
-    Dockerfile: Dockerfile
-    DockerContext: functions/ml-inference
-    DockerTag: latest
 ```
 
 ### 8.3 IAM updates
@@ -323,6 +334,7 @@ MlInferenceFunction:
 - Deploy with image support:
   - `sam deploy --resolve-image-repos ...`
 - Ensure pipeline role has ECR permissions for image push/pull.
+- Pass `MlInferenceImageUri` from GitHub secret (for dev: `DEV_ML_INFERENCE_IMAGE_URI`).
 
 ---
 
@@ -384,3 +396,34 @@ What is still missing:
 - Reuse ML core from `ML_server` in a new internal `ml-inference` Lambda.
 - Pass images by S3 key (not URL string business dependency, not base64 payload by default).
 - Keep `ml-inference` private (no API Gateway exposure).
+
+---
+
+## 13) Deployment Troubleshooting (Important)
+
+### Error: Lambda rejects ECR image with unsupported media type
+If CloudFormation fails with:
+- `image manifest, config or layer media type ... is not supported`
+- and ECR reports `application/vnd.oci.image.index.v1+json`
+
+Root cause:
+- Image was pushed as an OCI **index** manifest, not a single Lambda-compatible image manifest.
+
+Fix:
+1. Build/push image as single platform (`linux/arm64`) and disable provenance/SBOM attestation:
+```bash
+npm run ml:image:build-push -- \
+  028208204477.dkr.ecr.ap-southeast-1.amazonaws.com/simple-docker-service-235d61bb754d \
+  ml-inference-dummy-v2
+```
+2. Update `env.development.json`:
+   - `Parameters.ML_INFERENCE_IMAGE_URI=028208204477.dkr.ecr.ap-southeast-1.amazonaws.com/simple-docker-service-235d61bb754d:ml-inference-dummy-v2`
+3. Regenerate + push GitHub secrets:
+```bash
+npm run secrets:dev
+```
+4. Push to `main` to rerun deploy workflow.
+
+Validation:
+- The build script prints `imageManifestMediaType=...`.
+- Do not continue if it shows `application/vnd.oci.image.index.v1+json`.
