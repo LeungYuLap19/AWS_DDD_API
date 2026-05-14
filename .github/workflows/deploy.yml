@@ -49,12 +49,117 @@ jobs:
       - name: Build app
         run: npm run build
 
+      - name: Compute development deployment fingerprint
+        id: dev-fingerprint
+        env:
+          DEV_ALLOWED_ORIGINS: ${{ secrets.DEV_ALLOWED_ORIGINS }}
+          DEV_AUTH_BYPASS: ${{ secrets.DEV_AUTH_BYPASS }}
+          DEV_MONGODB_URI: ${{ secrets.DEV_MONGODB_URI }}
+          DEV_JWT_SECRET: ${{ secrets.DEV_JWT_SECRET }}
+          DEV_REFRESH_TOKEN_MAX_AGE_SEC: ${{ secrets.DEV_REFRESH_TOKEN_MAX_AGE_SEC }}
+          DEV_REFRESH_COOKIE_SAME_SITE: ${{ secrets.DEV_REFRESH_COOKIE_SAME_SITE }}
+          DEV_REFRESH_RATE_LIMIT_LIMIT: ${{ secrets.DEV_REFRESH_RATE_LIMIT_LIMIT }}
+          DEV_REFRESH_RATE_LIMIT_WINDOW_SEC: ${{ secrets.DEV_REFRESH_RATE_LIMIT_WINDOW_SEC }}
+          DEV_AUTH_SMTP_HOST: ${{ secrets.DEV_AUTH_SMTP_HOST }}
+          DEV_AUTH_SMTP_PORT: ${{ secrets.DEV_AUTH_SMTP_PORT }}
+          DEV_AUTH_SMTP_USER: ${{ secrets.DEV_AUTH_SMTP_USER }}
+          DEV_AUTH_SMTP_PASS: ${{ secrets.DEV_AUTH_SMTP_PASS }}
+          DEV_AUTH_SMTP_FROM: ${{ secrets.DEV_AUTH_SMTP_FROM }}
+          DEV_TWILIO_ACCOUNT_SID: ${{ secrets.DEV_TWILIO_ACCOUNT_SID }}
+          DEV_TWILIO_AUTH_TOKEN: ${{ secrets.DEV_TWILIO_AUTH_TOKEN }}
+          DEV_TWILIO_VERIFY_SERVICE_SID: ${{ secrets.DEV_TWILIO_VERIFY_SERVICE_SID }}
+          DEV_S3_BUCKET_NAME: ${{ secrets.DEV_S3_BUCKET_NAME }}
+          DEV_S3_BUCKET_BASE_URL: ${{ secrets.DEV_S3_BUCKET_BASE_URL }}
+          DEV_S3_BUCKET_REGION: ${{ secrets.DEV_S3_BUCKET_REGION }}
+          DEV_ADOPTION_MONGODB_URI: ${{ secrets.DEV_ADOPTION_MONGODB_URI }}
+          DEV_PET_ANALYSIS_VM_PUBLIC_IP: ${{ secrets.DEV_PET_ANALYSIS_VM_PUBLIC_IP }}
+          DEV_PET_ANALYSIS_DOCKER_IMAGE: ${{ secrets.DEV_PET_ANALYSIS_DOCKER_IMAGE }}
+          DEV_PET_ANALYSIS_HEATMAP: ${{ secrets.DEV_PET_ANALYSIS_HEATMAP }}
+          DEV_PET_ANALYSIS_VM_BREED_PUBLIC_IP: ${{ secrets.DEV_PET_ANALYSIS_VM_BREED_PUBLIC_IP }}
+          DEV_PET_ANALYSIS_BREED_DOCKER_IMAGE: ${{ secrets.DEV_PET_ANALYSIS_BREED_DOCKER_IMAGE }}
+          DEV_BUSINESS_MONGODB_URI: ${{ secrets.DEV_BUSINESS_MONGODB_URI }}
+          DEV_ML_INFERENCE_IMAGE_URI: ${{ secrets.DEV_ML_INFERENCE_IMAGE_URI }}
+          DEV_FACEID_API: ${{ secrets.DEV_FACEID_API }}
+          DEV_COMMERCE_SMTP_HOST: ${{ secrets.DEV_COMMERCE_SMTP_HOST }}
+          DEV_COMMERCE_SMTP_PORT: ${{ secrets.DEV_COMMERCE_SMTP_PORT }}
+          DEV_COMMERCE_SMTP_USER: ${{ secrets.DEV_COMMERCE_SMTP_USER }}
+          DEV_COMMERCE_SMTP_PASS: ${{ secrets.DEV_COMMERCE_SMTP_PASS }}
+          DEV_COMMERCE_SMTP_FROM: ${{ secrets.DEV_COMMERCE_SMTP_FROM }}
+          DEV_WHATSAPP_BEARER_TOKEN: ${{ secrets.DEV_WHATSAPP_BEARER_TOKEN }}
+          DEV_WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.DEV_WHATSAPP_PHONE_NUMBER_ID }}
+          DEV_CUTTLY_API_KEY: ${{ secrets.DEV_CUTTLY_API_KEY }}
+          DEV_SF_CUSTOMER_CODE: ${{ secrets.DEV_SF_CUSTOMER_CODE }}
+          DEV_SF_PRODUCTION_CHECK_CODE: ${{ secrets.DEV_SF_PRODUCTION_CHECK_CODE }}
+          DEV_SF_SANDBOX_CHECK_CODE: ${{ secrets.DEV_SF_SANDBOX_CHECK_CODE }}
+          DEV_SF_ADDRESS_API_KEY: ${{ secrets.DEV_SF_ADDRESS_API_KEY }}
+          DEV_LOGISTICS_SMTP_HOST: ${{ secrets.DEV_LOGISTICS_SMTP_HOST }}
+          DEV_LOGISTICS_SMTP_PORT: ${{ secrets.DEV_LOGISTICS_SMTP_PORT }}
+          DEV_LOGISTICS_SMTP_USER: ${{ secrets.DEV_LOGISTICS_SMTP_USER }}
+          DEV_LOGISTICS_SMTP_PASS: ${{ secrets.DEV_LOGISTICS_SMTP_PASS }}
+          DEV_LOGISTICS_SMTP_FROM: ${{ secrets.DEV_LOGISTICS_SMTP_FROM }}
+        run: |
+          FINGERPRINT=$(
+            printf '%s\n' \
+              "StageName=development" \
+              "ProjectName=aws-ddd-api" \
+              "LambdaAliasName=development" \
+              "ConfigNamespace=/petpetclub/aws-ddd-api/development" \
+              "AllowedOrigins=${DEV_ALLOWED_ORIGINS}" \
+              "AuthBypass=${DEV_AUTH_BYPASS}" \
+              "MongoDbUri=${DEV_MONGODB_URI}" \
+              "JwtSecret=${DEV_JWT_SECRET}" \
+              "RefreshTokenMaxAgeSec=${DEV_REFRESH_TOKEN_MAX_AGE_SEC}" \
+              "RefreshCookieSameSite=${DEV_REFRESH_COOKIE_SAME_SITE}" \
+              "RefreshRateLimitLimit=${DEV_REFRESH_RATE_LIMIT_LIMIT}" \
+              "RefreshRateLimitWindowSec=${DEV_REFRESH_RATE_LIMIT_WINDOW_SEC}" \
+              "AuthSmtpHost=${DEV_AUTH_SMTP_HOST}" \
+              "AuthSmtpPort=${DEV_AUTH_SMTP_PORT}" \
+              "AuthSmtpUser=${DEV_AUTH_SMTP_USER}" \
+              "AuthSmtpPass=${DEV_AUTH_SMTP_PASS}" \
+              "AuthSmtpFrom=${DEV_AUTH_SMTP_FROM}" \
+              "TwilioAccountSid=${DEV_TWILIO_ACCOUNT_SID}" \
+              "TwilioAuthToken=${DEV_TWILIO_AUTH_TOKEN}" \
+              "TwilioVerifyServiceSid=${DEV_TWILIO_VERIFY_SERVICE_SID}" \
+              "S3BucketName=${DEV_S3_BUCKET_NAME}" \
+              "S3BucketBaseUrl=${DEV_S3_BUCKET_BASE_URL}" \
+              "S3BucketRegion=${DEV_S3_BUCKET_REGION}" \
+              "AdoptionMongoDbUri=${DEV_ADOPTION_MONGODB_URI}" \
+              "PetAnalysisVmPublicIp=${DEV_PET_ANALYSIS_VM_PUBLIC_IP}" \
+              "PetAnalysisDockerImage=${DEV_PET_ANALYSIS_DOCKER_IMAGE}" \
+              "PetAnalysisHeatmap=${DEV_PET_ANALYSIS_HEATMAP}" \
+              "PetAnalysisVmBreedPublicIp=${DEV_PET_ANALYSIS_VM_BREED_PUBLIC_IP}" \
+              "PetAnalysisBreedDockerImage=${DEV_PET_ANALYSIS_BREED_DOCKER_IMAGE}" \
+              "BusinessMongoDbUri=${DEV_BUSINESS_MONGODB_URI}" \
+              "MlInferenceImageUri=${DEV_ML_INFERENCE_IMAGE_URI}" \
+              "FaceIdApi=${DEV_FACEID_API}" \
+              "CommerceSmtpHost=${DEV_COMMERCE_SMTP_HOST}" \
+              "CommerceSmtpPort=${DEV_COMMERCE_SMTP_PORT}" \
+              "CommerceSmtpUser=${DEV_COMMERCE_SMTP_USER}" \
+              "CommerceSmtpPass=${DEV_COMMERCE_SMTP_PASS}" \
+              "CommerceSmtpFrom=${DEV_COMMERCE_SMTP_FROM}" \
+              "CommerceWhatsappBearerToken=${DEV_WHATSAPP_BEARER_TOKEN}" \
+              "CommerceWhatsappPhoneNumberId=${DEV_WHATSAPP_PHONE_NUMBER_ID}" \
+              "CommerceCuttlyApiKey=${DEV_CUTTLY_API_KEY}" \
+              "SfCustomerCode=${DEV_SF_CUSTOMER_CODE}" \
+              "SfProductionCheckCode=${DEV_SF_PRODUCTION_CHECK_CODE}" \
+              "SfSandboxCheckCode=${DEV_SF_SANDBOX_CHECK_CODE}" \
+              "SfAddressApiKey=${DEV_SF_ADDRESS_API_KEY}" \
+              "LogisticsSmtpHost=${DEV_LOGISTICS_SMTP_HOST}" \
+              "LogisticsSmtpPort=${DEV_LOGISTICS_SMTP_PORT}" \
+              "LogisticsSmtpUser=${DEV_LOGISTICS_SMTP_USER}" \
+              "LogisticsSmtpPass=${DEV_LOGISTICS_SMTP_PASS}" \
+              "LogisticsSmtpFrom=${DEV_LOGISTICS_SMTP_FROM}" \
+            | shasum -a 256 | awk '{print $1}'
+          )
+          echo "value=$FINGERPRINT" >> "$GITHUB_OUTPUT"
+
       - name: Deploy development
         run: |
           sam deploy --config-env default --resolve-image-repos --parameter-overrides \
             StageName=development \
             ProjectName=aws-ddd-api \
             LambdaAliasName=development \
+            DeploymentFingerprint="${{ steps.dev-fingerprint.outputs.value }}" \
             ConfigNamespace=/petpetclub/aws-ddd-api/development \
             AllowedOrigins="${{ secrets.DEV_ALLOWED_ORIGINS }}" \
             AuthBypass="${{ secrets.DEV_AUTH_BYPASS }}" \
@@ -102,6 +207,9 @@ jobs:
             LogisticsSmtpPass="${{ secrets.DEV_LOGISTICS_SMTP_PASS }}" \
             LogisticsSmtpFrom="${{ secrets.DEV_LOGISTICS_SMTP_FROM }}"
 
+      - name: Verify development alias sync
+        run: node script/verify-lambda-alias-sync.cjs --template template.yaml --project aws-ddd-api --stage development --alias development
+
       - name: Smoke test development
         run: |
           API_URL=$(aws cloudformation describe-stacks \
@@ -143,12 +251,115 @@ jobs:
       - name: Build app
         run: npm run build
 
+      - name: Compute production deployment fingerprint
+        id: prod-fingerprint
+        env:
+          PROD_ALLOWED_ORIGINS: ${{ secrets.PROD_ALLOWED_ORIGINS }}
+          PROD_AUTH_BYPASS: ${{ secrets.PROD_AUTH_BYPASS }}
+          PROD_MONGODB_URI: ${{ secrets.PROD_MONGODB_URI }}
+          PROD_JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+          PROD_REFRESH_TOKEN_MAX_AGE_SEC: ${{ secrets.PROD_REFRESH_TOKEN_MAX_AGE_SEC }}
+          PROD_REFRESH_COOKIE_SAME_SITE: ${{ secrets.PROD_REFRESH_COOKIE_SAME_SITE }}
+          PROD_REFRESH_RATE_LIMIT_LIMIT: ${{ secrets.PROD_REFRESH_RATE_LIMIT_LIMIT }}
+          PROD_REFRESH_RATE_LIMIT_WINDOW_SEC: ${{ secrets.PROD_REFRESH_RATE_LIMIT_WINDOW_SEC }}
+          PROD_AUTH_SMTP_HOST: ${{ secrets.PROD_AUTH_SMTP_HOST }}
+          PROD_AUTH_SMTP_PORT: ${{ secrets.PROD_AUTH_SMTP_PORT }}
+          PROD_AUTH_SMTP_USER: ${{ secrets.PROD_AUTH_SMTP_USER }}
+          PROD_AUTH_SMTP_PASS: ${{ secrets.PROD_AUTH_SMTP_PASS }}
+          PROD_AUTH_SMTP_FROM: ${{ secrets.PROD_AUTH_SMTP_FROM }}
+          PROD_TWILIO_ACCOUNT_SID: ${{ secrets.PROD_TWILIO_ACCOUNT_SID }}
+          PROD_TWILIO_AUTH_TOKEN: ${{ secrets.PROD_TWILIO_AUTH_TOKEN }}
+          PROD_TWILIO_VERIFY_SERVICE_SID: ${{ secrets.PROD_TWILIO_VERIFY_SERVICE_SID }}
+          PROD_S3_BUCKET_NAME: ${{ secrets.PROD_S3_BUCKET_NAME }}
+          PROD_S3_BUCKET_BASE_URL: ${{ secrets.PROD_S3_BUCKET_BASE_URL }}
+          PROD_S3_BUCKET_REGION: ${{ secrets.PROD_S3_BUCKET_REGION }}
+          PROD_ADOPTION_MONGODB_URI: ${{ secrets.PROD_ADOPTION_MONGODB_URI }}
+          PROD_PET_ANALYSIS_VM_PUBLIC_IP: ${{ secrets.PROD_PET_ANALYSIS_VM_PUBLIC_IP }}
+          PROD_PET_ANALYSIS_DOCKER_IMAGE: ${{ secrets.PROD_PET_ANALYSIS_DOCKER_IMAGE }}
+          PROD_PET_ANALYSIS_HEATMAP: ${{ secrets.PROD_PET_ANALYSIS_HEATMAP }}
+          PROD_PET_ANALYSIS_VM_BREED_PUBLIC_IP: ${{ secrets.PROD_PET_ANALYSIS_VM_BREED_PUBLIC_IP }}
+          PROD_PET_ANALYSIS_BREED_DOCKER_IMAGE: ${{ secrets.PROD_PET_ANALYSIS_BREED_DOCKER_IMAGE }}
+          PROD_BUSINESS_MONGODB_URI: ${{ secrets.PROD_BUSINESS_MONGODB_URI }}
+          PROD_FACEID_API: ${{ secrets.PROD_FACEID_API }}
+          PROD_COMMERCE_SMTP_HOST: ${{ secrets.PROD_COMMERCE_SMTP_HOST }}
+          PROD_COMMERCE_SMTP_PORT: ${{ secrets.PROD_COMMERCE_SMTP_PORT }}
+          PROD_COMMERCE_SMTP_USER: ${{ secrets.PROD_COMMERCE_SMTP_USER }}
+          PROD_COMMERCE_SMTP_PASS: ${{ secrets.PROD_COMMERCE_SMTP_PASS }}
+          PROD_COMMERCE_SMTP_FROM: ${{ secrets.PROD_COMMERCE_SMTP_FROM }}
+          PROD_WHATSAPP_BEARER_TOKEN: ${{ secrets.PROD_WHATSAPP_BEARER_TOKEN }}
+          PROD_WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.PROD_WHATSAPP_PHONE_NUMBER_ID }}
+          PROD_CUTTLY_API_KEY: ${{ secrets.PROD_CUTTLY_API_KEY }}
+          PROD_SF_CUSTOMER_CODE: ${{ secrets.PROD_SF_CUSTOMER_CODE }}
+          PROD_SF_PRODUCTION_CHECK_CODE: ${{ secrets.PROD_SF_PRODUCTION_CHECK_CODE }}
+          PROD_SF_SANDBOX_CHECK_CODE: ${{ secrets.PROD_SF_SANDBOX_CHECK_CODE }}
+          PROD_SF_ADDRESS_API_KEY: ${{ secrets.PROD_SF_ADDRESS_API_KEY }}
+          PROD_LOGISTICS_SMTP_HOST: ${{ secrets.PROD_LOGISTICS_SMTP_HOST }}
+          PROD_LOGISTICS_SMTP_PORT: ${{ secrets.PROD_LOGISTICS_SMTP_PORT }}
+          PROD_LOGISTICS_SMTP_USER: ${{ secrets.PROD_LOGISTICS_SMTP_USER }}
+          PROD_LOGISTICS_SMTP_PASS: ${{ secrets.PROD_LOGISTICS_SMTP_PASS }}
+          PROD_LOGISTICS_SMTP_FROM: ${{ secrets.PROD_LOGISTICS_SMTP_FROM }}
+        run: |
+          FINGERPRINT=$(
+            printf '%s\n' \
+              "StageName=production" \
+              "ProjectName=aws-ddd-api" \
+              "LambdaAliasName=production" \
+              "ConfigNamespace=/petpetclub/aws-ddd-api/production" \
+              "AllowedOrigins=${PROD_ALLOWED_ORIGINS}" \
+              "AuthBypass=${PROD_AUTH_BYPASS}" \
+              "MongoDbUri=${PROD_MONGODB_URI}" \
+              "JwtSecret=${PROD_JWT_SECRET}" \
+              "RefreshTokenMaxAgeSec=${PROD_REFRESH_TOKEN_MAX_AGE_SEC}" \
+              "RefreshCookieSameSite=${PROD_REFRESH_COOKIE_SAME_SITE}" \
+              "RefreshRateLimitLimit=${PROD_REFRESH_RATE_LIMIT_LIMIT}" \
+              "RefreshRateLimitWindowSec=${PROD_REFRESH_RATE_LIMIT_WINDOW_SEC}" \
+              "AuthSmtpHost=${PROD_AUTH_SMTP_HOST}" \
+              "AuthSmtpPort=${PROD_AUTH_SMTP_PORT}" \
+              "AuthSmtpUser=${PROD_AUTH_SMTP_USER}" \
+              "AuthSmtpPass=${PROD_AUTH_SMTP_PASS}" \
+              "AuthSmtpFrom=${PROD_AUTH_SMTP_FROM}" \
+              "TwilioAccountSid=${PROD_TWILIO_ACCOUNT_SID}" \
+              "TwilioAuthToken=${PROD_TWILIO_AUTH_TOKEN}" \
+              "TwilioVerifyServiceSid=${PROD_TWILIO_VERIFY_SERVICE_SID}" \
+              "S3BucketName=${PROD_S3_BUCKET_NAME}" \
+              "S3BucketBaseUrl=${PROD_S3_BUCKET_BASE_URL}" \
+              "S3BucketRegion=${PROD_S3_BUCKET_REGION}" \
+              "AdoptionMongoDbUri=${PROD_ADOPTION_MONGODB_URI}" \
+              "PetAnalysisVmPublicIp=${PROD_PET_ANALYSIS_VM_PUBLIC_IP}" \
+              "PetAnalysisDockerImage=${PROD_PET_ANALYSIS_DOCKER_IMAGE}" \
+              "PetAnalysisHeatmap=${PROD_PET_ANALYSIS_HEATMAP}" \
+              "PetAnalysisVmBreedPublicIp=${PROD_PET_ANALYSIS_VM_BREED_PUBLIC_IP}" \
+              "PetAnalysisBreedDockerImage=${PROD_PET_ANALYSIS_BREED_DOCKER_IMAGE}" \
+              "BusinessMongoDbUri=${PROD_BUSINESS_MONGODB_URI}" \
+              "FaceIdApi=${PROD_FACEID_API}" \
+              "CommerceSmtpHost=${PROD_COMMERCE_SMTP_HOST}" \
+              "CommerceSmtpPort=${PROD_COMMERCE_SMTP_PORT}" \
+              "CommerceSmtpUser=${PROD_COMMERCE_SMTP_USER}" \
+              "CommerceSmtpPass=${PROD_COMMERCE_SMTP_PASS}" \
+              "CommerceSmtpFrom=${PROD_COMMERCE_SMTP_FROM}" \
+              "CommerceWhatsappBearerToken=${PROD_WHATSAPP_BEARER_TOKEN}" \
+              "CommerceWhatsappPhoneNumberId=${PROD_WHATSAPP_PHONE_NUMBER_ID}" \
+              "CommerceCuttlyApiKey=${PROD_CUTTLY_API_KEY}" \
+              "SfCustomerCode=${PROD_SF_CUSTOMER_CODE}" \
+              "SfProductionCheckCode=${PROD_SF_PRODUCTION_CHECK_CODE}" \
+              "SfSandboxCheckCode=${PROD_SF_SANDBOX_CHECK_CODE}" \
+              "SfAddressApiKey=${PROD_SF_ADDRESS_API_KEY}" \
+              "LogisticsSmtpHost=${PROD_LOGISTICS_SMTP_HOST}" \
+              "LogisticsSmtpPort=${PROD_LOGISTICS_SMTP_PORT}" \
+              "LogisticsSmtpUser=${PROD_LOGISTICS_SMTP_USER}" \
+              "LogisticsSmtpPass=${PROD_LOGISTICS_SMTP_PASS}" \
+              "LogisticsSmtpFrom=${PROD_LOGISTICS_SMTP_FROM}" \
+            | shasum -a 256 | awk '{print $1}'
+          )
+          echo "value=$FINGERPRINT" >> "$GITHUB_OUTPUT"
+
       - name: Deploy production
         run: |
           sam deploy --config-env production --resolve-image-repos --parameter-overrides \
             StageName=production \
             ProjectName=aws-ddd-api \
             LambdaAliasName=production \
+            DeploymentFingerprint="${{ steps.prod-fingerprint.outputs.value }}" \
             ConfigNamespace=/petpetclub/aws-ddd-api/production \
             AllowedOrigins="${{ secrets.PROD_ALLOWED_ORIGINS }}" \
             AuthBypass="${{ secrets.PROD_AUTH_BYPASS }}" \
@@ -194,6 +405,9 @@ jobs:
             LogisticsSmtpUser="${{ secrets.PROD_LOGISTICS_SMTP_USER }}" \
             LogisticsSmtpPass="${{ secrets.PROD_LOGISTICS_SMTP_PASS }}" \
             LogisticsSmtpFrom="${{ secrets.PROD_LOGISTICS_SMTP_FROM }}"
+
+      - name: Verify production alias sync
+        run: node script/verify-lambda-alias-sync.cjs --template template.yaml --project aws-ddd-api --stage production --alias production
 
       - name: Smoke test production
         run: |

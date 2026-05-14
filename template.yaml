@@ -200,6 +200,10 @@ Parameters:
     Type: Number
     Default: 50
     Description: Reserved concurrent execution limit per Lambda function. Set to a value appropriate for your account concurrency quota.
+  DeploymentFingerprint:
+    Type: String
+    Default: ''
+    Description: Fingerprint of the effective deployment config used to force alias version publication when config-only values change.
   MlInferenceImageUri:
     Type: String
     Default: ''
@@ -216,6 +220,7 @@ Globals: # shared default settings applied to all resources of a given type, unl
     Runtime: nodejs22.x
     Architectures:
       - arm64 # Graviton2: ~20% cheaper compute, faster cold start vs x86_64
+    AutoPublishCodeSha256: !Ref DeploymentFingerprint
     Timeout: 10
     MemorySize: 256
     VpcConfig:
