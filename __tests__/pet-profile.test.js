@@ -711,7 +711,16 @@ describe('pet-profile handler Tier 2 integration', () => {
             animal: 'Dog',
             ownerContact1: 91234567,
             tagId: 'TAG-001',
+            medicalRecordsCount: 2,
+            medicationRecordsCount: 1,
+            dewormRecordsCount: 3,
+            vaccineRecordsCount: 4,
             locationName: 'Shelter A',
+            position: '22.3000,114.1700',
+            breed: 'Shiba',
+            receivedDate: new Date('2024-01-01T00:00:00.000Z'),
+            createdAt: new Date('2024-02-01T00:00:00.000Z'),
+            updatedAt: new Date('2024-02-02T00:00:00.000Z'),
           },
         ],
         petCount: 1,
@@ -733,10 +742,20 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(Array.isArray(parsed.body.data)).toBe(true);
       expect(parsed.body.data[0]._id).toBeDefined();
       expect(parsed.body.data[0].name).toBe('Mochi');
-      expect(parsed.body.data[0].location).toBe('Shelter A');
+      expect(parsed.body.data[0].tagID).toBe('TAG-001');
+      expect(parsed.body.data[0].medical).toBe(2);
+      expect(parsed.body.data[0].medication).toBe(1);
+      expect(parsed.body.data[0].deworm).toBe(3);
+      expect(parsed.body.data[0].vaccineRecords).toBe(4);
       expect(parsed.body.data[0].userId).toBeUndefined();
       expect(parsed.body.data[0].ownerContact1).toBeUndefined();
       expect(parsed.body.data[0].tagId).toBeUndefined();
+      expect(parsed.body.data[0].location).toBeUndefined();
+      expect(parsed.body.data[0].position).toBeUndefined();
+      expect(parsed.body.data[0].createdAt).toBeUndefined();
+      expect(parsed.body.data[0].updatedAt).toBeUndefined();
+      expect(parsed.body.data[0].receivedDate).toBeUndefined();
+      expect(parsed.body.data[0].breed).toBeUndefined();
     });
 
     test('preserves isRegistered in GET /pet/profile/me list summaries, including false values', async () => {

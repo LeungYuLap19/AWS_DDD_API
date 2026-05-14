@@ -332,6 +332,18 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       expect(data.length).toBeGreaterThan(0);
       expect(data.every((p) => p.ownerContact1 === undefined)).toBe(true);
       expect(data.every((p) => p.tagId === undefined)).toBe(true);
+      expect(data.every((p) => Object.prototype.hasOwnProperty.call(p, 'tagID'))).toBe(true);
+      expect(data.every((p) => p.location === undefined)).toBe(true);
+      expect(data.every((p) => p.position === undefined)).toBe(true);
+      expect(data.every((p) => p.createdAt === undefined)).toBe(true);
+      expect(data.every((p) => p.updatedAt === undefined)).toBe(true);
+      expect(data.every((p) => p.receivedDate === undefined)).toBe(true);
+      expect(data.every((p) => p.breed === undefined)).toBe(true);
+      expect(data.every((p) => p.medical === 0)).toBe(true);
+      expect(data.every((p) => p.medication === 0)).toBe(true);
+      expect(data.every((p) => p.deworm === 0)).toBe(true);
+      expect(data.every((p) => p.vaccineRecords === 0)).toBe(true);
+      expect(data.some((p) => p.tagID === state.tagId)).toBe(true);
     });
 
     test('GET /pet/profile/by-tag/{tagId} returns public data without auth', async () => {

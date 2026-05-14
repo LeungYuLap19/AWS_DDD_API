@@ -1076,13 +1076,23 @@ describe('POST /commerce/orders — purchase confirmation', () => {
   });
 
   test('returns 400 when shopCode is invalid (shop not found)', async () => {
-    const { handler } = loadWithMultipartMock(validFields(), { files: [] }, {
+    const { handler } = loadWithMultipartMock(validFields({ shopCode: 'UNKNOWN-SHOP' }), { files: [] }, {
       shopInfoResult: null,
     });
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
     expect(parsed.body.errorKey).toBe('orders.errors.invalidShopCode');
+  });
+
+  test('allows missing shopCode and falls back to zero price', async () => {
+    const { handler } = loadWithMultipartMock(validFields({ shopCode: undefined }), { files: [] }, {
+      shopInfoResult: null,
+    });
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.price).toBe(0);
   });
 
   test('uses server-authoritative price from ShopInfo', async () => {

@@ -63,15 +63,8 @@ const LIST_SUMMARY_FIELDS = [
   'sex',
   'sterilization',
   'adoptionStatus',
-  'breed',
   'status',
-  'receivedDate',
   'ngoPetId',
-  'createdAt',
-  'updatedAt',
-  'isRegistered',
-  'locationName',
-  'position',
 ];
 
 const PUBLIC_TAG_LOOKUP_FIELDS = [
@@ -123,6 +116,10 @@ function pickPetFields(raw: AnyRecord, fields: string[]): AnyRecord {
   return sanitized;
 }
 
+function coerceNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 /** Returns the standard owner-facing basic pet projection used by list/detail reads. */
 export function sanitizePetBasic(pet: unknown): AnyRecord | null {
   const raw = asPlainRecord(pet);
@@ -151,12 +148,25 @@ export function sanitizePetDetail(pet: unknown): AnyRecord | null {
 
 /** Returns the compact pet-card projection used by paginated list responses. */
 export function sanitizePetListSummary(pets: unknown[]): AnyRecord[] {
-  return pets
-    .map((pet) => {
-      const raw = asPlainRecord(pet);
-      return raw ? pickPetFields(raw, LIST_SUMMARY_FIELDS) : null;
-    })
-    .filter((pet): pet is AnyRecord => Boolean(pet));
+  const summaries: AnyRecord[] = [];
+
+  for (const pet of pets) {
+    const raw = asPlainRecord(pet);
+    if (!raw) {
+      continue;
+    }
+
+    const sanitized = pickPetFields(raw, LIST_SUMMARY_FIELDS);
+    sanitized.isRegistered = typeof raw.isRegistered === 'boolean' ? raw.isRegistered : false;
+    sanitized.tagID = raw.tagId ?? null;
+    sanitized.medical = coerceNumber(raw.medicalRecordsCount);
+    sanitized.medication = coerceNumber(raw.medicationRecordsCount);
+    sanitized.deworm = coerceNumber(raw.dewormRecordsCount);
+    sanitized.vaccineRecords = coerceNumber(raw.vaccineRecordsCount);
+    summaries.push(sanitized);
+  }
+
+  return summaries;
 }
 
 /** Returns the public tag-lookup projection with missing fields normalized to `null`. */
