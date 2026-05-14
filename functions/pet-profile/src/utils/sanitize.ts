@@ -54,6 +54,7 @@ const LINEAGE_FIELDS = [
 const FULL_FIELDS = [...BASIC_FIELDS, ...LINEAGE_FIELDS];
 
 const LIST_SUMMARY_FIELDS = [
+  '_id',
   'name',
   'breedimage',
   'animal',

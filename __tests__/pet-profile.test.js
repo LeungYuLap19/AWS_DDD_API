@@ -731,6 +731,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.pagination.total).toBe(1);
       expect(Array.isArray(parsed.body.data)).toBe(true);
+      expect(parsed.body.data[0]._id).toBeDefined();
       expect(parsed.body.data[0].name).toBe('Mochi');
       expect(parsed.body.data[0].location).toBe('Shelter A');
       expect(parsed.body.data[0].userId).toBeUndefined();
