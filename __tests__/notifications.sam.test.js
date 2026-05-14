@@ -16,7 +16,7 @@
 // Routes under test:
 //   GET    /notifications/me                       → list caller's notifications (protected: any user)
 //   PATCH  /notifications/me/{notificationId}      → archive a notification (protected: any user)
-//   POST   /notifications/dispatch                 → create notification for a target user (protected: admin only)
+//   POST   /notifications/dispatch                 → create notification for any target user (protected: any authenticated user)
 //
 // DB collections used:
 //   notifications — NotificationsFunction MONGODB_URI
@@ -585,7 +585,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
   // ── POST /notifications/dispatch ─────────────────────────────────────────────
 
   describe('POST /notifications/dispatch', () => {
-    test('creates a notification and it is persisted to DB', async () => {
+    test('creates a self notification with a user token and persists it to DB', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
       await notificationsCol().deleteMany({ userId: state.primaryUserId });
@@ -597,7 +597,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
           targetUserId: state.primaryUserId.toString(),
           type: 'vaccine_reminder',
         },
-        authHeaders(state.adminToken)
+        authHeaders(state.primaryToken)
       );
 
       expect(res.status).toBe(200);
@@ -651,6 +651,32 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       expect(persisted.nextEventDate.getFullYear()).toBe(2026);
     });
 
+    test('backward compatibility — admin can still dispatch to another user via targetUserId', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedFixtures();
+      await notificationsCol().deleteMany({ userId: state.secondaryUserId, type: 'ownership_transfer' });
+
+      const res = await req(
+        'POST',
+        '/notifications/dispatch',
+        {
+          targetUserId: state.secondaryUserId.toString(),
+          type: 'ownership_transfer',
+        },
+        authHeaders(state.adminToken)
+      );
+
+      expect(res.status).toBe(200);
+
+      const data = responseData(res.body);
+      const createdId = new mongoose.Types.ObjectId(data._id);
+      state.createdNotificationIds.push(createdId);
+
+      const persisted = await notificationsCol().findOne({ _id: createdId });
+      expect(String(persisted.userId)).toBe(String(state.secondaryUserId));
+      expect(persisted.isArchived).toBe(false);
+    });
+
     test('dispatch with DD/MM/YYYY date — persisted as a real Date', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
@@ -663,7 +689,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
           type: 'deworming_reminder',
           nextEventDate: '15/06/2026',
         },
-        authHeaders(state.adminToken)
+        authHeaders(state.primaryToken)
       );
 
       expect(res.status).toBe(200);
@@ -678,7 +704,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       expect(persisted.nextEventDate.getMonth()).toBe(5); // 0-indexed June
     });
 
-    test('dispatched notification is immediately visible to target user via GET /notifications/me', async () => {
+    test('dispatched notification is immediately visible to the caller via GET /notifications/me', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
       await notificationsCol().deleteMany({ userId: state.primaryUserId });
@@ -690,7 +716,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
           targetUserId: state.primaryUserId.toString(),
           type: 'ownership_transfer',
         },
-        authHeaders(state.adminToken)
+        authHeaders(state.primaryToken)
       );
       expect(dispatchRes.status).toBe(200);
       const dispatchData = responseData(dispatchRes.body);
@@ -715,7 +741,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
         'POST',
         '/notifications/dispatch',
         { targetUserId: state.primaryUserId.toString() },
-        authHeaders(state.adminToken)
+        authHeaders(state.primaryToken)
       );
 
       expect(res.status).toBe(400);
@@ -766,7 +792,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
         'POST',
         '/notifications/dispatch',
         { targetUserId: 'not-an-objectid', type: 'vaccine_reminder' },
-        authHeaders(state.adminToken)
+        authHeaders(state.primaryToken)
       );
 
       expect(res.status).toBe(400);
@@ -781,7 +807,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
         'POST',
         '/notifications/dispatch',
         '{"targetUserId":',
-        authHeaders(state.adminToken)
+        authHeaders(state.primaryToken)
       );
 
       expect(res.status).toBe(400);
@@ -802,7 +828,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
           isArchived: true,
           userId: 'injected-id',
         },
-        authHeaders(state.adminToken)
+        authHeaders(state.primaryToken)
       );
 
       expect(res.status).toBe(400);
@@ -875,7 +901,7 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
       expect(expectedUnauthenticatedStatuses()).toContain(res.status);
     });
 
-    test('POST /notifications/dispatch rejects non-admin user token with 403', async () => {
+    test('POST /notifications/dispatch allows user token when targetUserId matches the caller', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
@@ -888,25 +914,41 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken)
       );
 
-      // Non-admin role → 403 common.forbidden from requireRole
-      expect(res.status).toBe(403);
-      expect(res.body?.errorKey).toBe('common.forbidden');
+      expect(res.status).toBe(200);
 
-      // Confirm no record was created
       const countAfter = await notificationsCol().countDocuments({ userId: state.primaryUserId });
-      expect(countAfter).toBe(countBefore);
+      expect(countAfter).toBe(countBefore + 1);
+    });
+
+    test('POST /notifications/dispatch allows non-admin user token when targetUserId belongs to another user', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedFixtures();
+
+      const countBefore = await notificationsCol().countDocuments({ userId: state.secondaryUserId });
+
+      const res = await req(
+        'POST',
+        '/notifications/dispatch',
+        { targetUserId: state.secondaryUserId.toString(), type: 'vaccine_reminder' },
+        authHeaders(state.primaryToken)
+      );
+
+      expect(res.status).toBe(200);
+
+      const countAfter = await notificationsCol().countDocuments({ userId: state.secondaryUserId });
+      expect(countAfter).toBe(countBefore + 1);
     });
 
     test('POST /notifications/dispatch rejects expired JWT', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const expiredAdmin = signToken({ userId: state.adminUserId, role: 'admin', expiresIn: -60 });
+      const expiredUserToken = signToken({ userId: state.primaryUserId, expiresIn: -60 });
       const res = await req(
         'POST',
         '/notifications/dispatch',
         { targetUserId: state.primaryUserId.toString(), type: 'vaccine_reminder' },
-        authHeaders(expiredAdmin)
+        authHeaders(expiredUserToken)
       );
 
       expect([401, 403]).toContain(res.status);
@@ -1012,12 +1054,12 @@ describe('Tier 3+4 — /notifications via SAM local + UAT DB', () => {
         type: 'nearby_pet_lost',
       };
 
-      const first = await req('POST', '/notifications/dispatch', body, authHeaders(state.adminToken));
+      const first = await req('POST', '/notifications/dispatch', body, authHeaders(state.primaryToken));
       expect(first.status).toBe(200);
       const firstData = responseData(first.body);
       state.createdNotificationIds.push(new mongoose.Types.ObjectId(firstData._id));
 
-      const second = await req('POST', '/notifications/dispatch', body, authHeaders(state.adminToken));
+      const second = await req('POST', '/notifications/dispatch', body, authHeaders(state.primaryToken));
       expect(second.status).toBe(200);
       const secondData = responseData(second.body);
       state.createdNotificationIds.push(new mongoose.Types.ObjectId(secondData._id));

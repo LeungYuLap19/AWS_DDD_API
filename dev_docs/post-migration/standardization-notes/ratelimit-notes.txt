@@ -131,7 +131,7 @@ These routes are JWT-protected (default authorizer) so the barrier is higher tha
 | pet-adoption   | POST /pet/adoption/{id} (managed record create)              | creates adoption application      |
 | pet-source     | POST /pet/source/{petId}, PATCH /pet/source/{petId}          | write operations                  |
 
-Note: commerce-fulfillment routes (`requireRole(['admin', 'developer'])`) and `POST /notifications/dispatch` (`requireRole('admin')`) are intentionally not rate-limited — hard role gate is sufficient.
+Note: commerce-fulfillment routes (`requireRole(['admin', 'developer'])`) are intentionally not rate-limited — hard role gate is sufficient. `POST /notifications/dispatch` should no longer be treated as exempt once its auth model is relaxed.
 
 ### Policy correctness issue: redundant ip+identifier lane in auth flows
 

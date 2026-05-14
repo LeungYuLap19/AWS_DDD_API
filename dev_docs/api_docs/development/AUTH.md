@@ -92,6 +92,13 @@ x-api-key: <api-gateway-api-key>
 
 Access tokens use HS256 and expire in 15 minutes.
 
+Important boundary:
+
+- `POST /auth/challenges/verify` does **not** use the API Gateway default authorizer
+- if that route receives an `Authorization: Bearer <access-token>` header, the `auth` Lambda verifies the JWT itself for the optional linking branch
+- therefore an expired/invalid JWT on this one route still reaches the Lambda and returns a unified `401 common.unauthorized`
+- this is different from the repo's other protected APIs, where API Gateway + `RequestAuthorizerFunction` usually reject expired/invalid JWTs before the domain Lambda runs
+
 ### Required Headers
 
 | Scenario | Headers |
@@ -176,6 +183,8 @@ Route-specific notes:
 ```
 
 Frontend integrations should branch on `errorKey`, not the localized `error` string.
+
+This unified error envelope applies to Lambda-generated responses in this document. It should not be generalized to gateway-generated auth failures on other protected APIs in the repo.
 
 ### Request Body Validation Rules
 
@@ -397,12 +406,14 @@ For SMS linking, `linked` contains `phoneNumber` instead.
 | 400 | `auth.challenge.codeIncorrect` | SMS verify status returned `pending` |
 | 400 | `auth.challenge.codeExpired` | SMS verify status returned `expired` or `canceled` |
 | 400 | `auth.challenge.verificationFailed` | SMS verify returned another non-approved status not mapped to a more specific key |
-| 401 | `common.unauthorized` | Linking branch received invalid JWT or current user no longer exists |
+| 401 | `common.unauthorized` | Only for the optional linking branch on this route: JWT was invalid/expired, or the current user no longer exists |
 | 409 | `auth.challenge.emailAlreadyLinked` | Email already belongs to another user during linking |
 | 409 | `auth.challenge.phoneAlreadyLinked` | Phone already belongs to another user during linking |
 | 429 | `common.rateLimited` | Rate limit or failure cooldown exceeded |
 | 503 | `auth.challenge.smsServiceUnavailable` | SMS verify provider unavailable |
 | 500 | `common.internalError` | Unexpected internal error |
+
+This `401 common.unauthorized` row is specific to `POST /auth/challenges/verify` because the route is `Authorizer: NONE` at API Gateway and parses the optional JWT inside the Lambda. Do not reuse this expectation for other protected APIs whose JWT checks happen in the gateway authorizer.
 
 ### POST /auth/registrations/user
 

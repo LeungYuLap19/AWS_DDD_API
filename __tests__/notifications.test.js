@@ -125,6 +125,11 @@ function loadHandlerWithMocks({
   notificationList = [],
   createdDoc = null,
   updateOneResult = { matchedCount: 1, modifiedCount: 1 },
+  rateLimitEntry = {
+    count: 1,
+    expireAt: new Date(Date.now() + 60_000),
+    windowStart: new Date(),
+  },
   connectError = null,
   findError = null,
   updateError = null,
@@ -149,6 +154,12 @@ function loadHandlerWithMocks({
       ? jest.fn().mockRejectedValue(createError)
       : jest.fn().mockResolvedValue(created),
   };
+  const rateLimitModel = {
+    findOne: jest.fn(() => ({
+      lean: jest.fn().mockResolvedValue(null),
+    })),
+    findOneAndUpdate: jest.fn().mockResolvedValue(rateLimitEntry),
+  };
 
   const mongooseMock = {
     Schema: actualMongoose.Schema,
@@ -160,6 +171,7 @@ function loadHandlerWithMocks({
     models: {},
     model: jest.fn((name) => {
       if (name === 'Notifications') return notificationsModel;
+      if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model: ${name}`);
     }),
   };
@@ -175,7 +187,7 @@ function loadHandlerWithMocks({
 
   const { handler } = require(handlerModulePath);
 
-  return { handler, notificationsModel, created };
+  return { handler, notificationsModel, rateLimitModel, created };
 }
 
 function signToken({ userId, role = 'user', expiresIn = '15m' } = {}) {
@@ -526,17 +538,16 @@ describe('Tier 2 — notifications handler integration', () => {
   // ── POST /notifications/dispatch ─────────────────────────────────────────
 
   describe('POST /notifications/dispatch', () => {
-    test('happy path — dispatches notification to target user and returns created doc', async () => {
+    test('happy path — user token dispatches self notification and returns created doc', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
 
       const { handler } = loadHandlerWithMocks();
       const res = await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
-          body: JSON.stringify({ targetUserId, type: 'vaccine_reminder' }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          body: JSON.stringify({ targetUserId: callerId, type: 'vaccine_reminder' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -549,7 +560,6 @@ describe('Tier 2 — notifications handler integration', () => {
 
     test('happy path — full optional fields are stored correctly', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
 
       const { handler, notificationsModel } = loadHandlerWithMocks();
@@ -558,20 +568,21 @@ describe('Tier 2 — notifications handler integration', () => {
           method: 'POST',
           resource: '/notifications/dispatch',
           body: JSON.stringify({
-            targetUserId,
+            targetUserId: callerId,
             type: 'adoption_follow_up',
             petId,
             petName: 'Buddy',
             nextEventDate: '2026-06-01',
             nearbyPetLost: 'Central District',
           }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
       const createArg = notificationsModel.create.mock.calls[0]?.[0];
-      expect(String(createArg.userId)).toBe(targetUserId);
+      expect(String(createArg.userId)).toBe(callerId);
       expect(createArg.type).toBe('adoption_follow_up');
+      expect(createArg.isArchived).toBe(false);
       expect(String(createArg.petId)).toBe(petId);
       expect(createArg.petName).toBe('Buddy');
       expect(createArg.nearbyPetLost).toBe('Central District');
@@ -579,15 +590,14 @@ describe('Tier 2 — notifications handler integration', () => {
 
     test('date — nextEventDate in DD/MM/YYYY format is parsed to a Date', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
 
       const { handler, notificationsModel } = loadHandlerWithMocks();
       await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
-          body: JSON.stringify({ targetUserId, type: 'vaccine_reminder', nextEventDate: '15/06/2026' }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          body: JSON.stringify({ targetUserId: callerId, type: 'vaccine_reminder', nextEventDate: '15/06/2026' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -596,17 +606,38 @@ describe('Tier 2 — notifications handler integration', () => {
       expect(createArg.nextEventDate.getFullYear()).toBe(2026);
     });
 
-    test('validation — missing type field returns 400 with domain error key', async () => {
+    test('backward compatibility — admin may still dispatch to another user via targetUserId', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
       const targetUserId = new mongoose.Types.ObjectId().toString();
+
+      const { handler, notificationsModel } = loadHandlerWithMocks();
+      const res = await handler(
+        createEvent({
+          method: 'POST',
+          resource: '/notifications/dispatch',
+          body: JSON.stringify({ targetUserId, type: 'vaccine_reminder' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(res);
+      expect(parsed.statusCode).toBe(200);
+
+      const createArg = notificationsModel.create.mock.calls[0]?.[0];
+      expect(String(createArg.userId)).toBe(targetUserId);
+      expect(createArg.isArchived).toBe(false);
+    });
+
+    test('validation — missing type field returns 400 with domain error key', async () => {
+      const callerId = new mongoose.Types.ObjectId().toString();
 
       const { handler } = loadHandlerWithMocks();
       const res = await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
-          body: JSON.stringify({ targetUserId }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          body: JSON.stringify({ targetUserId: callerId }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -617,15 +648,14 @@ describe('Tier 2 — notifications handler integration', () => {
 
     test('validation — invalid type value (not in enum) returns 400 with typeRequired error key', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
 
       const { handler } = loadHandlerWithMocks();
       const res = await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
-          body: JSON.stringify({ targetUserId, type: 'unknown_type' }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          body: JSON.stringify({ targetUserId: callerId, type: 'unknown_type' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -636,15 +666,14 @@ describe('Tier 2 — notifications handler integration', () => {
 
     test('validation — nextEventDate with invalid format returns 400 with invalidDate error key', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
 
       const { handler } = loadHandlerWithMocks();
       const res = await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
-          body: JSON.stringify({ targetUserId, type: 'vaccine_reminder', nextEventDate: 'not-a-date' }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          body: JSON.stringify({ targetUserId: callerId, type: 'vaccine_reminder', nextEventDate: 'not-a-date' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -661,7 +690,7 @@ describe('Tier 2 — notifications handler integration', () => {
           method: 'POST',
           resource: '/notifications/dispatch',
           body: JSON.stringify({ type: 'vaccine_reminder' }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -677,7 +706,7 @@ describe('Tier 2 — notifications handler integration', () => {
           method: 'POST',
           resource: '/notifications/dispatch',
           body: JSON.stringify({ targetUserId: 'not-valid-id', type: 'vaccine_reminder' }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -688,15 +717,14 @@ describe('Tier 2 — notifications handler integration', () => {
 
     test('validation — invalid petId ObjectId format returns 400', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
 
       const { handler } = loadHandlerWithMocks();
       const res = await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
-          body: JSON.stringify({ targetUserId, type: 'vaccine_reminder', petId: 'bad-id' }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          body: JSON.stringify({ targetUserId: callerId, type: 'vaccine_reminder', petId: 'bad-id' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -713,7 +741,7 @@ describe('Tier 2 — notifications handler integration', () => {
           method: 'POST',
           resource: '/notifications/dispatch',
           body: null,
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -729,7 +757,7 @@ describe('Tier 2 — notifications handler integration', () => {
           method: 'POST',
           resource: '/notifications/dispatch',
           body: '{"targetUserId":',
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -755,23 +783,51 @@ describe('Tier 2 — notifications handler integration', () => {
       expect(parsed.body.errorKey).toBe('common.unauthorized');
     });
 
-    test('auth — non-admin authenticated user gets 403 on dispatch', async () => {
+    test('auth — non-admin authenticated user can dispatch to another user', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
+      const otherUserId = new mongoose.Types.ObjectId().toString();
 
-      const { handler } = loadHandlerWithMocks();
+      const { handler, notificationsModel } = loadHandlerWithMocks();
       const res = await handler(
         createEvent({
           method: 'POST',
           resource: '/notifications/dispatch',
-          body: JSON.stringify({ targetUserId, type: 'vaccine_reminder' }),
+          body: JSON.stringify({ targetUserId: otherUserId, type: 'vaccine_reminder' }),
           authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
       const parsed = parseResponse(res);
-      expect(parsed.statusCode).toBe(403);
-      expect(parsed.body.errorKey).toBe('common.forbidden');
+      expect(parsed.statusCode).toBe(200);
+      const createArg = notificationsModel.create.mock.calls[0]?.[0];
+      expect(String(createArg.userId)).toBe(otherUserId);
+      expect(createArg.isArchived).toBe(false);
+    });
+
+    test('rate limit — returns 429 with retry-after and does not create a notification', async () => {
+      const callerId = new mongoose.Types.ObjectId().toString();
+
+      const { handler, notificationsModel } = loadHandlerWithMocks({
+        rateLimitEntry: {
+          count: 999,
+          expireAt: new Date(Date.now() + 30_000),
+          windowStart: new Date(),
+        },
+      });
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          resource: '/notifications/dispatch',
+          body: JSON.stringify({ targetUserId: callerId, type: 'vaccine_reminder' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(429);
+      expect(parsed.body.errorKey).toBe('common.rateLimited');
+      expect(result.headers['retry-after']).toBeDefined();
+      expect(notificationsModel.create).not.toHaveBeenCalled();
     });
   });
 
@@ -820,7 +876,6 @@ describe('Tier 2 — notifications handler integration', () => {
 
     test('mass assignment — unknown fields in dispatch body are rejected with 400 (strict schema)', async () => {
       const callerId = new mongoose.Types.ObjectId().toString();
-      const targetUserId = new mongoose.Types.ObjectId().toString();
 
       const { handler, notificationsModel } = loadHandlerWithMocks();
       const res = await handler(
@@ -828,13 +883,13 @@ describe('Tier 2 — notifications handler integration', () => {
           method: 'POST',
           resource: '/notifications/dispatch',
           body: JSON.stringify({
-            targetUserId,
+            targetUserId: callerId,
             type: 'vaccine_reminder',
             isArchived: true,
             __proto__: { evil: true },
             userId: 'injected-id',
           }),
-          authorizer: createAuthorizer({ userId: callerId, role: 'admin' }),
+          authorizer: createAuthorizer({ userId: callerId, role: 'user' }),
         }),
         createContext()
       );
@@ -982,25 +1037,27 @@ describe('Tier 3 — notifications SAM local HTTP integration', () => {
     expect([200, 401]).toContain(res.status);
   });
 
-  test('POST /notifications/dispatch with non-admin token returns 403', async () => {
+  test('POST /notifications/dispatch with user token reaches validation for self dispatch', async () => {
     if (skipIfNoSam()) return;
-    const token = signToken({ userId: new mongoose.Types.ObjectId().toString(), role: 'user' });
+    const userId = new mongoose.Types.ObjectId().toString();
+    const token = signToken({ userId, role: 'user' });
     const res = await req(
       'POST',
       '/notifications/dispatch',
-      { targetUserId: new mongoose.Types.ObjectId().toString(), type: 'vaccine_reminder' },
+      { targetUserId: userId },
       { Authorization: `Bearer ${token}`, origin: VALID_ORIGIN }
     );
-    expect([403, 401]).toContain(res.status);
+    expect([400, 401, 403]).toContain(res.status);
   });
 
-  test('POST /notifications/dispatch with missing type returns 400 for admin token', async () => {
+  test('POST /notifications/dispatch with missing type returns 400 for authenticated user token', async () => {
     if (skipIfNoSam()) return;
-    const token = signToken({ userId: new mongoose.Types.ObjectId().toString(), role: 'admin' });
+    const userId = new mongoose.Types.ObjectId().toString();
+    const token = signToken({ userId, role: 'user' });
     const res = await req(
       'POST',
       '/notifications/dispatch',
-      { targetUserId: new mongoose.Types.ObjectId().toString() },
+      { targetUserId: userId },
       { Authorization: `Bearer ${token}`, origin: VALID_ORIGIN }
     );
     expect([400, 401, 403]).toContain(res.status);

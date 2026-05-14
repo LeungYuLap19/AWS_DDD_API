@@ -105,6 +105,13 @@ npm run local:api
 
 `RequestAuthorizerFunction` 是 API 預設 authorizer。
 
+大部分 protected route 的 auth flow 是：
+
+- client request
+- API Gateway
+- `RequestAuthorizerFunction`
+- domain Lambda
+
 目前使用：
 
 - `Authorization: Bearer <jwt>`
@@ -119,6 +126,10 @@ authorizer 會把 claims 放進 API Gateway authorizer context，後續 domain L
 - `ngoId`
 - `ngoName`
 
+這代表 Bearer JWT 會先進 authorizer Lambda；只有 verify 成功、policy `Allow` 的 request 才會進後面的 domain Lambda。
+
+如果 token 缺失、過期、被竄改，或缺少必要 claim，domain Lambda 通常不會執行，API Gateway 會直接回 gateway-generated `401/403`。這類 response 不保證有 shared `{ success, errorKey, requestId }` envelope。
+
 補充：
 
 - `auth/challenges/verify` 這條 route 是 **optional auth**
@@ -126,7 +137,7 @@ authorizer 會把 claims 放進 API Gateway authorizer context，後續 domain L
 - 但 Lambda 內會在 verify flow 嘗試解析 `Authorization` header
 - 沒有 Bearer token：走 public verify/login/register path
 - Bearer token 有效：走 link email / phone path
-- Bearer token 存在但無效：直接 `401`
+- Bearer token 存在但無效：由 `auth` Lambda 直接回 `401 common.unauthorized`
 
 ### API key
 
@@ -145,7 +156,9 @@ API 目前要求 `x-api-key`。
 
 - 有 `x-api-key` 但沒有 Bearer token：走 public verify flow
 - 有 `x-api-key` 且 Bearer token 有效：走 link email / phone flow
-- Bearer token 存在但無效：直接 `401`
+- Bearer token 存在但無效：這條 route 會進 `auth` Lambda，並回 unified `401 common.unauthorized`
+
+相對地，其它掛 default authorizer 的 protected route，如果 Bearer JWT 過期或無效，通常會在 API Gateway / authorizer 階段被擋下來，不會進 domain Lambda，也不應假設 response 一定帶 `errorKey`。
 
 ### request body validation
 
