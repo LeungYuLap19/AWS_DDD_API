@@ -3,6 +3,8 @@
 dist/
 diagnostics/
 node_modules/
+__pycache__/
+*.pyc
 env.json
 env.local.json
 env.development.json

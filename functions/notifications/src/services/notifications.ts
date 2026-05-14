@@ -106,6 +106,7 @@ export async function handleDispatchNotification(ctx: RouteContext): Promise<API
   const notification = await Notifications.create({
     userId: targetUserId,
     type,
+    isArchived: false,
     petId: petId ?? null,
     petName: petName ?? null,
     nextEventDate: parseDateString(nextEventDate),

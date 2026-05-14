@@ -1,15 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DEFAULT_ENV_FILE="${REPO_ROOT}/env.development.json"
+
 if [[ "${1:-}" == "" || "${2:-}" == "" ]]; then
-  echo "Usage: script/build-ml-inference-image.sh <ecr_repo_uri> <tag>"
-  echo "Example: script/build-ml-inference-image.sh 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/my-repo ml-inference-v2"
+  echo "Usage: script/build-ml-inference-image.sh <ecr_repo_uri> <tag> [env_file]"
+  echo "Example: script/build-ml-inference-image.sh 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/my-repo ml-inference-v2 env.development.json"
   exit 1
 fi
 
 ECR_REPO_URI="$1"
 IMAGE_TAG="$2"
 IMAGE_URI="${ECR_REPO_URI}:${IMAGE_TAG}"
+ENV_FILE_INPUT="${3:-${DEFAULT_ENV_FILE}}"
+
+if [[ "${ENV_FILE_INPUT}" = /* ]]; then
+  ENV_FILE="${ENV_FILE_INPUT}"
+else
+  ENV_FILE="${REPO_ROOT}/${ENV_FILE_INPUT}"
+fi
 
 REGISTRY_HOST="${ECR_REPO_URI%%/*}"
 AWS_REGION="$(echo "${REGISTRY_HOST}" | cut -d'.' -f4)"
@@ -23,7 +34,7 @@ docker buildx build \
   --sbom=false \
   --output type=image,push=true \
   -t "${IMAGE_URI}" \
-  functions/ml-inference
+  "${REPO_ROOT}/functions/ml-inference"
 
 echo "Inspecting pushed image media type..."
 MEDIA_TYPE="$(aws ecr describe-images \
@@ -40,4 +51,24 @@ if [[ "${MEDIA_TYPE}" == "application/vnd.oci.image.index.v1+json" ]]; then
   exit 2
 fi
 
+if [[ ! -f "${ENV_FILE}" ]]; then
+  echo "ERROR: env file not found: ${ENV_FILE}"
+  exit 3
+fi
+
+echo "Updating ML_INFERENCE_IMAGE_URI in ${ENV_FILE}..."
+node -e '
+const fs = require("fs");
+const envFile = process.argv[1];
+const imageUri = process.argv[2];
+const content = fs.readFileSync(envFile, "utf8");
+const json = JSON.parse(content);
+if (!json.Parameters || typeof json.Parameters !== "object") {
+  throw new Error("Missing Parameters object in env file");
+}
+json.Parameters.ML_INFERENCE_IMAGE_URI = imageUri;
+fs.writeFileSync(envFile, `${JSON.stringify(json, null, 2)}\n`);
+' "${ENV_FILE}" "${IMAGE_URI}"
+
 echo "OK: ${IMAGE_URI}"
+echo "Updated: ${ENV_FILE}"
