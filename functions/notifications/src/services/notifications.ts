@@ -1,9 +1,10 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, paginationQuerySchema, parseObjectIdParam, requireAuthContext, requireRole } from '@aws-ddd-api/shared';
+import { parseBody, paginationQuerySchema, parseObjectIdParam, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { dispatchNotificationSchema } from '../zodSchema/notificationSchema';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 
 type MongooseDocument = { toObject: () => Record<string, unknown> };
@@ -87,11 +88,11 @@ export async function handleArchiveNotification(ctx: RouteContext): Promise<APIG
 }
 
 /**
- * Admin-only notification dispatch endpoint that materializes a notification
+ * Authenticated notification dispatch endpoint that materializes a notification
  * document from a validated domain event payload.
  */
 export async function handleDispatchNotification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireRole(ctx.event, 'admin');
+  const authContext = requireAuthContext(ctx.event);
 
   const parsed = parseBody(ctx.body, dispatchNotificationSchema);
   if (!parsed.ok) {
@@ -101,11 +102,24 @@ export async function handleDispatchNotification(ctx: RouteContext): Promise<API
   await connectToMongoDB();
 
   const { targetUserId, type, petId, petName, nextEventDate, nearbyPetLost } = parsed.data;
+  const rateLimitResponse = await applyRateLimit({
+    action: 'notifications.dispatch',
+    accountId: targetUserId,
+    event: ctx.event,
+    identifier: authContext.userId,
+    policies: [
+      { scope: 'ip', limit: 120, windowSeconds: 5 * 60 },
+      { scope: 'identifier', limit: 60, windowSeconds: 5 * 60 },
+      { scope: 'account', limit: 60, windowSeconds: 5 * 60 },
+    ],
+  });
+  if (rateLimitResponse) return rateLimitResponse;
 
   const Notifications = mongoose.model('Notifications');
   const notification = await Notifications.create({
     userId: targetUserId,
     type,
+    isArchived: false,
     petId: petId ?? null,
     petName: petName ?? null,
     nextEventDate: parseDateString(nextEventDate),

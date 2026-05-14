@@ -4,7 +4,7 @@
 
 **Lambda:** `aws-ddd-api-{stage}-notifications`
 
-Per-user notification inbox plus admin-only dispatch. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `notifications`, `count`, or `notification` payloads are stale.
+Per-user notification inbox plus authenticated dispatch. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `notifications`, `count`, or `notification` payloads are stale.
 
 ---
 
@@ -16,7 +16,7 @@ Per-user notification inbox plus admin-only dispatch. The current DDD implementa
 | --- | --- | --- | --- |
 | GET | `/notifications/me` | `x-api-key` + Bearer JWT | List the caller's notifications |
 | PATCH | `/notifications/me/{notificationId}` | `x-api-key` + Bearer JWT | Archive a single caller-owned notification |
-| POST | `/notifications/dispatch` | `x-api-key` + Bearer JWT with `admin` role | Create a notification for any target user |
+| POST | `/notifications/dispatch` | `x-api-key` + Bearer JWT | Create a notification for any target user |
 
 ### Integration-Critical Behavior
 
@@ -27,7 +27,8 @@ Per-user notification inbox plus admin-only dispatch. The current DDD implementa
 | Dispatch response | Dispatch returns the full created notification inside `data`, not just the new `_id` |
 | Ownership model | Archive filters by both `_id` and `userId`; another user's notification returns `404 common.notFound`, not `403` |
 | Archive semantics | PATCH always sets `isArchived: true`; the request body is ignored |
-| Dispatch permissions | Only `admin` role can dispatch |
+| Dispatch permissions | Any authenticated user can dispatch to any `targetUserId` |
+| Dispatch rate limit | Layered per-IP, per-caller, and per-target throttling returns `429 common.rateLimited` when exceeded |
 | Archived list behavior | `GET /notifications/me` still returns rows where `isArchived` is already `true` |
 
 ---
@@ -60,7 +61,7 @@ Dispatch requests must also send `Content-Type: application/json`.
 
 - `GET /notifications/me` scopes results to `jwt.userId`
 - `PATCH /notifications/me/{notificationId}` only archives rows where `_id` and `userId` both match
-- `POST /notifications/dispatch` requires `admin` role via `requireRole`
+- `POST /notifications/dispatch` requires JWT auth
 
 ### Localization
 
@@ -240,10 +241,10 @@ None required. The handler ignores body content.
 
 ### POST /notifications/dispatch
 
-Create a notification for any target user. Admin only.
+Create a notification for any target user.
 
 **Lambda owner:** `notifications`  
-**Auth:** `x-api-key` + Bearer JWT with `admin` role  
+**Auth:** `x-api-key` + Bearer JWT  
 **Content-Type:** `application/json`
 
 #### Dispatch Request Body
@@ -280,7 +281,7 @@ The body schema is strict. Extra keys are rejected.
 | 400 | `notifications.errors.typeRequired` | Invalid or missing notification type |
 | 400 | `notifications.errors.invalidDate` | Invalid `nextEventDate` |
 | 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
-| 403 | `common.forbidden` | Caller is not `admin` |
+| 429 | `common.rateLimited` | Dispatch write rate limit exceeded |
 | 500 | `common.internalError` | Unexpected internal error |
 
 ---
@@ -289,7 +290,8 @@ The body schema is strict. Extra keys are rejected.
 
 1. Read inbox state from `data` and pagination state from `pagination`; do not use the older `notifications` or `count` keys.
 2. Treat `common.notFound` from archive as a stale-client state: the item is missing or not owned by the current user.
-3. Use the dispatch route only from admin tooling. There is no self-service notification creation endpoint in the current DDD API.
+3. The dispatch route accepts any authenticated Bearer JWT and writes the notification to the supplied `targetUserId`.
+4. Frontend should handle `429 common.rateLimited` on dispatch and retry after the `retry-after` header when present.
 
 ---
 
