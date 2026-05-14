@@ -2,6 +2,10 @@ import mongoose from 'mongoose';
 
 const { Schema } = mongoose;
 
+/**
+ * Minimal image metadata record used by the upload helper before and after the
+ * S3 write completes.
+ */
 export const ImageCollectionSchema = new Schema(
   {
     fileName: { type: String, default: null },

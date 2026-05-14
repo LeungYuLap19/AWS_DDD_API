@@ -1,308 +1,48 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import {
   parseMultipartBody,
-  parseObjectIdParam,
 } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import env from '../config/env';
 import { connectToMongoDB } from '../config/db';
 import { loadAuthorizedPet, requireAuthContext } from '../utils/auth';
 import {
+  cleanupUploadedImage,
+  extractImageFile,
+  extractRegisterFiles,
+  getEnrollmentProgress,
+  getPetId,
+  isAcceptedRegisterStatus,
+  isPetTypeConsistent,
+  loadBiometricDocument,
+  loadCandidates,
+  type PetType,
+  upsertBiometricDocument,
+  uploadImageOrError,
+} from '../utils/biometric';
+import {
+  invokeMlInference,
+  type MlRegisterPayload,
+  type MlVerifyPayload,
+} from '../utils/mlInference';
+import {
   normalizeRegisterMultipartBody,
   normalizeVerifyMultipartBody,
 } from '../utils/multipart';
 import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
-import { uploadImageFile } from '../utils/upload';
 import {
   registerBiometricSchema,
   verifyBiometricSchema,
 } from '../zodSchema/biometricSchemas';
 
-const lambdaClient = new LambdaClient({});
-
-type MlInvokeOperation = 'register' | 'verify';
-type PetType = 'cat' | 'dog';
-type EmbeddingCandidate = {
-  angle: 'front-face' | 'high-face' | 'left-face' | 'low-face' | 'right-face';
-  embedding: number[];
-};
-const ALLOWED_ANGLES = new Set<EmbeddingCandidate['angle']>([
-  'front-face',
-  'high-face',
-  'left-face',
-  'low-face',
-  'right-face',
-]);
-
-type MlRegisterPayload = {
-  status?: string;
-  angle?: string | null;
-  score?: number | null;
-  counts?: Record<string, number>;
-  can_finish?: boolean;
-  front_image?: string | null;
-  embedding?: number[];
-  petId?: string;
-  petType?: string;
-  image?: { bucket?: string; key?: string };
-};
-
-type MlVerifyPayload = {
-  status?: string;
-  similarity?: number | null;
-  angle?: string | null;
-  threshold?: number;
-  petId?: string;
-  petType?: string;
-  image?: { bucket?: string; key?: string };
-  candidateCount?: number;
-};
-
-type MlSuccessEnvelope<T = unknown> = {
-  ok: true;
-  op: MlInvokeOperation;
-  data: T;
-};
-
-type MlErrorEnvelope = {
-  ok: false;
-  statusCode?: number;
-  errorKey?: string;
-  message?: string;
-};
-
-type UploadedImageRef = {
-  key: string;
-  url: string;
-};
-
-async function invokeMlInference<T>(
-  params: {
-    op: MlInvokeOperation;
-    petId: string;
-    body: Record<string, unknown>;
-    requestId?: string | null;
-  }
-): Promise<T> {
-  const functionName = env.ML_INFERENCE_FUNCTION_NAME;
-  const payload = {
-    op: params.op,
-    petId: params.petId,
-    body: params.body,
-    requestId: params.requestId ?? undefined,
-  };
-
-  const result = await lambdaClient.send(
-    new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: 'RequestResponse',
-      Payload: Buffer.from(JSON.stringify(payload)),
-    })
-  );
-
-  if (result.FunctionError) {
-    throw new Error(`ml-inference invoke failed: ${result.FunctionError}`);
-  }
-
-  const payloadText = result.Payload ? Buffer.from(result.Payload).toString('utf8') : '';
-  if (!payloadText) return {} as T;
-
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(payloadText);
-  } catch {
-    return { raw: payloadText } as T;
-  }
-
-  if (typeof decoded === 'object' && decoded !== null && 'ok' in decoded) {
-    const maybeErr = decoded as MlErrorEnvelope;
-    if (maybeErr.ok === false) {
-      throw {
-        statusCode: typeof maybeErr.statusCode === 'number' ? maybeErr.statusCode : 502,
-        errorKey:
-          typeof maybeErr.errorKey === 'string'
-            ? maybeErr.errorKey
-            : 'common.serviceUnavailable',
-      };
-    }
-
-    const maybeOk = decoded as MlSuccessEnvelope<T>;
-    if (maybeOk.ok === true) {
-      return maybeOk.data;
-    }
-  }
-
-  return decoded as T;
-}
-
-function getPetId(ctx: RouteContext): string | APIGatewayProxyResult {
-  const petIdResult = parseObjectIdParam(ctx.event.pathParameters?.petId);
-  if (!petIdResult.ok) {
-    return response.errorResponse(petIdResult.statusCode, petIdResult.errorKey, ctx.event);
-  }
-
-  return petIdResult.data;
-}
-
-function buildFolder(petId: string, purpose: 'registrations' | 'verifications'): string {
-  const base = purpose === 'registrations' ? 'face-id/registrations' : 'face-id/verifications';
-  return `user-uploads/pets/${petId}/${base}`;
-}
-
-function buildS3KeyFromUrl(url: string): string {
-  const base = `${env.AWS_BUCKET_BASE_URL}/`;
-  if (!url.startsWith(base)) {
-    throw new Error('Uploaded image URL does not match AWS_BUCKET_BASE_URL');
-  }
-
-  return url.slice(base.length);
-}
-
-async function uploadImageOrError(
-  op: MlInvokeOperation,
-  file: { content: Buffer; filename: string },
-  petId: string,
-  ctx: RouteContext
-): Promise<UploadedImageRef | APIGatewayProxyResult> {
-  const purpose = op === 'register' ? 'registrations' : 'verifications';
-
-  try {
-    const url = await uploadImageFile(
-      { buffer: file.content, originalname: file.filename },
-      buildFolder(petId, purpose),
-      'user'
-    );
-
-    return {
-      url,
-      key: buildS3KeyFromUrl(url),
-    };
-  } catch (error: unknown) {
-    const code = (error as { code?: string }).code;
-    if (code === 'INVALID_FILE_TYPE') {
-      return response.errorResponse(400, 'petBiometric.errors.invalidFileType', ctx.event);
-    }
-    if (code === 'FILE_TOO_LARGE') {
-      return response.errorResponse(413, 'petBiometric.errors.fileTooLarge', ctx.event);
-    }
-    throw error;
-  }
-}
-
-function normalizeRegisterOutcome(payload: MlRegisterPayload) {
-  return {
-    status: payload.status ?? 'unknown',
-    angle: payload.angle ?? null,
-    score: payload.score ?? null,
-    counts: payload.counts ?? {},
-    can_finish: payload.can_finish ?? false,
-    front_image: payload.front_image ?? null,
-  };
-}
-
-function isAcceptedRegisterStatus(status: string | undefined): boolean {
-  return status === 'accepted' || status === 'angle_full';
-}
-
-function extractImageFile(
-  files: Array<{ fieldname?: string; content?: Buffer; filename?: string }>
-): { content: Buffer; filename: string } | null {
-  const imageFiles = files.filter((entry) => entry?.fieldname === 'image' && entry?.content);
-  if (imageFiles.length !== 1) return null;
-  const file = imageFiles[0];
-  if (!file?.content) return null;
-  return {
-    content: file.content,
-    filename: file.filename ?? 'upload',
-  };
-}
-
-function extractRegisterFiles(
-  files: Array<{ fieldname?: string; content?: Buffer; filename?: string }>
-): Array<{ content: Buffer; filename: string }> {
-  return files
-    .filter((entry) => entry?.fieldname === 'image' && entry?.content)
-    .map((entry) => ({
-      content: entry.content as Buffer,
-      filename: entry.filename ?? 'upload',
-    }));
-}
-
-async function upsertBiometricDocument(params: {
-  petId: string;
-  userId: string;
-  petType: PetType;
-  imageKey: string;
-  angle: string;
-  embedding: number[];
-}) {
-  const PetBiometric = mongoose.model('PetBiometric');
-  await PetBiometric.updateOne(
-    { petId: params.petId },
-    {
-      $setOnInsert: {
-        petId: params.petId,
-        userId: params.userId,
-        petType: params.petType,
-      },
-      $push: {
-        imageKeys: params.imageKey,
-        embeddings: {
-          angle: params.angle,
-          embedding: params.embedding,
-        },
-      },
-    },
-    { upsert: true }
-  );
-}
-
-async function loadCandidates(petId: string): Promise<EmbeddingCandidate[]> {
-  const PetBiometric = mongoose.model('PetBiometric');
-  const doc = await PetBiometric.findOne({ petId })
-    .select('embeddings')
-    .lean() as { embeddings?: Array<{ angle?: string; embedding?: number[] }> } | null;
-
-  if (!doc?.embeddings?.length) return [];
-
-  return doc.embeddings
-    .filter((entry): entry is { angle: EmbeddingCandidate['angle']; embedding: number[] } =>
-      typeof entry?.angle === 'string' &&
-      ALLOWED_ANGLES.has(entry.angle as EmbeddingCandidate['angle']) &&
-      Array.isArray(entry.embedding) &&
-      entry.embedding.length > 0
-    )
-    .map((entry) => ({
-      angle: entry.angle,
-      embedding: entry.embedding,
-    }));
-}
-
-async function loadBiometricDocument(petId: string) {
-  const PetBiometric = mongoose.model('PetBiometric');
-  return PetBiometric.findOne({ petId })
-    .select('petId userId petType imageKeys embeddings createdAt')
-    .lean() as Promise<{
-      petId?: string;
-      userId?: string;
-      petType?: string;
-      imageKeys?: string[];
-      embeddings?: Array<{ angle?: string; embedding?: number[] }>;
-      createdAt?: Date | string;
-    } | null>;
-}
-
-function ensurePetTypeConsistency(storedPetType: unknown, requestedPetType: PetType) {
-  if (storedPetType != null && String(storedPetType) !== requestedPetType) {
-    return false;
-  }
-
-  return true;
-}
-
+/**
+ * Returns the authenticated caller's biometric enrollment summary for one pet
+ * after validating ownership against the pet record in MongoDB.
+ *
+ * This endpoint is read-only and does not invoke `ml-inference`.
+ */
 export async function handleGetBiometric(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const auth = requireAuthContext(ctx.event);
   const petId = getPetId(ctx);
@@ -312,7 +52,8 @@ export async function handleGetBiometric(ctx: RouteContext): Promise<APIGatewayP
   await loadAuthorizedPet(ctx.event, petId);
 
   const doc = await loadBiometricDocument(petId);
-  const hasFaceId = Boolean(doc?.embeddings?.length);
+  const progress = getEnrollmentProgress(doc);
+  const hasFaceId = progress.canFinish;
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
@@ -334,6 +75,13 @@ export async function handleGetBiometric(ctx: RouteContext): Promise<APIGatewayP
   });
 }
 
+/**
+ * Deletes the stored Face ID document for one owned pet.
+ *
+ * The route is destructive but DB-only: it rate-limits the caller, enforces
+ * pet ownership, and removes the `pet_biometrics` document without invoking
+ * `ml-inference`.
+ */
 export async function handleDeleteBiometric(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
   const petId = getPetId(ctx);
@@ -367,11 +115,20 @@ export async function handleDeleteBiometric(ctx: RouteContext): Promise<APIGatew
   });
 }
 
+/**
+ * Registers one or more multipart-uploaded pet images for Face ID enrollment.
+ *
+ * The handler validates multipart form fields, uploads each image to S3,
+ * invokes `ml-inference register` once per image, and persists only accepted
+ * embeddings to MongoDB immediately after each accepted ML result before
+ * returning the remaining public enrollment progress.
+ */
 export async function handleRegisterBiometric(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const auth = requireAuthContext(ctx.event);
   const petId = getPetId(ctx);
   if (typeof petId !== 'string') return petId;
 
+  // 1. Parse the multipart request and validate the public register contract.
   const multiResult = await parseMultipartBody(ctx.event, registerBiometricSchema, {
     normalize: normalizeRegisterMultipartBody,
     fallbackErrorKey: 'common.validationFailed',
@@ -385,8 +142,10 @@ export async function handleRegisterBiometric(ctx: RouteContext): Promise<APIGat
     return response.errorResponse(400, 'petBiometric.errors.noFilesUploaded', ctx.event);
   }
 
+  // 2. Open the DB connection before rate-limit, ownership, and persistence work.
   await connectToMongoDB();
 
+  // 3. Apply write-path throttling before any S3 or ML work starts.
   const rateLimitResult = await applyRateLimit({
     action: 'pet-biometric.register',
     event: ctx.event,
@@ -399,27 +158,24 @@ export async function handleRegisterBiometric(ctx: RouteContext): Promise<APIGat
   });
   if (rateLimitResult) return rateLimitResult;
 
+  // 4. Verify the caller owns the pet and that the requested petType stays consistent.
   await loadAuthorizedPet(ctx.event, petId);
 
   const existingDoc = await loadBiometricDocument(petId);
-  if (!ensurePetTypeConsistency(existingDoc?.petType, multiResult.data.petType)) {
+  if (!isPetTypeConsistent(existingDoc?.petType, multiResult.data.petType as PetType)) {
     return response.errorResponse(400, 'petBiometric.errors.petTypeMismatch', ctx.event);
   }
 
-  const accepted: Array<Record<string, unknown>> = [];
-  const rejected: Array<Record<string, unknown>> = [];
-  const acceptedForPersistence: Array<{
-    imageKey: string;
-    angle: string;
-    embedding: number[];
-  }> = [];
+  let persistedAcceptedCount = 0;
 
   for (const file of files) {
+    // 5. Upload one registration image to S3 before invoking ML on that object.
     const uploaded = await uploadImageOrError('register', file, petId, ctx);
     if ('statusCode' in uploaded) return uploaded;
 
     let mlResult: MlRegisterPayload;
     try {
+      // 6. Invoke the internal ML register operation with the uploaded S3 reference.
       mlResult = await invokeMlInference<MlRegisterPayload>({
         op: 'register',
         petId,
@@ -435,73 +191,73 @@ export async function handleRegisterBiometric(ctx: RouteContext): Promise<APIGat
     } catch (error) {
       const statusCode = (error as { statusCode?: unknown })?.statusCode;
       const errorKey = (error as { errorKey?: unknown })?.errorKey;
+      await cleanupUploadedImage(uploaded.key, 'register.mlInvokeFailed');
       if (typeof statusCode === 'number' && typeof errorKey === 'string') {
         return response.errorResponse(statusCode, errorKey, ctx.event);
       }
       throw error;
     }
 
-    const normalized = normalizeRegisterOutcome(mlResult);
-    if (!isAcceptedRegisterStatus(normalized.status)) {
-      rejected.push({
-        imageKey: uploaded.key,
-        ...normalized,
-      });
+    const status = typeof mlResult.status === 'string' ? mlResult.status : 'unknown';
+    if (!isAcceptedRegisterStatus(status)) {
+      // 7. Reject non-persistable ML outcomes and clean up their transient S3 objects.
+      await cleanupUploadedImage(uploaded.key, `register.${status}`);
       continue;
     }
 
+    // 8. Guard the persistable branch: accepted ML results must include angle + embedding.
     const angle = typeof mlResult.angle === 'string' ? mlResult.angle : null;
     const embedding = Array.isArray(mlResult.embedding) ? mlResult.embedding : [];
     if (!angle || embedding.length === 0) {
+      await cleanupUploadedImage(uploaded.key, 'register.invalidAcceptedPayload');
       return response.errorResponse(502, 'common.serviceUnavailable', ctx.event, {
         message: 'common.serviceUnavailable',
       });
     }
 
-    acceptedForPersistence.push({
-      imageKey: uploaded.key,
-      angle,
-      embedding,
-    });
-
-    accepted.push({
-      imageKey: uploaded.key,
-      embedding,
-      ...normalized,
-    });
-  }
-
-  if (acceptedForPersistence.length === 0) {
-    return response.errorResponse(400, 'petBiometric.errors.noAcceptedImages', ctx.event);
-  }
-
-  for (const item of acceptedForPersistence) {
+    // 9. Persist each accepted enrollment image immediately so earlier progress is not lost
+    // if a later file in the same batch fails.
     await upsertBiometricDocument({
+      imageKey: uploaded.key,
       petId,
       userId: auth.userId,
       petType: multiResult.data.petType,
-      imageKey: item.imageKey,
-      angle: item.angle,
-      embedding: item.embedding,
+      angle,
+      embedding,
     });
+    persistedAcceptedCount += 1;
   }
 
-  return response.successResponse(200, ctx.event, {
-    message: 'success.retrieved',
-    data: {
-      petId,
-      petType: multiResult.data.petType,
-      accepted,
-      rejected,
-    },
+  // 10. If every uploaded image was rejected, fail the request without writing Mongo data.
+  if (persistedAcceptedCount === 0) {
+    return response.errorResponse(400, 'petBiometric.errors.noAcceptedImages', ctx.event);
+  }
+
+  // 11. Reload the persisted document and derive cumulative enrollment progress from Mongo.
+  const persistedDoc = await loadBiometricDocument(petId);
+  const progress = getEnrollmentProgress(persistedDoc);
+
+  // 12. Return only the public progress fields required by the register contract.
+  return response.successResponse(201, ctx.event, {
+    message: 'success.created',
+    data: progress,
   });
 }
 
+/**
+ * Verifies one multipart-uploaded probe image against the stored embeddings for
+ * an owned pet.
+ *
+ * The handler uploads the probe image to S3, loads Mongo-backed candidates by
+ * `petId`, invokes `ml-inference verify`, and returns the ML result without
+ * mutating the biometric record.
+ */
 export async function handleVerifyBiometric(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const auth = requireAuthContext(ctx.event);
   const petId = getPetId(ctx);
   if (typeof petId !== 'string') return petId;
 
+  // 1. Parse the multipart request and validate the public verify contract.
   const multiResult = await parseMultipartBody(ctx.event, verifyBiometricSchema, {
     normalize: normalizeVerifyMultipartBody,
     fallbackErrorKey: 'common.validationFailed',
@@ -519,8 +275,10 @@ export async function handleVerifyBiometric(ctx: RouteContext): Promise<APIGatew
     return response.errorResponse(400, errorKey, ctx.event);
   }
 
+  // 2. Open the DB connection before rate-limit, ownership, and candidate lookup work.
   await connectToMongoDB();
 
+  // 3. Apply write-path throttling before S3 upload and ML verification work starts.
   const rateLimitResult = await applyRateLimit({
     action: 'pet-biometric.verify',
     event: ctx.event,
@@ -533,19 +291,22 @@ export async function handleVerifyBiometric(ctx: RouteContext): Promise<APIGatew
   });
   if (rateLimitResult) return rateLimitResult;
 
+  // 4. Verify the caller owns the pet and that the requested petType stays consistent.
   await loadAuthorizedPet(ctx.event, petId);
 
   const existingDoc = await loadBiometricDocument(petId);
-  if (!ensurePetTypeConsistency(existingDoc?.petType, multiResult.data.petType)) {
+  if (!isPetTypeConsistent(existingDoc?.petType, multiResult.data.petType as PetType)) {
     return response.errorResponse(400, 'petBiometric.errors.petTypeMismatch', ctx.event);
   }
 
+  // 5. Load stored candidate embeddings, then upload the probe image to S3 for ML access.
   const candidates = await loadCandidates(petId);
   const uploaded = await uploadImageOrError('verify', file, petId, ctx);
   if ('statusCode' in uploaded) return uploaded;
 
   let mlResult: MlVerifyPayload;
   try {
+    // 6. Invoke the internal ML verify operation with the probe image and Mongo candidates.
     mlResult = await invokeMlInference<MlVerifyPayload>({
       op: 'verify',
       petId,
@@ -567,12 +328,16 @@ export async function handleVerifyBiometric(ctx: RouteContext): Promise<APIGatew
     const errorKey = (error as { errorKey?: unknown })?.errorKey;
     if (typeof statusCode === 'number' && typeof errorKey === 'string') {
       return response.errorResponse(statusCode, errorKey, ctx.event);
+      }
+      throw error;
+    } finally {
+      // 7. Verification probe images are transient, so always clean them up after ML returns.
+      await cleanupUploadedImage(uploaded.key, 'verify.probe');
     }
-    throw error;
-  }
 
+  // 8. Return the verification result together with request-scoped metadata.
   return response.successResponse(200, ctx.event, {
-    message: 'success.retrieved',
+    message: 'success.completed',
     data: {
       petId,
       petType: multiResult.data.petType,

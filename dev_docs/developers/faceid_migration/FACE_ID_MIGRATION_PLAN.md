@@ -193,6 +193,8 @@ Key points:
    - GET does not invoke ml-inference
    - DELETE does not invoke ml-inference
 
+5. Deployment test with local real web app
+
 ## 9) Deployment Notes
 
 1. Keep `ml-inference` private (no API Gateway event).

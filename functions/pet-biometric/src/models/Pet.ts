@@ -16,6 +16,12 @@ const PetTransferNgoSchema = new Schema(
   { _id: false }
 );
 
+/**
+ * Compatibility Pet schema registered locally for ownership checks.
+ *
+ * The pet collection is owned by `pet-profile`; this lambda only reads the pet
+ * document for auth/ownership validation and does not own the collection shape.
+ */
 export const PetSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId },

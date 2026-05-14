@@ -122,14 +122,6 @@ Parameters:
   PetAnalysisBreedDockerImage:
     Type: String
     Default: ''
-  BusinessMongoDbUri:
-    Type: String
-    Default: ''
-    NoEcho: true
-  FaceIdApi:
-    Type: String
-    Default: ''
-    NoEcho: true
   CommerceSmtpHost:
     Type: String
     Default: ''
@@ -1678,11 +1670,8 @@ Resources:
       AutoPublishAliasAllProperties: true
       Environment:
         Variables:
-          BUSINESS_MONGODB_URI: !Ref BusinessMongoDbUri
-          FACEID_API: !Ref FaceIdApi
           ML_INFERENCE_FUNCTION_NAME: !Sub '${ProjectName}-${StageName}-ml-inference'
           AWS_BUCKET_NAME: !Ref S3BucketName
-          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
           AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
         PetBiometricByPetIdGET:

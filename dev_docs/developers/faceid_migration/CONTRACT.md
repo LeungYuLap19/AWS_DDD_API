@@ -25,7 +25,7 @@ Behavior:
 3. Mongo-only read
 4. no `ml-inference` invoke
 
-Success response:
+Success response (`200 OK`):
 
 ```json
 {
@@ -62,7 +62,7 @@ Behavior:
 3. Mongo-only delete
 4. no `ml-inference` invoke
 
-Success response:
+Success response (`200 OK`):
 
 ```json
 {
@@ -94,41 +94,37 @@ Notes:
 2. `pet-biometric` uploads files to S3 internally
 3. `pet-biometric` calls `ml-inference` once per uploaded image
 4. only accepted ML results are persisted to MongoDB
+5. frontend does not send previous accepted counts or enrollment progress
+6. `pet-biometric` derives cumulative progress from MongoDB after persistence
 
-Success response:
+Success response (`201 Created`):
 
 ```json
 {
-  "message": "success.retrieved",
+  "message": "success.created",
   "data": {
-    "petId": "pet123",
-    "petType": "cat",
-    "accepted": [
-      {
-        "imageKey": "user-uploads/pets/pet123/face-id/registrations/a.jpg",
-        "embedding": [0.01, -0.02, 0.03],
-        "status": "accepted",
-        "angle": "front-face",
-        "score": 100.0,
-        "counts": {},
-        "can_finish": false,
-        "front_image": null
-      }
-    ],
-    "rejected": [
-      {
-        "imageKey": "user-uploads/pets/pet123/face-id/registrations/b.jpg",
-        "status": "low_quality",
-        "angle": "left-face",
-        "score": 12.3,
-        "counts": {},
-        "can_finish": false,
-        "front_image": null
-      }
-    ]
+    "remaining": 1,
+    "canFinish": false
   }
 }
 ```
+
+Response field meaning:
+
+1. `remaining`
+   - number of additional accepted front-facing enrollments still required
+   - derived from cumulative MongoDB state after the current request is persisted
+   - equal to `max(0, 10 - acceptedTotal)`
+2. `canFinish`
+   - `true` when enrollment completion requirement is met
+   - equal to `acceptedTotal >= 10`
+
+Enrollment completion rule:
+
+1. successful enrollment requires 10 cumulative accepted front-facing images
+2. previous accepted counts are not sent by frontend
+3. `pet-biometric` must load MongoDB state and compute cumulative progress itself
+4. public success response returns only enrollment progress, not per-image outcomes
 
 Failure behavior:
 
@@ -166,7 +162,7 @@ Success response:
 
 ```json
 {
-  "message": "success.retrieved",
+  "message": "success.completed",
   "data": {
     "petId": "pet123",
     "petType": "cat",
@@ -243,10 +239,7 @@ Success envelope returned by `ml-inference`:
     "status": "accepted",
     "angle": "front-face",
     "score": 100.0,
-    "counts": {},
-    "can_finish": false,
-    "front_image": null,
-    "embedding": [],
+    "embedding": [0.01, -0.02, 0.03],
     "petId": "pet123",
     "petType": "cat",
     "image": {
@@ -261,6 +254,8 @@ Notes:
 
 1. `embedding` is required for MongoDB persistence by `pet-biometric`
 2. `pet-biometric` treats `accepted` and `angle_full` as persistable statuses
+3. `ml-inference register` returns per-image ML outcome only
+4. cumulative enrollment progress such as `counts`, `acceptedTotal`, `remaining`, and `canFinish` is owned by `pet-biometric`, not `ml-inference`
 
 ## 2.2 `verify` operation
 

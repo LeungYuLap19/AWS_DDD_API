@@ -10,6 +10,13 @@ const EmbeddingItemSchema = new Schema(
   { _id: false }
 );
 
+/**
+ * One-document-per-pet Face ID store.
+ *
+ * The public contract intentionally keeps enrollment data in a single
+ * `pet_biometrics` document so GET/DELETE are simple DB operations and verify
+ * can load all candidate embeddings by `petId`.
+ */
 const PetBiometricSchema = new Schema(
   {
     petId: { type: String, required: true, unique: true, index: true },

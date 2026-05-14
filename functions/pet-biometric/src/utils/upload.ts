@@ -1,5 +1,5 @@
-import mongoose from 'mongoose';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { randomUUID } from 'node:crypto';
+import { DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import env from '../config/env';
 import s3Client from '../config/s3';
 
@@ -31,10 +31,21 @@ const EXT_MAP: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+/**
+ * Uploads one validated image buffer directly to S3.
+ *
+ * Face ID intentionally keeps its own storage model minimal. The only
+ * persisted Face ID references live in `pet_biometrics`, so this helper does
+ * not create ancillary MongoDB records such as `image_collections`.
+ *
+ * @throws Error with `code: 'INVALID_FILE_TYPE'` when the file signature does
+ * not match the allowlisted image MIME set.
+ * @throws Error with `code: 'FILE_TOO_LARGE'` when the raw buffer exceeds the
+ * API Gateway-safe upload size limit.
+ */
 export async function uploadImageFile(
   file: { buffer: Buffer; originalname: string },
-  folder: string,
-  owner = 'user'
+  folder: string
 ): Promise<string> {
   const detectedMime = detectMimeFromBuffer(file.buffer);
   if (!detectedMime || !ALLOWED_UPLOAD_MIME.has(detectedMime)) {
@@ -45,11 +56,8 @@ export async function uploadImageFile(
   }
 
   const ext = EXT_MAP[detectedMime] || 'bin';
-  const ImageCollection = mongoose.model('ImageCollection');
-  const img = await ImageCollection.create({});
-  const fileName = `${img._id}.${ext}`;
+  const fileName = `${randomUUID()}.${ext}`;
   const key = `${folder}/${fileName}`;
-  const url = `${env.AWS_BUCKET_BASE_URL}/${key}`;
 
   await s3Client.send(
     new PutObjectCommand({
@@ -60,18 +68,20 @@ export async function uploadImageFile(
     })
   );
 
-  await ImageCollection.updateOne(
-    { _id: img._id },
-    {
-      $set: {
-        fileName,
-        url,
-        fileSize: file.buffer.length / (1024 * 1024),
-        mimeType: detectedMime,
-        owner,
-      },
-    }
-  );
+  return key;
+}
 
-  return url;
+/**
+ * Deletes one Face ID image object from S3 by key.
+ *
+ * The caller decides whether deletion failures should abort the request or be
+ * treated as best-effort cleanup.
+ */
+export async function deleteImageFile(key: string): Promise<void> {
+  await s3Client.send(
+    new DeleteObjectCommand({
+      Bucket: env.AWS_BUCKET_NAME,
+      Key: key,
+    })
+  );
 }
