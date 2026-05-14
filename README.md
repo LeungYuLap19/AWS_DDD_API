@@ -227,7 +227,7 @@ development stack 已在 AWS 上實測：
 
 這樣 shared layer 改動時，function 會 publish 新 version，alias 也會跟著移動，不會停留在舊 layer version。
 
-注意：env / secret 這類由 deploy parameter 帶入的 config-only 變更，SAM 可能只更新 `$LATEST`，但不會自動推進 alias 到新 version。這個 repo 現在會在 workflow 內計算一個 `DeploymentFingerprint`，並透過 `Globals.Function.AutoPublishCodeSha256` 強制這類 config-only 變更也 publish 新 version。deploy 後還會再執行 `script/verify-lambda-alias-sync.cjs`，如果 alias 與 `$LATEST` 的 code / env 不一致，workflow 會直接 fail，避免 deployment 看起來成功但實際上還在跑舊 config。
+注意：env / secret 這類由 deploy parameter 帶入的 config-only 變更，SAM 可能只更新 `$LATEST`，但不會自動推進 alias 到新 version。這個 repo 現在會在 workflow 內計算一個 `DeploymentFingerprint`，並把 `AutoPublishCodeSha256: !Ref DeploymentFingerprint` 設在每個 aliased `AWS::Serverless::Function` 上，強制這類 config-only 變更也 publish 新 version。deploy 後還會再執行 `script/verify-lambda-alias-sync.cjs`，如果 alias 與 `$LATEST` 的 code / env 不一致，workflow 會直接 fail，避免 deployment 看起來成功但實際上還在跑舊 config。
 
 ## 目錄結構
 

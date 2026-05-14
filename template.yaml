@@ -220,7 +220,6 @@ Globals: # shared default settings applied to all resources of a given type, unl
     Runtime: nodejs22.x
     Architectures:
       - arm64 # Graviton2: ~20% cheaper compute, faster cold start vs x86_64
-    AutoPublishCodeSha256: !Ref DeploymentFingerprint
     Timeout: 10
     MemorySize: 256
     VpcConfig:
@@ -541,6 +540,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
 
   PipelineSmokeFunction: # CI/CD smoke test example
     # - proves deployment pipeline works
@@ -555,6 +555,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         PipelineSmokeRootGET:
           Type: Api
@@ -635,6 +636,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           REFRESH_TOKEN_MAX_AGE_SEC: !Ref RefreshTokenMaxAgeSec
@@ -784,6 +786,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         UserMeGET:
           Type: Api
@@ -828,6 +831,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         NgoMeGET:
           Type: Api
@@ -882,6 +886,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -974,6 +979,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         PetSourceGET:
           Type: Api
@@ -1022,6 +1028,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         PetTransferPOST:
           Type: Api
@@ -1098,6 +1105,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           ADOPTION_MONGODB_URI: !Ref AdoptionMongoDbUri
@@ -1189,6 +1197,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         PetMedicalGeneralListGET:
           Type: Api
@@ -1470,6 +1479,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1591,6 +1601,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1681,6 +1692,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           BUSINESS_MONGODB_URI: !Ref BusinessMongoDbUri
@@ -1793,6 +1805,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         NotificationsMeGET:
           Type: Api
@@ -1855,6 +1868,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Events:
         CommerceCatalogGET:
           Type: Api
@@ -1960,6 +1974,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -2037,6 +2052,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           SMTP_HOST: !Ref CommerceSmtpHost
@@ -2174,6 +2190,7 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
       Environment:
         Variables:
           SF_CUSTOMER_CODE: !Ref SfCustomerCode
