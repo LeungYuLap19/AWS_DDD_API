@@ -33,7 +33,9 @@ export async function generateUniqueTagId(): Promise<string> {
 // ── Pricing ───────────────────────────────────────────────────────────────────
 
 export async function resolveCanonicalPrice(shopCode: string): Promise<{ canonicalPrice: number } | null> {
-  if (!shopCode) return null;
+  if (!shopCode) {
+    return { canonicalPrice: 0 };
+  }
   const ShopInfo = mongoose.model('ShopInfo');
   const shop = (await ShopInfo.findOne({ shopCode }, { price: 1 }).lean()) as { price?: unknown } | null;
   if (!shop) return null;

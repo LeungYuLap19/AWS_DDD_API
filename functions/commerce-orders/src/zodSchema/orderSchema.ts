@@ -61,8 +61,9 @@ export const purchaseConfirmationSchema = z
     shopCode: z
       .string({ message: 'orders.errors.invalidShopCode' })
       .trim()
-      .min(1, { message: 'orders.errors.invalidShopCode' })
-      .max(64),
+      .max(64)
+      .optional()
+      .default(''),
     promotionCode: z.string().trim().max(64).optional().default(''),
     petContact: z.string().trim().max(50, { message: 'common.invalidBodyParams' }).optional().default(''),
     optionImg: z.string().trim().max(2048, { message: 'common.invalidBodyParams' }).optional().default(''),
