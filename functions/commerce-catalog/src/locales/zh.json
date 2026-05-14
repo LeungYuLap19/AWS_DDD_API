@@ -1,7 +1,9 @@
 {
   "catalog": {
     "errors": {
-      "createEventFailed": "無法記錄目錄事件"
+      "createEventFailed": "無法記錄目錄事件",
+      "shopCodeOrPdfRequired": "必須提供 shopCode 或 PDF 檔案。",
+      "invalidVerificationFileType": "驗證檔案格式無效，請上傳 PDF。"
     }
   }
 }

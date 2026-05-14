@@ -1,7 +1,9 @@
 {
   "catalog": {
     "errors": {
-      "createEventFailed": "Failed to record catalog event"
+      "createEventFailed": "Failed to record catalog event",
+      "shopCodeOrPdfRequired": "Either shopCode or a PDF file is required.",
+      "invalidVerificationFileType": "Invalid verification file type. Please upload a PDF."
     }
   }
 }

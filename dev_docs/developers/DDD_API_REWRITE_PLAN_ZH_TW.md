@@ -263,6 +263,8 @@ Legend
       POST [x-api-key]
   /storefront
     GET [x-api-key]
+    /shop-code-verifications
+      POST [x-api-key]
   /orders
     GET [x-api-key, admin]
     POST [x-api-key, self]
@@ -817,6 +819,7 @@ sam deploy --config-env production
 | `GET /commerce/catalog` | `GET /product/productList` | `GetBreed` | `commerce-catalog` | product catalog / reference list。 |
 | `POST /commerce/catalog/events` | `POST /product/productLog` | `GetBreed` | `commerce-catalog` | product access/view event logging。 |
 | `GET /commerce/storefront` | `GET /purchase/shop-info` | `purchaseConfirmation` | `commerce-catalog` | checkout/storefront metadata。 |
+| `POST /commerce/storefront/shop-code-verifications` | — | — | `commerce-catalog` | 驗證 shop code（可由 `shopCode` 或 PDF 內容解析）。 |
 | `GET /commerce/orders` | `GET /purchase/orders` | `purchaseConfirmation` | `commerce-orders` | order list。 |
 | `POST /commerce/orders` | `POST /purchase/confirmation` | `purchaseConfirmation` | `commerce-orders` | 建立 order + order verification + tag data。 |
 | `GET /commerce/orders/{tempId}` | `GET /v2/orderVerification/ordersInfo/{tempId}` | `OrderVerification` | `commerce-orders` | 取得 linked order info / pet contact summary。 |
