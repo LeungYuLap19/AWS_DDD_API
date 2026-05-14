@@ -50,16 +50,19 @@
   - POST /pet/medical/{petId}/vaccination
   - PATCH /pet/medical/{petId}/vaccination/{vaccineId}
   - DELETE /pet/medical/{petId}/vaccination/{vaccineId}
+
 - [ ] pet-biometric
   - GET /pet/biometric/{petId}
   - DELETE /pet/biometric/{petId}
   - POST /pet/biometric/{petId}/registrations
   - POST /pet/biometric/{petId}/verifications
 
+- [ ] ml-inference
+
 ## Do Later / Can Set Aside
 
 - [ ] what can be extract to shared (SoC) - delay
-  - db connection, service standard flow, s3 client
+  - db connection, ratelimit, self access
 - [ ] mongodb indexing - delay
 - [ ] admin protected routes need db identity checking
 - [ ] better notification flow (currently allow cross user notification writes)

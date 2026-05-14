@@ -38,8 +38,20 @@ const requiredEnvKeys = [
   'JWT_SECRET',
 ];
 
+function getAllowedOrigins(): string[] {
+  const raw = env.ALLOWED_ORIGINS ?? '';
+  return raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
 function isDevelopmentCorsConfigured(): boolean {
-  return env.STAGE_NAME !== 'development' || env.ALLOWED_ORIGINS === '*';
+  if (env.STAGE_NAME !== 'development') {
+    return true;
+  }
+
+  return getAllowedOrigins().length > 0;
 }
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
@@ -60,7 +72,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   if (!isDevelopmentCorsConfigured()) {
     return response.errorResponse(500, 'pipelineSmoke.envMissing', requestEvent, {
-      'x-env-error': 'development-cors-not-wildcard',
+      'x-env-error': 'development-cors-missing',
     });
   }
 
@@ -74,9 +86,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     alias: env.LAMBDA_ALIAS_NAME,
     env: {
       requiredKeysPresent: true,
-      developmentCorsWildcard: env.STAGE_NAME === 'development'
-        ? env.ALLOWED_ORIGINS === '*'
+      developmentCorsConfigured: env.STAGE_NAME === 'development'
+        ? getAllowedOrigins().length > 0
         : null,
+      allowedOrigins: getAllowedOrigins(),
       checkedKeys: requiredEnvKeys,
     },
     requestId: event.requestContext?.requestId || null,

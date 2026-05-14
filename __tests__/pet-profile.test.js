@@ -739,6 +739,50 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.data[0].tagId).toBeUndefined();
     });
 
+    test('preserves isRegistered in GET /pet/profile/me list summaries, including false values', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petList: [
+          {
+            _id: new mongoose.Types.ObjectId().toString(),
+            userId,
+            name: 'Mochi',
+            animal: 'Dog',
+            isRegistered: false,
+          },
+          {
+            _id: new mongoose.Types.ObjectId().toString(),
+            userId,
+            name: 'Luna',
+            animal: 'Dog',
+            isRegistered: true,
+          },
+        ],
+        petCount: 2,
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/profile/me',
+          resource: '/pet/profile/me',
+          authorizer: createAuthorizer({ userId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      const petsByName = Object.fromEntries(parsed.body.data.map((pet) => [pet.name, pet]));
+
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.pagination.total).toBe(2);
+      expect(Object.prototype.hasOwnProperty.call(petsByName.Mochi, 'isRegistered')).toBe(true);
+      expect(petsByName.Mochi.isRegistered).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(petsByName.Luna, 'isRegistered')).toBe(true);
+      expect(petsByName.Luna.isRegistered).toBe(true);
+    });
+
     test('returns NGO list results with paging and sort metadata for GET /pet/profile/me NGO scope', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ngoId = new mongoose.Types.ObjectId().toString();
