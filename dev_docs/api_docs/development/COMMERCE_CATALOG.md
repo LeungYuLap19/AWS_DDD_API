@@ -4,7 +4,7 @@
 
 **Lambda:** `aws-ddd-api-{stage}-commerce-catalog`
 
-Public commerce browsing endpoints for product catalog, storefront metadata, and product-view event logging. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `items`, `shops`, or `id` payloads are stale.
+Public commerce browsing endpoints for product catalog, storefront metadata, product-view event logging, and storefront shop-code verification. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `items`, `shops`, or `id` payloads are stale.
 
 ---
 
@@ -17,12 +17,13 @@ Public commerce browsing endpoints for product catalog, storefront metadata, and
 | GET | `/commerce/catalog` | `x-api-key` only | — | Paginated product list |
 | POST | `/commerce/catalog/events` | `x-api-key` only | `application/json` | Record a product-view event |
 | GET | `/commerce/storefront` | `x-api-key` only | — | Paginated storefront list |
+| POST | `/commerce/storefront/shop-code-verifications` | `x-api-key` only | `application/json` or `multipart/form-data` | Verify a storefront shop code |
 
 ### Integration-Critical Behavior
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Auth | All three routes are public at the Lambda level, but still require API Gateway `x-api-key` |
+| Auth | All four routes are public at the Lambda level, but still require API Gateway `x-api-key` |
 | Pagination | Both GET endpoints use the shared pagination schema with default `page=1`, `limit=30`, max `limit=100` |
 | Catalog response | `GET /commerce/catalog` returns product records inside `data`, not top-level `items` |
 | Storefront response | `GET /commerce/storefront` returns storefront rows inside `data`, not top-level `shops` |
@@ -30,6 +31,7 @@ Public commerce browsing endpoints for product catalog, storefront metadata, and
 | Event validation | Event body is strict JSON; extra keys are rejected |
 | `accessAt` handling | `accessAt` is only string-length checked by the current schema; when present, the handler passes it to `new Date(...)` without separate date-format validation |
 | Event rate limit | Event logging is capped by IP and global ceilings even though the route is public |
+| Shop-code verification | `POST /commerce/storefront/shop-code-verifications` accepts either `shopCode` directly or a PDF upload; unmatched codes return `200` with `isValid=false` |
 
 ---
 
@@ -42,6 +44,7 @@ Public commerce browsing endpoints for product catalog, storefront metadata, and
 | `GET /commerce/catalog` | Yes | None |
 | `POST /commerce/catalog/events` | Yes | None |
 | `GET /commerce/storefront` | Yes | None |
+| `POST /commerce/storefront/shop-code-verifications` | Yes | None |
 | `OPTIONS` for the above routes | No | None |
 
 Required deployed header:
@@ -288,6 +291,80 @@ Each returned row is projected to:
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
 | 500 | `common.internalError` | Unexpected database or server error |
 
+### POST /commerce/storefront/shop-code-verifications
+
+Verify a storefront shop code against the current `ShopInfo` collection.
+
+**Lambda owner:** `commerce-catalog`  
+**Auth:** `x-api-key` only  
+**Content-Type:** `application/json` or `multipart/form-data`
+
+#### Request Body
+
+JSON mode:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `shopCode` | string | No | Trimmed, max 64 chars |
+
+Multipart mode:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `shopCode` | string | No | Optional direct verify value |
+| `file` | file | No | Optional. If `shopCode` is absent, endpoint expects at least one PDF file |
+
+#### Verification Rules
+
+1. If `shopCode` is provided, the endpoint verifies it case-insensitively against shop codes in DB.
+2. If `shopCode` is missing:
+   - no uploaded files => `400 catalog.errors.shopCodeOrPdfRequired`
+   - files exist but no PDF => `400 catalog.errors.invalidVerificationFileType`
+   - PDF exists => backend scans PDF bytes for known shop codes and verifies the extracted value
+3. If no match is found, the endpoint still returns `200` with `isValid: false`.
+
+#### Verification Success (200, matched)
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": {
+    "isValid": true,
+    "source": "shopCode",
+    "shopCode": "HK001",
+    "matchedShopCode": "HK001"
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+#### Verification Success (200, unmatched)
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": {
+    "isValid": false,
+    "source": "pdf",
+    "shopCode": null,
+    "matchedShopCode": null
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+#### Verification Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `catalog.errors.shopCodeOrPdfRequired` | Neither `shopCode` nor file was provided |
+| 400 | `catalog.errors.invalidVerificationFileType` | Multipart request provided files but none are PDF |
+| 400 | `common.invalidBodyParams` | Invalid body shape or `shopCode` exceeds max length |
+| 400 | `common.invalidJSON` | Malformed JSON body |
+| 500 | `common.internalError` | Unexpected database or server error |
+
 ---
 
 ## Frontend Integration Guide
@@ -295,9 +372,10 @@ Each returned row is projected to:
 1. Use `GET /commerce/storefront` to fetch server-authoritative `shopCode` and `price` values before checkout.
 2. Use `GET /commerce/catalog` for paginated browsing and read records from `data`, not old top-level `items`.
 3. Treat `POST /commerce/catalog/events` as fire-and-forget analytics. It is public but rate-limited, so the client should not retry aggressively on `429`.
+4. For shop-code checks, prefer sending `shopCode` directly. Use PDF upload only when frontend cannot reliably provide the code as text.
 
 ---
 
 ## Verification Snapshot
 
-This document is grounded in `functions/commerce-catalog/src/services/catalog.ts`, `storefront.ts`, `catalogEventBodySchema.ts`, and the route wiring in `template.yaml`.
+This document is grounded in `functions/commerce-catalog/src/services/catalog.ts`, `storefront.ts`, `catalogEventBodySchema.ts`, `verifyShopCodeBodySchema.ts`, and the route wiring in `template.yaml`.

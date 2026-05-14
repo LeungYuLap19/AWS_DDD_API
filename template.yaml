@@ -1898,6 +1898,14 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
+        CommerceStorefrontShopCodeVerificationsPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/storefront/shop-code-verifications
+            Method: POST
+            Auth:
+              Authorizer: NONE
         CommerceCatalogOPTIONS:
           Type: Api
           Properties:
@@ -1921,6 +1929,15 @@ Resources:
           Properties:
             RestApiId: !Ref RestApi
             Path: /commerce/storefront
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceStorefrontShopCodeVerificationsOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/storefront/shop-code-verifications
             Method: OPTIONS
             Auth:
               Authorizer: NONE

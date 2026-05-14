@@ -2,12 +2,13 @@
  * commerce-catalog Lambda — handler-level integration tests (Tier 2).
  *
  * Exercises the real exported `handler` (createApiGatewayHandler -> createRouter)
- * against all three commerce-catalog routes. MongoDB is mocked; no real DB.
+ * against all commerce-catalog routes. MongoDB is mocked; no real DB.
  *
  * Routes under test:
  *   GET  /commerce/catalog           — public, returns product list
  *   POST /commerce/catalog/events    — public, records product-view event
  *   GET  /commerce/storefront        — public, returns shop metadata
+ *   POST /commerce/storefront/shop-code-verifications — public, verifies storefront shop code
  *
  * Run:  npm test -- __tests__/commerce-catalog.test.js --runInBand
  * Pre-req: npm run build:ts  (builds dist/)
@@ -59,6 +60,53 @@ function createEvent({
     },
     isBase64Encoded: false,
   };
+}
+
+function createMultipartEvent({
+  path = '/commerce/storefront/shop-code-verifications',
+  resource = '/commerce/storefront/shop-code-verifications',
+  fields = {},
+  files = [],
+} = {}) {
+  const boundary = '----Boundary7MA4YWxkTrZu0gW';
+  const bodyChunks = [];
+
+  for (const [name, value] of Object.entries(fields)) {
+    bodyChunks.push(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
+      `${String(value)}\r\n`
+    );
+  }
+
+  for (const file of files) {
+    const fieldname = file.fieldname || 'file';
+    const filename = file.filename || 'upload.pdf';
+    const contentType = file.contentType || 'application/pdf';
+    const content = typeof file.content === 'string' ? file.content : String(file.content ?? '');
+    bodyChunks.push(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="${fieldname}"; filename="${filename}"\r\n` +
+      `Content-Type: ${contentType}\r\n\r\n` +
+      `${content}\r\n`
+    );
+  }
+
+  bodyChunks.push(`--${boundary}--\r\n`);
+
+  const event = createEvent({
+    method: 'POST',
+    path,
+    resource,
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+    },
+    body: null,
+  });
+  event.body = bodyChunks.join('');
+  event.isBase64Encoded = false;
+  return event;
 }
 
 function parseResponse(result) {
@@ -686,5 +734,111 @@ describe('GET /commerce/storefront', () => {
     );
 
     expect(parseResponse(result).statusCode).toBe(405);
+  });
+});
+
+// ─── POST /commerce/storefront/shop-code-verifications ──────────────────────
+
+describe('POST /commerce/storefront/shop-code-verifications', () => {
+  const sampleShops = [
+    { shopCode: 'HK01', shopName: 'PPC HK Central', price: 299 },
+    { shopCode: 'KLN09', shopName: 'PPC Kowloon', price: 199 },
+  ];
+
+  test('happy path — verifies a valid shopCode from JSON body', async () => {
+    const { handler } = loadHandlerWithMocks({ shopInfoResult: sampleShops });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/commerce/storefront/shop-code-verifications',
+        resource: '/commerce/storefront/shop-code-verifications',
+        body: { shopCode: 'HK01' },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.isValid).toBe(true);
+    expect(parsed.body.data.source).toBe('shopCode');
+    expect(parsed.body.data.matchedShopCode).toBe('HK01');
+  });
+
+  test('returns isValid=false for unknown shopCode', async () => {
+    const { handler } = loadHandlerWithMocks({ shopInfoResult: sampleShops });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/commerce/storefront/shop-code-verifications',
+        resource: '/commerce/storefront/shop-code-verifications',
+        body: { shopCode: 'UNKNOWN' },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.isValid).toBe(false);
+    expect(parsed.body.data.matchedShopCode).toBeNull();
+  });
+
+  test('returns 400 when neither shopCode nor PDF is provided', async () => {
+    const { handler } = loadHandlerWithMocks({ shopInfoResult: sampleShops });
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/commerce/storefront/shop-code-verifications',
+        resource: '/commerce/storefront/shop-code-verifications',
+        body: {},
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('catalog.errors.shopCodeOrPdfRequired');
+  });
+
+  test('happy path — extracts and verifies shop code from PDF multipart payload', async () => {
+    const { handler } = loadHandlerWithMocks({ shopInfoResult: sampleShops });
+    const event = createMultipartEvent({
+      files: [
+        {
+          fieldname: 'receipt',
+          filename: 'receipt.pdf',
+          contentType: 'application/pdf',
+          content: 'Payment receipt for order with shop code HK01',
+        },
+      ],
+    });
+
+    const result = await handler(event, createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.isValid).toBe(true);
+    expect(parsed.body.data.source).toBe('pdf');
+    expect(parsed.body.data.matchedShopCode).toBe('HK01');
+  });
+
+  test('returns 400 when multipart upload file is not PDF and no shopCode is provided', async () => {
+    const { handler } = loadHandlerWithMocks({ shopInfoResult: sampleShops });
+    const event = createMultipartEvent({
+      files: [
+        {
+          fieldname: 'receipt',
+          filename: 'receipt.txt',
+          contentType: 'text/plain',
+          content: 'shop code HK01',
+        },
+      ],
+    });
+
+    const result = await handler(event, createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('catalog.errors.invalidVerificationFileType');
   });
 });

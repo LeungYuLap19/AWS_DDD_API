@@ -170,6 +170,8 @@ Legend
       POST [x-api-key]
   /storefront
     GET [x-api-key]
+    /shop-code-verifications
+      POST [x-api-key]
   /orders
     GET [x-api-key, admin]
     POST [x-api-key, self]
