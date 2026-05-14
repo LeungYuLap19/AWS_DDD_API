@@ -69,6 +69,7 @@ const LIST_SUMMARY_FIELDS = [
   'ngoPetId',
   'createdAt',
   'updatedAt',
+  'isRegistered',
   'locationName',
   'position',
 ];
