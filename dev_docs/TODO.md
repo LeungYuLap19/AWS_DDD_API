@@ -56,13 +56,26 @@
 
 - [x] POST /commerce/storefront/shop-code-verifications
 
-- [ ] pet-biometric
+- [ ] commerce pricing must be backend-authoritative (item price, discount, delivery fee)
+  - target formula: `finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee`
+  - never trust client price math (`price`, `discount`, `deliveryFee` from frontend payload)
+  - endpoints to fix:
+  - `POST /commerce/orders`
+  - `GET /commerce/catalog`
+  - `GET /commerce/storefront`
+  - `POST /commerce/storefront/shop-code-verifications`
+
+- [ ] product ednpoints
+  - `GET /commerce/catalog/ptag-products`
+  - `GET /commerce/catalog/ptag-products/{productCode}`
+
+- [ ] pet-biometric - delay
   - GET /pet/biometric/{petId}
   - DELETE /pet/biometric/{petId}
   - POST /pet/biometric/{petId}/registrations
   - POST /pet/biometric/{petId}/verifications
 
-- [ ] ml-inference
+- [ ] ml-inference - delay
 
 ## Do Later / Can Set Aside
 
