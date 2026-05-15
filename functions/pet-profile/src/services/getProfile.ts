@@ -10,6 +10,16 @@ import { PUBLIC_TAG_PROJECTION } from './profileHelpers';
 
 const PET_VIEWS = new Set(['basic', 'detail', 'full']);
 
+async function loadLatestPetLostId(petId: string): Promise<string | null> {
+  const PetLost = mongoose.model('PetLost');
+  const record = await PetLost.findOne({ petId })
+    .sort({ createdAt: -1, _id: -1 })
+    .select({ _id: 1 })
+    .lean() as { _id?: mongoose.Types.ObjectId | string } | null;
+
+  return record?._id ? String(record._id) : null;
+}
+
 /**
  * Returns one owned pet profile using the requested response projection. The
  * `view` query parameter controls whether the caller receives basic, lineage,
@@ -29,10 +39,15 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
     view === 'basic' ? sanitizePetBasic(pet) :
     view === 'detail' ? sanitizePetLineage(pet) :
     sanitizePetFull(pet);
+  const data = { id: pet._id, ...(form ?? {}) } as Record<string, unknown>;
+
+  if (view === 'basic') {
+    data.latestPetLostId = await loadLatestPetLostId(String(pet._id));
+  }
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    data: { id: pet._id, ...(form ?? {}) },
+    data,
   });
 }
 

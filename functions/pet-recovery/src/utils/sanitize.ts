@@ -25,7 +25,9 @@ function stripInternalFields(raw: AnyRecord): AnyRecord {
 export function sanitizePetLost(record: unknown): AnyRecord | null {
   const raw = asPlainRecord(record);
   if (!raw) return null;
-  return stripInternalFields(raw);
+  const { petId, ...safe } = stripInternalFields(raw);
+  void petId;
+  return safe;
 }
 
 export function sanitizePetFound(record: unknown): AnyRecord | null {

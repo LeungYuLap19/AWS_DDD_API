@@ -181,10 +181,13 @@ Legend
       DELETE [x-api-key, owner]
   --- * ---
 
-  /medical
-    /reference
-      /deworm
+  /reference
+    /breed
+      /{animalType}
         GET [x-api-key]
+    /deworm
+      GET [x-api-key]
+  /medical
     /{petId}
       /general
         GET [x-api-key, owner]
@@ -263,6 +266,8 @@ Legend
       POST [x-api-key]
   /storefront
     GET [x-api-key]
+    /shop-code-verifications
+      POST [x-api-key]
   /orders
     GET [x-api-key, admin]
     POST [x-api-key, self]
@@ -743,11 +748,17 @@ sam deploy --config-env production
 | `PATCH /pet/adoption/{petId}` | `PUT /v2/pets/{petID}/pet-adoption/{adoptionId}` | `PetDetailInfo` | 更新 pet-owned adoption record。 |
 | `DELETE /pet/adoption/{petId}` | `DELETE /v2/pets/{petID}/pet-adoption/{adoptionId}` | `PetDetailInfo` | 刪除 pet-owned adoption record。 |
 
-### 7.8 Pet Medical
+### 7.8 Pet Reference
 
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |
-| `GET /pet/medical/reference/deworm` | `GET /deworm` | `GetBreed` | deworming reference content。 |
+| `GET /pet/reference/breed/{animalType}` | `GET /animal/breed/{species}/en`、`GET /animal/breed/{species}/zh` | `GetBreed` | breed lookup content。 |
+| `GET /pet/reference/deworm` | `GET /deworm` | `GetBreed` | deworming reference content。 |
+
+### 7.9 Pet Medical
+
+| 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
+| --- | --- | --- | --- |
 | `GET /pet/medical/{petId}/general` | `GET /pets/{petID}/medical-record` | `PetMedicalRecord` | 取得 general medical records。 |
 | `POST /pet/medical/{petId}/general` | `POST /pets/{petID}/medical-record` | `PetMedicalRecord` | 建立 general medical record。 |
 | `PATCH /pet/medical/{petId}/general/{medicalId}` | `PUT /pets/{petID}/medical-record/{medicalID}` | `PetMedicalRecord` | 更新 general medical record。 |
@@ -769,7 +780,7 @@ sam deploy --config-env production
 | `PATCH /pet/medical/{petId}/vaccination/{vaccineId}` | `PUT /pets/{petID}/vaccine-record/{vaccineID}` | `PetVaccineRecords` | 更新 vaccination record。 |
 | `DELETE /pet/medical/{petId}/vaccination/{vaccineId}` | `DELETE /pets/{petID}/vaccine-record/{vaccineID}` | `PetVaccineRecords` | 刪除 vaccination record。 |
 
-### 7.9 Pet Analysis
+### 7.10 Pet Analysis
 
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |
@@ -781,7 +792,7 @@ sam deploy --config-env production
 | `POST /pet/analysis/uploads/image` | `POST /util/uploadImage` | `EyeUpload` | generic image upload helper。 |
 | `POST /pet/analysis/uploads/breed-image` | `POST /util/uploadPetBreedImage` | `EyeUpload` | breed image upload helper。 |
 
-### 7.10 Pet Recovery
+### 7.11 Pet Recovery
 
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |
@@ -792,7 +803,7 @@ sam deploy --config-env production
 | `POST /pet/recovery/found` | `POST /v2/pets/pet-found` | `PetLostandFound` | 建立 found pet report。 |
 | `DELETE /pet/recovery/found/{petFoundID}` | `DELETE /v2/pets/pet-found/{petFoundID}` | `PetLostandFound` | 刪除 found pet report。 |
 
-### 7.11 Pet Biometric
+### 7.12 Pet Biometric
 
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |
@@ -800,7 +811,7 @@ sam deploy --config-env production
 | `POST /pet/biometric/registrations` | `POST /petBiometrics/register` | `PetBiometricRoutes` | 註冊或刷新 biometric reference set。 |
 | `POST /pet/biometric/verifications` | `POST /petBiometrics/verifyPet` | `PetBiometricRoutes` | 驗證 biometric match。 |
 
-### 7.12 Notifications
+### 7.13 Notifications
 
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |
@@ -808,7 +819,7 @@ sam deploy --config-env production
 | `PATCH /notifications/me/{notificationId}` | `PUT /v2/account/{userId}/notifications/{notificationId}` | `PetLostandFound` | archive notification。 |
 | `POST /notifications/dispatch` | `POST /v2/account/{userId}/notifications` | `PetLostandFound` | system dispatch notification，目標 userId 放 body。 |
 
-### 7.13 Commerce
+### 7.14 Commerce
 
 > Commerce 拆分成 3 個 Lambda：`commerce-catalog`、`commerce-orders`、`commerce-fulfillment`。
 
@@ -817,6 +828,7 @@ sam deploy --config-env production
 | `GET /commerce/catalog` | `GET /product/productList` | `GetBreed` | `commerce-catalog` | product catalog / reference list。 |
 | `POST /commerce/catalog/events` | `POST /product/productLog` | `GetBreed` | `commerce-catalog` | product access/view event logging。 |
 | `GET /commerce/storefront` | `GET /purchase/shop-info` | `purchaseConfirmation` | `commerce-catalog` | checkout/storefront metadata。 |
+| `POST /commerce/storefront/shop-code-verifications` | — | — | `commerce-catalog` | 驗證 shop code（可由 `shopCode` 或 PDF 內容解析）。 |
 | `GET /commerce/orders` | `GET /purchase/orders` | `purchaseConfirmation` | `commerce-orders` | order list。 |
 | `POST /commerce/orders` | `POST /purchase/confirmation` | `purchaseConfirmation` | `commerce-orders` | 建立 order + order verification + tag data。 |
 | `GET /commerce/orders/{tempId}` | `GET /v2/orderVerification/ordersInfo/{tempId}` | `OrderVerification` | `commerce-orders` | 取得 linked order info / pet contact summary。 |
@@ -830,7 +842,7 @@ sam deploy --config-env production
 | `GET /commerce/fulfillment/share-links/whatsapp/{_id}` | `GET /v2/orderVerification/whatsapp-order-link/{_id}` | `OrderVerification` | `commerce-fulfillment` | WhatsApp deep-link 資料。 |
 | `POST /commerce/commands/ptag-detection-email` | `POST /purchase/send-ptag-detection-email` | `purchaseConfirmation` | `commerce-fulfillment` | 發送 PTag detection email command。 |
 
-### 7.14 Logistics
+### 7.15 Logistics
 
 | 新 Endpoint | Legacy Endpoint | Legacy Lambda | 功能 |
 | --- | --- | --- | --- |

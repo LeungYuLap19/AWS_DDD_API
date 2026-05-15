@@ -417,8 +417,8 @@ describe('pet-recovery handler Tier 2 integration', () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const ownerUserId = new mongoose.Types.ObjectId().toString();
       const lostDocs = [
-        { _id: 'a', name: 'Mochi', lostDate: new Date('2025-01-02'), userId: ownerUserId, ownerContact1: 91234567, __v: 0 },
-        { _id: 'b', name: 'Bao', lostDate: new Date('2025-01-01'), userId: ownerUserId, ownerContact1: 98765432, __v: 0 },
+        { _id: 'a', petId: new mongoose.Types.ObjectId().toString(), name: 'Mochi', lostDate: new Date('2025-01-02'), userId: ownerUserId, ownerContact1: 91234567, __v: 0 },
+        { _id: 'b', petId: new mongoose.Types.ObjectId().toString(), name: 'Bao', lostDate: new Date('2025-01-01'), userId: ownerUserId, ownerContact1: 98765432, __v: 0 },
       ];
 
       const { handler, petLostModel } = loadHandlerWithMocks({ petLostList: lostDocs });
@@ -439,6 +439,7 @@ describe('pet-recovery handler Tier 2 integration', () => {
       expect(parsed.body.data).toHaveLength(2);
       expect(parsed.body.data[0]).not.toHaveProperty('__v');
       expect(parsed.body.data[0]).not.toHaveProperty('userId');
+      expect(parsed.body.data[0]).not.toHaveProperty('petId');
       expect(parsed.body.data[0].ownerContact1).toBe(91234567);
       expect(petLostModel.find).toHaveBeenCalledWith({});
     });

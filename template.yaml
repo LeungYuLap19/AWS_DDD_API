@@ -190,8 +190,12 @@ Parameters:
     NoEcho: true
   LambdaReservedConcurrency:
     Type: Number
-    Default: 50
-    Description: Reserved concurrent execution limit per Lambda function. Set to a value appropriate for your account concurrency quota.
+    Default: 45
+    Description: Reserved concurrent execution limit per Lambda function. Default 45 keeps headroom for the account-wide unreserved concurrency floor when this stack adds new functions.
+  DeploymentFingerprint:
+    Type: String
+    Default: ''
+    Description: Fingerprint of the effective deployment config used to force alias version publication when config-only values change.
   MlInferenceImageUri:
     Type: String
     Default: ''
@@ -227,8 +231,6 @@ Globals: # shared default settings applied to all resources of a given type, unl
     DeadLetterQueue:
       Type: SQS
       TargetArn: !GetAtt LambdaDeadLetterQueue.Arn
-    ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
-
 Resources:
   ApiAccessLogGroup:
     Type: AWS::Logs::LogGroup
@@ -528,6 +530,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
 
   PipelineSmokeFunction: # CI/CD smoke test example
     # - proves deployment pipeline works
@@ -542,6 +546,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         PipelineSmokeRootGET:
           Type: Api
@@ -622,6 +628,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           REFRESH_TOKEN_MAX_AGE_SEC: !Ref RefreshTokenMaxAgeSec
@@ -771,6 +779,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         UserMeGET:
           Type: Api
@@ -815,6 +825,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         NgoMeGET:
           Type: Api
@@ -869,6 +881,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -961,6 +975,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         PetSourceGET:
           Type: Api
@@ -1009,6 +1025,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         PetTransferPOST:
           Type: Api
@@ -1085,6 +1103,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           ADOPTION_MONGODB_URI: !Ref AdoptionMongoDbUri
@@ -1176,6 +1196,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         PetMedicalGeneralListGET:
           Type: Api
@@ -1427,23 +1449,6 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetMedicalReferenceDewormGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/reference/deworm
-            Method: GET
-            Auth:
-              Authorizer: NONE
-        PetMedicalReferenceDewormOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/reference/deworm
-            Method: OPTIONS
-            Auth:
-              Authorizer: NONE
-              ApiKeyRequired: false
 
   PetAnalysisFunction:
     Type: AWS::Serverless::Function
@@ -1457,6 +1462,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1566,6 +1573,54 @@ Resources:
               Authorizer: NONE
               ApiKeyRequired: false
 
+  PetReferenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-reference'
+      CodeUri: dist/functions/pet-reference/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      Events:
+        PetReferenceBreedGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/breed/{animalType}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        PetReferenceBreedOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/breed/{animalType}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetReferenceDewormGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/deworm
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        PetReferenceDewormOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/deworm
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+
   PetRecoveryFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1578,6 +1633,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1668,6 +1725,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           ML_INFERENCE_FUNCTION_NAME: !Sub '${ProjectName}-${StageName}-ml-inference'
@@ -1777,6 +1836,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         NotificationsMeGET:
           Type: Api
@@ -1839,6 +1900,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Events:
         CommerceCatalogGET:
           Type: Api
@@ -1868,6 +1931,14 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
+        CommerceStorefrontShopCodeVerificationsPOST:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/storefront/shop-code-verifications
+            Method: POST
+            Auth:
+              Authorizer: NONE
         CommerceCatalogOPTIONS:
           Type: Api
           Properties:
@@ -1891,6 +1962,15 @@ Resources:
           Properties:
             RestApiId: !Ref RestApi
             Path: /commerce/storefront
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceStorefrontShopCodeVerificationsOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/storefront/shop-code-verifications
             Method: OPTIONS
             Auth:
               Authorizer: NONE
@@ -1944,6 +2024,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -2021,6 +2103,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           SMTP_HOST: !Ref CommerceSmtpHost
@@ -2158,6 +2242,8 @@ Resources:
         - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
           SF_CUSTOMER_CODE: !Ref SfCustomerCode

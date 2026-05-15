@@ -83,6 +83,7 @@ function createFindChain(value) {
     sort: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(value),
   };
 }
@@ -140,6 +141,7 @@ function loadHandlerWithMocks({
   updatedPetDoc = null,
   petList = [],
   petCount = 0,
+  petLostDoc = null,
   publicTagPet = null,
   duplicateTag = null,
   duplicateNgoPet = null,
@@ -205,6 +207,7 @@ function loadHandlerWithMocks({
 
   const petFind = jest.fn(() => petFindChain);
   const petCountDocuments = jest.fn().mockResolvedValue(petCount);
+  const petLostFindOne = jest.fn(() => createFindChain(petLostDoc));
   const userFindOne = jest.fn(() => createLeanResult(userDoc));
   const rateLimitModel = {
     findOneAndUpdate: jest.fn().mockResolvedValue(rateLimitEntry),
@@ -229,6 +232,10 @@ function loadHandlerWithMocks({
     findOne: userFindOne,
   };
 
+  const petLostModel = {
+    findOne: petLostFindOne,
+  };
+
   const mongooseMock = {
     Schema: actualMongoose.Schema,
     Types: actualMongoose.Types,
@@ -238,6 +245,7 @@ function loadHandlerWithMocks({
     isValidObjectId: actualMongoose.isValidObjectId,
     model: jest.fn((name) => {
       if (name === 'Pet') return petModel;
+      if (name === 'PetLost') return petLostModel;
       if (name === 'User') return userModel;
       if (name === 'NgoCounters') return ngoCountersModel;
       if (name === 'ImageCollection') return imageCollectionModel;
@@ -310,6 +318,7 @@ function loadHandlerWithMocks({
     handler,
     authorizer,
     petModel,
+    petLostModel,
     petFindChain,
     userModel,
     ngoCountersModel,
@@ -592,6 +601,7 @@ describe('pet-profile handler Tier 2 integration', () => {
     test('returns only basic fields for GET /pet/profile/{petId}?view=basic', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
+      const petLostId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
         authUserId: userId,
         petDoc: {
@@ -603,6 +613,7 @@ describe('pet-profile handler Tier 2 integration', () => {
           motherName: 'Luna',
           deleted: false,
         },
+        petLostDoc: { _id: petLostId },
       });
 
       const result = await handler(
@@ -621,6 +632,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.data.name).toBe('Mochi');
       expect(parsed.body.data.tagId).toBe('TAG-001');
+      expect(parsed.body.data.latestPetLostId).toBe(petLostId);
       expect(parsed.body.data.chipId).toBeUndefined();
       expect(parsed.body.data.motherName).toBeUndefined();
     });
@@ -711,7 +723,16 @@ describe('pet-profile handler Tier 2 integration', () => {
             animal: 'Dog',
             ownerContact1: 91234567,
             tagId: 'TAG-001',
+            medicalRecordsCount: 2,
+            medicationRecordsCount: 1,
+            dewormRecordsCount: 3,
+            vaccineRecordsCount: 4,
             locationName: 'Shelter A',
+            position: '22.3000,114.1700',
+            breed: 'Shiba',
+            receivedDate: new Date('2024-01-01T00:00:00.000Z'),
+            createdAt: new Date('2024-02-01T00:00:00.000Z'),
+            updatedAt: new Date('2024-02-02T00:00:00.000Z'),
           },
         ],
         petCount: 1,
@@ -731,11 +752,66 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.pagination.total).toBe(1);
       expect(Array.isArray(parsed.body.data)).toBe(true);
+      expect(parsed.body.data[0]._id).toBeDefined();
       expect(parsed.body.data[0].name).toBe('Mochi');
-      expect(parsed.body.data[0].location).toBe('Shelter A');
+      expect(parsed.body.data[0].tagID).toBe('TAG-001');
+      expect(parsed.body.data[0].medical).toBe(2);
+      expect(parsed.body.data[0].medication).toBe(1);
+      expect(parsed.body.data[0].deworm).toBe(3);
+      expect(parsed.body.data[0].vaccineRecords).toBe(4);
       expect(parsed.body.data[0].userId).toBeUndefined();
       expect(parsed.body.data[0].ownerContact1).toBeUndefined();
       expect(parsed.body.data[0].tagId).toBeUndefined();
+      expect(parsed.body.data[0].location).toBeUndefined();
+      expect(parsed.body.data[0].position).toBeUndefined();
+      expect(parsed.body.data[0].createdAt).toBeUndefined();
+      expect(parsed.body.data[0].updatedAt).toBeUndefined();
+      expect(parsed.body.data[0].receivedDate).toBeUndefined();
+      expect(parsed.body.data[0].breed).toBeUndefined();
+    });
+
+    test('preserves isRegistered in GET /pet/profile/me list summaries, including false values', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const { handler } = loadHandlerWithMocks({
+        authUserId: userId,
+        petList: [
+          {
+            _id: new mongoose.Types.ObjectId().toString(),
+            userId,
+            name: 'Mochi',
+            animal: 'Dog',
+            isRegistered: false,
+          },
+          {
+            _id: new mongoose.Types.ObjectId().toString(),
+            userId,
+            name: 'Luna',
+            animal: 'Dog',
+            isRegistered: true,
+          },
+        ],
+        petCount: 2,
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/profile/me',
+          resource: '/pet/profile/me',
+          authorizer: createAuthorizer({ userId }),
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      const petsByName = Object.fromEntries(parsed.body.data.map((pet) => [pet.name, pet]));
+
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.pagination.total).toBe(2);
+      expect(Object.prototype.hasOwnProperty.call(petsByName.Mochi, 'isRegistered')).toBe(true);
+      expect(petsByName.Mochi.isRegistered).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(petsByName.Luna, 'isRegistered')).toBe(true);
+      expect(petsByName.Luna.isRegistered).toBe(true);
     });
 
     test('returns NGO list results with paging and sort metadata for GET /pet/profile/me NGO scope', async () => {

@@ -105,6 +105,13 @@ npm run local:api
 
 `RequestAuthorizerFunction` 是 API 預設 authorizer。
 
+大部分 protected route 的 auth flow 是：
+
+- client request
+- API Gateway
+- `RequestAuthorizerFunction`
+- domain Lambda
+
 目前使用：
 
 - `Authorization: Bearer <jwt>`
@@ -119,6 +126,10 @@ authorizer 會把 claims 放進 API Gateway authorizer context，後續 domain L
 - `ngoId`
 - `ngoName`
 
+這代表 Bearer JWT 會先進 authorizer Lambda；只有 verify 成功、policy `Allow` 的 request 才會進後面的 domain Lambda。
+
+如果 token 缺失、過期、被竄改，或缺少必要 claim，domain Lambda 通常不會執行，API Gateway 會直接回 gateway-generated `401/403`。這類 response 不保證有 shared `{ success, errorKey, requestId }` envelope。
+
 補充：
 
 - `auth/challenges/verify` 這條 route 是 **optional auth**
@@ -126,7 +137,7 @@ authorizer 會把 claims 放進 API Gateway authorizer context，後續 domain L
 - 但 Lambda 內會在 verify flow 嘗試解析 `Authorization` header
 - 沒有 Bearer token：走 public verify/login/register path
 - Bearer token 有效：走 link email / phone path
-- Bearer token 存在但無效：直接 `401`
+- Bearer token 存在但無效：由 `auth` Lambda 直接回 `401 common.unauthorized`
 
 ### API key
 
@@ -145,7 +156,9 @@ API 目前要求 `x-api-key`。
 
 - 有 `x-api-key` 但沒有 Bearer token：走 public verify flow
 - 有 `x-api-key` 且 Bearer token 有效：走 link email / phone flow
-- Bearer token 存在但無效：直接 `401`
+- Bearer token 存在但無效：這條 route 會進 `auth` Lambda，並回 unified `401 common.unauthorized`
+
+相對地，其它掛 default authorizer 的 protected route，如果 Bearer JWT 過期或無效，通常會在 API Gateway / authorizer 階段被擋下來，不會進 domain Lambda，也不應假設 response 一定帶 `errorKey`。
 
 ### request body validation
 
@@ -205,7 +218,7 @@ development stack 已在 AWS 上實測：
 
 ### alias / layer 行為
 
-這個 repo 現在依賴以下 SAM 行為確保 layer 更新會推進到 alias：
+這個 repo 依賴以下 SAM 行為讓大部分 function 更新會推進到 alias：
 
 - `SharedRuntimeLayer.Properties.PublishLambdaVersion: true`
 - every aliased function:
@@ -213,6 +226,8 @@ development stack 已在 AWS 上實測：
   - `AutoPublishAliasAllProperties: true`
 
 這樣 shared layer 改動時，function 會 publish 新 version，alias 也會跟著移動，不會停留在舊 layer version。
+
+注意：env / secret 這類由 deploy parameter 帶入的 config-only 變更，SAM 可能只更新 `$LATEST`，但不會自動推進 alias 到新 version。這個 repo 現在會在 workflow 內計算一個 `DeploymentFingerprint`，並把 `AutoPublishCodeSha256: !Ref DeploymentFingerprint` 設在每個 aliased `AWS::Serverless::Function` 上，強制這類 config-only 變更也 publish 新 version。deploy 後還會再執行 `script/verify-lambda-alias-sync.cjs`，如果 alias 與 `$LATEST` 的 code / env 不一致，workflow 會直接 fail，避免 deployment 看起來成功但實際上還在跑舊 config。
 
 ## 目錄結構
 

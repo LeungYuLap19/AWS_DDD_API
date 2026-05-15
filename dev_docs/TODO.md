@@ -45,11 +45,16 @@
 ## TODO endpoints
 
 - [x] pet-medical lambda
-  - GET /pet/medical/reference/deworm
   - GET /pet/medical/{petId}/vaccination
   - POST /pet/medical/{petId}/vaccination
   - PATCH /pet/medical/{petId}/vaccination/{vaccineId}
   - DELETE /pet/medical/{petId}/vaccination/{vaccineId}
+
+- [x] pet-reference lambda
+  - GET /pet/reference/breed/{animalType}?lang={lang}
+  - GET /pet/reference/deworm
+
+- [x] POST /commerce/storefront/shop-code-verifications
 
 - [ ] pet-biometric
   - GET /pet/biometric/{petId}
@@ -65,7 +70,7 @@
   - db connection, ratelimit, self access
 - [ ] mongodb indexing - delay
 - [ ] admin protected routes need db identity checking
-- [ ] add CORS restrictions
+- [ ] better notification flow (currently allow cross user notification writes)
 - [ ] business logics optimisation - delay
 - [ ] path optimization (consider move PATCH pet profile by {petId} to /pet-profile/me) - delay
 - [ ] Remove dead S3 env vars from `PetBiometricFunction` and `CommerceFulfillmentFunction`
