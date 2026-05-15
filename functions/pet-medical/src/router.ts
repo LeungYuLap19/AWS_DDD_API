@@ -2,9 +2,6 @@ import { createRouter } from '@aws-ddd-api/shared';
 import { response } from './utils/response';
 
 const routes = {
-  // Reference data (public)
-  'GET /pet/medical/reference/deworm': () => import('./services/reference').then((m) => m.handleGetDewormReference),
-
   // General medical records
   'GET /pet/medical/{petId}/general': () => import('./services/medical').then(m => m.handleListMedicalRecords),
   'POST /pet/medical/{petId}/general': () => import('./services/medical').then(m => m.handleCreateMedicalRecord),

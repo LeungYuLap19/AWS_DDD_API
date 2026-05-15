@@ -47,6 +47,7 @@ const functions = [
   'pet-adoption',
   'pet-analysis',
   'pet-biometric',
+  'pet-reference',
   'pet-medical',
   'pet-profile',
   'pet-recovery',

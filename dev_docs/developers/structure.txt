@@ -81,10 +81,14 @@ Legend
       PATCH [x-api-key, owner]
       DELETE [x-api-key, owner]
 
-  /medical
-    /reference
-      /deworm
+  /reference
+    /breed
+      /{animalType}
         GET [x-api-key]
+    /deworm
+      GET [x-api-key]
+
+  /medical
     /{petId}
       /general
         GET [x-api-key, owner]

@@ -1,0 +1,9 @@
+{
+  "petReference": {
+    "errors": {
+      "invalidAnimalType": "需要 animalType 參數",
+      "invalidLang": "lang 只能是 en 或 zh",
+      "breedListNotFound": "找不到指定種類與語言的品種資料"
+    }
+  }
+}

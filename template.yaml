@@ -1449,23 +1449,6 @@ Resources:
             Auth:
               Authorizer: NONE
               ApiKeyRequired: false
-        PetMedicalReferenceDewormGET:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/reference/deworm
-            Method: GET
-            Auth:
-              Authorizer: NONE
-        PetMedicalReferenceDewormOPTIONS:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /pet/medical/reference/deworm
-            Method: OPTIONS
-            Auth:
-              Authorizer: NONE
-              ApiKeyRequired: false
 
   PetAnalysisFunction:
     Type: AWS::Serverless::Function
@@ -1584,6 +1567,54 @@ Resources:
           Properties:
             RestApiId: !Ref RestApi
             Path: /pet/analysis/uploads/breed-image
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+
+  PetReferenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${StageName}-pet-reference'
+      CodeUri: dist/functions/pet-reference/
+      Handler: index.handler
+      Role: !GetAtt SharedFunctionRole.Arn
+      Layers:
+        - !Ref SharedRuntimeLayer
+      AutoPublishAlias: !Ref LambdaAliasName
+      AutoPublishAliasAllProperties: true
+      AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      Events:
+        PetReferenceBreedGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/breed/{animalType}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        PetReferenceBreedOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/breed/{animalType}
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        PetReferenceDewormGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/deworm
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        PetReferenceDewormOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /pet/reference/deworm
             Method: OPTIONS
             Auth:
               Authorizer: NONE
