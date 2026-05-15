@@ -214,9 +214,6 @@ Globals: # shared default settings applied to all resources of a given type, unl
       - arm64 # Graviton2: ~20% cheaper compute, faster cold start vs x86_64
     Timeout: 10
     MemorySize: 256
-    VpcConfig:
-      SecurityGroupIds: !Ref LambdaSecurityGroupIds
-      SubnetIds: !Ref LambdaSubnetIds
     Environment:
       Variables:
         PROJECT_NAME: !Ref ProjectName
@@ -515,7 +512,6 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: !Sub '${ProjectName}-${StageName}-lambda-dlq'
           PolicyDocument:
@@ -555,6 +551,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         PipelineSmokeRootGET:
           Type: Api
@@ -637,6 +636,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           REFRESH_TOKEN_MAX_AGE_SEC: !Ref RefreshTokenMaxAgeSec
@@ -788,6 +790,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         UserMeGET:
           Type: Api
@@ -834,6 +839,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         NgoMeGET:
           Type: Api
@@ -890,6 +898,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -984,6 +995,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         PetSourceGET:
           Type: Api
@@ -1034,6 +1048,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         PetTransferPOST:
           Type: Api
@@ -1112,6 +1129,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           ADOPTION_MONGODB_URI: !Ref AdoptionMongoDbUri
@@ -1205,6 +1225,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         PetMedicalGeneralListGET:
           Type: Api
@@ -1471,6 +1494,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1592,6 +1618,9 @@ Resources:
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         PetReferenceBreedGET:
           Type: Api
@@ -1642,6 +1671,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -1734,6 +1766,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           ML_INFERENCE_FUNCTION_NAME: !Sub '${ProjectName}-${StageName}-ml-inference'
@@ -1845,6 +1880,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         NotificationsMeGET:
           Type: Api
@@ -1909,6 +1947,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Events:
         CommerceCatalogGET:
           Type: Api
@@ -2033,6 +2074,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           AWS_BUCKET_NAME: !Ref S3BucketName
@@ -2112,6 +2156,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           SMTP_HOST: !Ref CommerceSmtpHost
@@ -2251,6 +2298,9 @@ Resources:
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
+      VpcConfig:
+        SecurityGroupIds: !Ref LambdaSecurityGroupIds
+        SubnetIds: !Ref LambdaSubnetIds
       Environment:
         Variables:
           SF_CUSTOMER_CODE: !Ref SfCustomerCode
