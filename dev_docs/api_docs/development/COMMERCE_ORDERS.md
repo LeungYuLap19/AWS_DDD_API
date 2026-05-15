@@ -289,6 +289,8 @@ The backend detects MIME type from file bytes, not just the declared multipart c
 | `lang` | enum string | No | `chn` or `eng`, defaults to `eng` |
 
 The multipart field set is strict. Unknown text fields are rejected.
+For example, sending client-side `price` in checkout body is rejected with
+`400 common.invalidBodyParams`.
 
 #### Order Side Effects
 
@@ -333,7 +335,7 @@ If order-verification creation fails after the order is saved, the handler compe
 | 400 | `orders.errors.invalidShopCode` | Unknown non-empty `shopCode` |
 | 400 | `orders.errors.invalidFileType` | Unsupported upload format |
 | 400 | `orders.errors.tooManyFiles` | More than one file supplied for `pet_img` or `discount_proof` |
-| 400 | `common.invalidBodyParams` | Strict-schema violation on text fields |
+| 400 | `common.invalidBodyParams` | Strict-schema violation (for example unknown/extra text fields such as `price`) |
 | 409 | `orders.errors.duplicateOrder` | `tempId` already exists |
 | 413 | `orders.errors.fileTooLarge` | Uploaded file exceeds 4 MB |
 | 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
