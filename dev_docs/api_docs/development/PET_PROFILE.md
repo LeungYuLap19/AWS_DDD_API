@@ -214,6 +214,10 @@ Delete success:
 - `updatedAt`
 - `location`
 - `position`
+- `latestPetLostId`
+
+`latestPetLostId` is the newest linked lost-report id for this pet, selected by
+`createdAt` descending. It is `null` when no linked lost report exists.
 
 #### Detail View Fields
 

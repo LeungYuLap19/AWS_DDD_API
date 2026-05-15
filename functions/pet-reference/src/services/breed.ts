@@ -23,7 +23,7 @@ function decodeAnimalType(raw: unknown): { ok: true; value: unknown } | { ok: fa
   }
 }
 
-function parseLangQuery(ctx: RouteContext): { ok: true; lang: 'en' | 'zh' } | { ok: false; statusCode: number; errorKey: string } {
+function parseLangQuery(ctx: RouteContext): { ok: true; lang: 'en' | 'zh' | 'cn' } | { ok: false; statusCode: number; errorKey: string } {
   const parsed = breedLookupQuerySchema.safeParse(ctx.event.queryStringParameters ?? {});
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

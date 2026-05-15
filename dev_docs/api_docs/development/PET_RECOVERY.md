@@ -197,12 +197,12 @@ List routes sanitize records before returning them.
 Removed from list items:
 
 - `userId`
+- `petId`
 - `__v`
 
 Returned fields vary by lost vs found record, but commonly include:
 
 - `_id`
-- `petId` for lost records when linked
 - `name` for lost records
 - `animal`
 - `breed`
