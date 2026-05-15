@@ -386,6 +386,13 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/biometric/*'
                   - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*/face-id/registrations/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*/face-id/verifications/*'
 
   PetProfileFunctionRole:
     Type: AWS::IAM::Role
