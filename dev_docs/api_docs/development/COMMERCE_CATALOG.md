@@ -322,6 +322,7 @@ Multipart mode:
    - files exist but no PDF => `400 catalog.errors.invalidVerificationFileType`
    - PDF exists => backend scans PDF bytes for known shop codes and verifies the extracted value
 3. If no match is found, the endpoint still returns `200` with `isValid: false`.
+4. Matched responses include canonical storefront `price`; unmatched responses return `price: null`.
 
 #### Verification Success (200, matched)
 
@@ -333,7 +334,8 @@ Multipart mode:
     "isValid": true,
     "source": "shopCode",
     "shopCode": "HK001",
-    "matchedShopCode": "HK001"
+    "matchedShopCode": "HK001",
+    "price": 299
   },
   "requestId": "aws-lambda-request-id"
 }
@@ -349,7 +351,8 @@ Multipart mode:
     "isValid": false,
     "source": "pdf",
     "shopCode": null,
-    "matchedShopCode": null
+    "matchedShopCode": null,
+    "price": null
   },
   "requestId": "aws-lambda-request-id"
 }

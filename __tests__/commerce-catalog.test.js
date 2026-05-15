@@ -763,6 +763,7 @@ describe('POST /commerce/storefront/shop-code-verifications', () => {
     expect(parsed.body.data.isValid).toBe(true);
     expect(parsed.body.data.source).toBe('shopCode');
     expect(parsed.body.data.matchedShopCode).toBe('HK01');
+    expect(parsed.body.data.price).toBe(299);
   });
 
   test('returns isValid=false for unknown shopCode', async () => {
@@ -782,6 +783,7 @@ describe('POST /commerce/storefront/shop-code-verifications', () => {
     expect(parsed.statusCode).toBe(200);
     expect(parsed.body.data.isValid).toBe(false);
     expect(parsed.body.data.matchedShopCode).toBeNull();
+    expect(parsed.body.data.price).toBeNull();
   });
 
   test('returns 400 when neither shopCode nor PDF is provided', async () => {
@@ -821,6 +823,7 @@ describe('POST /commerce/storefront/shop-code-verifications', () => {
     expect(parsed.body.data.isValid).toBe(true);
     expect(parsed.body.data.source).toBe('pdf');
     expect(parsed.body.data.matchedShopCode).toBe('HK01');
+    expect(parsed.body.data.price).toBe(299);
   });
 
   test('returns 400 when multipart upload file is not PDF and no shopCode is provided', async () => {
