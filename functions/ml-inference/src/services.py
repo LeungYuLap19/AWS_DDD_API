@@ -79,26 +79,21 @@ def verify_op(invocation: Any) -> Mapping[str, Any]:
     if threshold < 0:
         raise MlInferenceError(400, "mlInference.invalidRequest", "threshold must be >= 0")
 
-    if not candidates:
-        return {
-            "status": "no_enrollment",
-            "similarity": None,
-            "angle": None,
-            "threshold": threshold,
-            "petId": invocation.pet_id,
-            "petType": pet_type,
-            "image": {"bucket": bucket, "key": key},
-        }
+    # Deterministic success stub used for end-to-end integration testing.
+    # Keep request validation and shape checks above so payload wiring is still
+    # exercised while ML core is not integrated yet.
+    candidate_count = len(candidates)
+    angle = "front-face"
+    if candidates:
+        angle = require_angle(candidates[0])
 
-    # Stub response aligned with ML_server VerifyResponse shape.
-    # Replace these fixed values when ML core is plugged in.
     return {
-        "status": "no_match",
-        "similarity": 0.0,
-        "angle": require_angle(candidates[0]),
+        "status": "matched",
+        "similarity": 100.0,
+        "angle": angle,
         "threshold": threshold,
         "petId": invocation.pet_id,
         "petType": pet_type,
         "image": {"bucket": bucket, "key": key},
-        "candidateCount": len(candidates),
+        "candidateCount": candidate_count,
     }
