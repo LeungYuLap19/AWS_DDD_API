@@ -198,8 +198,8 @@ Parameters:
     NoEcho: true
   LambdaReservedConcurrency:
     Type: Number
-    Default: 50
-    Description: Reserved concurrent execution limit per Lambda function. Set to a value appropriate for your account concurrency quota.
+    Default: 45
+    Description: Reserved concurrent execution limit per Lambda function. Default 45 keeps headroom for the account-wide unreserved concurrency floor when this stack adds new functions.
   DeploymentFingerprint:
     Type: String
     Default: ''
