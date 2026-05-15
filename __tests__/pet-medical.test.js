@@ -131,9 +131,6 @@ function loadHandlerWithMocks({
   const dewormModel = makeRecordModel();
   const bloodTestModel = makeRecordModel();
   const vaccineModel = makeRecordModel();
-  const anthelminticModel = {
-    find: jest.fn(() => createLeanResult([])),
-  };
   const rateLimitModel = {
     findOne: jest.fn(() => ({
       lean: jest.fn().mockResolvedValue(null),
@@ -155,7 +152,6 @@ function loadHandlerWithMocks({
       if (name === 'Deworm_Records') return dewormModel;
       if (name === 'blood_tests') return bloodTestModel;
       if (name === 'Vaccine_Records') return vaccineModel;
-      if (name === 'Anthelmintic') return anthelminticModel;
       if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model ${name}`);
     }),
@@ -180,7 +176,6 @@ function loadHandlerWithMocks({
     dewormModel,
     bloodTestModel,
     vaccineModel,
-    anthelminticModel,
     rateLimitModel,
     mongooseMock,
   };
@@ -1472,67 +1467,4 @@ describe('pet-medical handler Tier 2 integration', () => {
     });
   });
 
-  describe('Deworm reference endpoint (GET /pet/medical/reference/deworm)', () => {
-    test('returns 200 and projected brandName list without auth', async () => {
-      const { handler, anthelminticModel } = loadHandlerWithMocks();
-      const brandId = new mongoose.Types.ObjectId();
-      anthelminticModel.find.mockReturnValueOnce(
-        createLeanResult([{ _id: brandId, brandName: 'NexGard', _otherInternal: 'leak?' }])
-      );
-      const result = await handler(
-        createEvent({
-          method: 'GET',
-          path: '/pet/medical/reference/deworm',
-          resource: '/pet/medical/reference/deworm',
-        }),
-        createContext()
-      );
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.message).toBe('Retrieved successfully');
-      expect(parsed.body.data).toEqual([
-        { _id: brandId.toString(), brandName: 'NexGard' },
-      ]);
-      // Internal fields like `_otherInternal` must not leak through the projection.
-      expect(parsed.body.data[0]).not.toHaveProperty('_otherInternal');
-    });
-
-    test('returns 429 when over per-IP rate limit', async () => {
-      const { handler, anthelminticModel } = loadHandlerWithMocks({
-        rateLimitEntry: {
-          count: 999,
-          expireAt: new Date(Date.now() + 30_000),
-          windowStart: new Date(),
-        },
-      });
-      const result = await handler(
-        createEvent({
-          method: 'GET',
-          path: '/pet/medical/reference/deworm',
-          resource: '/pet/medical/reference/deworm',
-        }),
-        createContext()
-      );
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(429);
-      expect(parsed.body.errorKey).toBe('common.rateLimited');
-      expect(anthelminticModel.find).not.toHaveBeenCalled();
-    });
-
-    test('returns 200 with empty data when the reference collection is empty', async () => {
-      const { handler, anthelminticModel } = loadHandlerWithMocks();
-      anthelminticModel.find.mockReturnValueOnce(createLeanResult([]));
-      const result = await handler(
-        createEvent({
-          method: 'GET',
-          path: '/pet/medical/reference/deworm',
-          resource: '/pet/medical/reference/deworm',
-        }),
-        createContext()
-      );
-      const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.data).toEqual([]);
-    });
-  });
 });

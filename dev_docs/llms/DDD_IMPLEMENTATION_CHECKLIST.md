@@ -165,7 +165,7 @@ Every domain Lambda in `AWS_DDD_API` should converge toward this shape:
 ```text
 functions/<domain>/
   index.ts
-  package.json                  # required for deploy packaging; include runtime deps used by this lambda
+  package.json                  # optional in current esbuild flow; legacy lambdas may still keep one as metadata
   src/
     router.ts
     config/
@@ -343,35 +343,40 @@ Examples:
 
 ### 4.9 Packaging
 
-Each Lambda should have a function-local `package.json`.
+Current packaging is driven by esbuild bundling, not by per-function `npm install`.
 
-This is not only for dependency declaration.
+Current build path:
 
-It is also part of the deploy packaging contract for `dist/`.
+- `script/esbuild-functions.cjs` bundles each Lambda to `dist/functions/<domain>/index.js`
+- non-layer dependencies are bundled into the single output file unless explicitly marked `external`
+- `script/prepare-dist.cjs` copies only the extra runtime artifacts that still need to accompany the bundle
+- `sam build` then packages from `dist/`
 
-Current example:
+Implication:
 
-- `functions/auth/package.json`
-- `functions/user/package.json`
+- a function-local `package.json` is no longer required for deploy packaging by default
+- existing function-local manifests may remain as metadata or as historical dependency documentation
+- adding a new Lambda does not require adding a function-local manifest unless the function genuinely needs non-bundled runtime packaging metadata
 
 Required rule:
 
-- when creating a new Lambda under `functions/<domain>/`, also create `functions/<domain>/package.json`
-- add a matching copy step in `script/prepare-dist.cjs`
-- if that Lambda has a function-local lockfile that is needed for packaging workflow parity, copy that as well
+- when creating a new Lambda under `functions/<domain>/`, ensure `script/esbuild-functions.cjs` includes it in the bundle list
+- if that Lambda has static assets or other non-bundled runtime files, add the required copy step in `script/prepare-dist.cjs`
+- if a future Lambda truly depends on a function-local manifest for a changed packaging flow, document that explicitly instead of assuming it is the default
 
 Reason:
 
 - `sam build` packages from `dist/`, not directly from the source function folder
-- `script/prepare-dist.cjs` is responsible for copying Lambda-local package manifests into `dist/functions/<domain>/`
-- if the Lambda package manifest is missing from source or not copied into `dist/`, deployment can fail or package the wrong runtime dependency set
+- the current build intentionally avoids per-function `npm install`
+- missing bundle registration or missing non-code asset copy steps are now the real packaging risks
 
 The minimum expectation is:
 
-- source manifest exists at `functions/<domain>/package.json`
-- `prepare-dist.cjs` copies it to `dist/functions/<domain>/package.json`
+- source entrypoint exists at `functions/<domain>/index.ts`
+- `script/esbuild-functions.cjs` bundles it into `dist/functions/<domain>/index.js`
+- any required static/runtime artifacts are copied by `script/prepare-dist.cjs`
 
-If a Lambda truly has no function-local runtime dependencies, keep the manifest minimal rather than omitting it.
+If a Lambda truly has no extra non-bundled runtime artifacts, omitting a function-local `package.json` is acceptable in the current build model.
 
 ### 4.10 TSDoc
 
@@ -466,7 +471,7 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 
 - [ ] Create `index.ts`
 - [ ] Create `router.ts`
-- [ ] Create function-local `package.json`
+- [ ] Create function-local `package.json` only if a non-default packaging need is actually present
 - [ ] Create `src/config/env.ts`
 - [ ] Create `src/zodSchema/envSchema.ts`
 - [ ] Create `src/utils/response.ts`
@@ -482,8 +487,9 @@ Use this checklist when migrating one legacy Lambda/domain into DDD.
 - [ ] Decide whether route uses default authorizer, `NONE`, or optional local auth
 - [ ] Add env parameters / function env wiring
 - [ ] Confirm VPC/global infra assumptions are compatible
-- [ ] Add Lambda `package.json` copy step to `script/prepare-dist.cjs`
-- [ ] Confirm deployment packaging for function-local dependencies in `dist/`
+- [ ] Add the function to `script/esbuild-functions.cjs`
+- [ ] Add any required static/runtime asset copy step to `script/prepare-dist.cjs`
+- [ ] Confirm deployment packaging assumptions in `dist/`
 
 ### Phase E — Behavior Implementation
 

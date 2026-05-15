@@ -45,11 +45,16 @@
 ## TODO endpoints
 
 - [x] pet-medical lambda
-  - GET /pet/medical/reference/deworm
   - GET /pet/medical/{petId}/vaccination
   - POST /pet/medical/{petId}/vaccination
   - PATCH /pet/medical/{petId}/vaccination/{vaccineId}
   - DELETE /pet/medical/{petId}/vaccination/{vaccineId}
+
+- [x] pet-reference lambda
+  - GET /pet/reference/breed/{animalType}?lang={lang}
+  - GET /pet/reference/deworm
+
+- [x] POST /commerce/storefront/shop-code-verifications
 
 - [ ] pet-biometric
   - GET /pet/biometric/{petId}

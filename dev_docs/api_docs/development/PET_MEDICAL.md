@@ -12,11 +12,9 @@ Medical record management for pets across five sub-domains:
 - blood test records
 - vaccination records
 
-Plus one public reference endpoint (no Bearer JWT required):
+The public dewormer brand reference data now lives in `PET_REFERENCE.md` under the new `pet-reference` Lambda.
 
-- dewormer brand reference data
-
-Most routes require `x-api-key` and a Bearer JWT. The reference endpoint requires only `x-api-key`. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe `form.medical`, `form.medication`, or delete responses with record ids are stale.
+Most routes require `x-api-key` and a Bearer JWT. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe `form.medical`, `form.medication`, or delete responses with record ids are stale.
 
 ---
 
@@ -46,7 +44,6 @@ Most routes require `x-api-key` and a Bearer JWT. The reference endpoint require
 | POST | `/pet/medical/{petId}/vaccination` | `x-api-key` + Bearer JWT | Create vaccination record |
 | PATCH | `/pet/medical/{petId}/vaccination/{vaccineId}` | `x-api-key` + Bearer JWT | Update vaccination record |
 | DELETE | `/pet/medical/{petId}/vaccination/{vaccineId}` | `x-api-key` + Bearer JWT | Delete vaccination record |
-| GET | `/pet/medical/reference/deworm` | `x-api-key` only (no JWT) | List dewormer brand reference data |
 
 ### Integration-Critical Behavior
 
@@ -54,7 +51,6 @@ Most routes require `x-api-key` and a Bearer JWT. The reference endpoint require
 | --- | --- |
 | Shared CRUD pattern | All five sub-domains use the same list/create/update/delete contract shape |
 | List response | Every GET list route returns `data: Record[]` plus `pagination` |
-| Reference list response | The deworm reference GET returns `data: Record[]` with no `pagination` |
 | Create response | Every POST route returns the created record in `data` |
 | Update response | Every PATCH route returns the updated record in `data` |
 | Delete response | Every DELETE route returns success metadata only, with no `data` |
@@ -72,7 +68,6 @@ Most routes require `x-api-key` and a Bearer JWT. The reference endpoint require
 | Route group | API key required | API Gateway authorizer |
 | --- | --- | --- |
 | All GET / POST / PATCH / DELETE `pet-medical` CRUD routes | Yes | `DddTokenAuthorizer` |
-| `GET /pet/medical/reference/deworm` | Yes | None (no JWT required) |
 | All `OPTIONS` `pet-medical` routes | No | None |
 
 Protected CRUD requests must send:
@@ -82,7 +77,7 @@ x-api-key: <api-gateway-api-key>
 Authorization: Bearer <access-token>
 ```
 
-The reference endpoint only requires:
+The public reference routes now live in `PET_REFERENCE.md` and only require:
 
 ```http
 x-api-key: <api-gateway-api-key>
@@ -116,7 +111,6 @@ If the pet exists but the caller does not own it, the route returns `403 common.
 | Create any CRUD medical record | IP 60 / 300s, identifier 30 / 300s, IP+identifier 20 / 300s |
 | Update any CRUD medical record | IP 90 / 300s, identifier 45 / 300s, IP+identifier 30 / 300s |
 | Delete any CRUD medical record | IP 30 / 60s, identifier 15 / 60s, IP+identifier 10 / 60s |
-| `GET /pet/medical/reference/deworm` | IP 60 / 60s, global 5000 / 60s |
 
 Rate-limit failures return `429 common.rateLimited`.
 
@@ -160,19 +154,6 @@ List success (CRUD sub-domains):
     "total": 0,
     "totalPages": 0
   },
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-Reference list success (`GET /pet/medical/reference/deworm` — no pagination):
-
-```json
-{
-  "success": true,
-  "message": "Retrieved successfully",
-  "data": [
-    { "_id": "665f1a2b3c4d5e6f7a8b9c0d", "brandName": "Bravecto" }
-  ],
   "requestId": "aws-lambda-request-id"
 }
 ```
@@ -237,7 +218,7 @@ All CRUD list routes use shared pagination query validation.
 
 Invalid pagination values return `400 common.invalidQueryParams`.
 
-The reference endpoint does not support pagination; it returns the full list.
+The public reference routes in `PET_REFERENCE.md` do not use pagination.
 
 ---
 
@@ -297,13 +278,6 @@ The reference endpoint does not support pagination; it returns the full list.
 - `vaccineTimes`
 - `vaccinePosition`
 - `petId`
-
-### Deworm Reference (Anthelmintic) Shape
-
-- `_id`
-- `brandName`
-
----
 
 ## General Medical Records
 
@@ -793,43 +767,6 @@ Delete a vaccination record. This is a hard delete; no soft-delete or audit trai
 
 ---
 
-## Reference Data
-
-### GET /pet/medical/reference/deworm
-
-Returns the full list of curated dewormer brand names. This endpoint is **public** — no Bearer JWT is needed. Only `x-api-key` is required.
-
-**Lambda owner:** `pet-medical`  
-**Auth:** `x-api-key` only — no `Authorization` header required  
-**Rate limits:** IP 60 / 60s, global 5000 / 60s
-
-The response data is curated by backend administrators. Clients should use the returned `brandName` values for display and the `_id` values as reference identifiers in deworming records.
-
-#### Deworm Reference Example Response
-
-```json
-{
-  "success": true,
-  "message": "Retrieved successfully",
-  "data": [
-    { "_id": "665f1a2b3c4d5e6f7a8b9c0d", "brandName": "Bravecto" },
-    { "_id": "665f1a2b3c4d5e6f7a8b9c0e", "brandName": "NexGard" }
-  ],
-  "requestId": "aws-lambda-request-id"
-}
-```
-
-`data` is an empty array `[]` when no brands have been added.
-
-#### Deworm Reference Errors
-
-| Status | `errorKey` | Cause |
-| --- | --- | --- |
-| 429 | `common.rateLimited` | Per-IP or global rate limit exceeded |
-| 500 | `common.internalError` | Unexpected internal error |
-
----
-
 ## Frontend Integration Guide
 
 1. Treat all five medical sub-domains as separate resource lists under the same authorization model.
@@ -837,11 +774,10 @@ The response data is curated by backend administrators. Clients should use the r
 3. After create or update, replace the edited row with the returned `data` record because the backend already returns the sanitized document.
 4. After delete, remove the row locally; the backend returns no `data` payload.
 5. Validate date fields client-side when possible, but still branch on the sub-domain-specific `invalidDateFormat` keys.
-6. The deworm reference endpoint (`GET /pet/medical/reference/deworm`) does not require a Bearer JWT — it can be called before the user authenticates, for example to populate a brand picker in a form.
-7. All CRUD create/update/delete rate limits are shared across all five sub-domains per user identifier. Bulk operations across sub-domains count against the same bucket.
+6. All CRUD create/update/delete rate limits are shared across all five sub-domains per user identifier. Bulk operations across sub-domains count against the same bucket.
 
 ---
 
 ## Verification Snapshot
 
-This document is grounded in the current handlers in `functions/pet-medical/src/services/medical.ts`, `medication.ts`, `deworming.ts`, `bloodTest.ts`, `vaccine.ts`, and `reference.ts`; the shared auth/sanitize helpers; the Zod schemas under `functions/pet-medical/src/zodSchema`; and the Mongoose models under `functions/pet-medical/src/models`. The active Tier 2 suite (52 tests) evidences current keys such as `petMedical.errors.petNotFound`, `petMedical.errors.vaccineRecord.invalidDateFormat`, and `petMedical.errors.vaccineRecord.notFound`.
+This document is grounded in the current handlers in `functions/pet-medical/src/services/medical.ts`, `medication.ts`, `deworming.ts`, `bloodTest.ts`, and `vaccine.ts`; the shared auth/sanitize helpers; the Zod schemas under `functions/pet-medical/src/zodSchema`; and the Mongoose models under `functions/pet-medical/src/models`. The active Tier 2 suite (52 tests) evidences current keys such as `petMedical.errors.petNotFound`, `petMedical.errors.vaccineRecord.invalidDateFormat`, and `petMedical.errors.vaccineRecord.notFound`.
