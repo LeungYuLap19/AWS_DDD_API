@@ -29,8 +29,6 @@ const values = {
   DEV_PET_ANALYSIS_HEATMAP: env.PetAnalysisFunction.HEATMAP,
   DEV_PET_ANALYSIS_VM_BREED_PUBLIC_IP: env.PetAnalysisFunction.VM_BREED_PUBLIC_IP,
   DEV_PET_ANALYSIS_BREED_DOCKER_IMAGE: env.PetAnalysisFunction.BREED_DOCKER_IMAGE,
-  DEV_BUSINESS_MONGODB_URI: env.PetBiometricFunction.BUSINESS_MONGODB_URI,
-  DEV_FACEID_API: env.PetBiometricFunction.FACEID_API,
   DEV_COMMERCE_SMTP_HOST: env.CommerceFulfillmentFunction.SMTP_HOST,
   DEV_COMMERCE_SMTP_PORT: env.CommerceFulfillmentFunction.SMTP_PORT,
   DEV_COMMERCE_SMTP_USER: env.CommerceFulfillmentFunction.SMTP_USER,

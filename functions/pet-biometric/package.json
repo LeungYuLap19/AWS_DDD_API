@@ -1,0 +1,12 @@
+{
+  "name": "@aws-ddd-api/pet-biometric",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.1045.0",
+    "@aws-sdk/client-s3": "^3.1036.0",
+    "mongoose": "^9.5.0",
+    "zod": "^4.3.6"
+  }
+}

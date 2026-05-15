@@ -122,14 +122,6 @@ Parameters:
   PetAnalysisBreedDockerImage:
     Type: String
     Default: ''
-  BusinessMongoDbUri:
-    Type: String
-    Default: ''
-    NoEcho: true
-  FaceIdApi:
-    Type: String
-    Default: ''
-    NoEcho: true
   CommerceSmtpHost:
     Type: String
     Default: ''
@@ -394,6 +386,13 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/biometric/*'
                   - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*/face-id/registrations/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/user-uploads/pets/*/face-id/verifications/*'
 
   PetProfileFunctionRole:
     Type: AWS::IAM::Role
@@ -1737,11 +1736,8 @@ Resources:
       ReservedConcurrentExecutions: !Ref LambdaReservedConcurrency
       Environment:
         Variables:
-          BUSINESS_MONGODB_URI: !Ref BusinessMongoDbUri
-          FACEID_API: !Ref FaceIdApi
           ML_INFERENCE_FUNCTION_NAME: !Sub '${ProjectName}-${StageName}-ml-inference'
           AWS_BUCKET_NAME: !Ref S3BucketName
-          AWS_BUCKET_BASE_URL: !Ref S3BucketBaseUrl
           AWS_BUCKET_REGION: !Ref S3BucketRegion
       Events:
         PetBiometricByPetIdGET:
