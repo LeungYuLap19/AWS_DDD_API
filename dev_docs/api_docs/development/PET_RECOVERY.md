@@ -26,7 +26,7 @@ Lost and found recovery listings and submissions. All routes are authenticated. 
 | Topic | Current DDD behavior |
 | --- | --- |
 | List wrapper | GET routes return `data: []` plus `pagination`, not top-level `pets` or `count` |
-| List sanitization | `userId` and `__v` are removed from list responses |
+| List sanitization | `userId` and `__v` are removed from all list responses; lost-report list items also omit linked `petId` |
 | Create wrapper | POST routes return `data: { id }` |
 | Delete wrapper | DELETE routes return success envelope with no `data` |
 | Multipart numeric handling | `weight` and `ownerContact1` are normalized to numbers when valid; invalid numeric strings survive as strings and fail schema validation |
@@ -260,6 +260,9 @@ List lost-pet reports sorted by `lostDate` descending.
   "requestId": "aws-lambda-request-id"
 }
 ```
+
+If a lost report was created with a linked `petId`, that link is used only for
+ownership/status handling on write. The list response does not expose `petId`.
 
 #### Lost List Common Errors
 
