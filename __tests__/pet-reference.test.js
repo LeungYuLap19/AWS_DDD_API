@@ -207,6 +207,39 @@ describe('pet-reference handler Tier 2 integration', () => {
       expect(animalModel.find).toHaveBeenCalledTimes(1);
     });
 
+    test('returns the nested breed payload for cn when present', async () => {
+      const { handler, animalModel } = loadHandlerWithMocks({
+        animalDocs: [
+          {
+            breeds: {
+              dog: {
+                cn: [
+                  { name: '柴犬简体' },
+                ],
+              },
+            },
+          },
+        ],
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/reference/breed/dog',
+          resource: '/pet/reference/breed/{animalType}',
+          pathParameters: { animalType: 'dog' },
+          queryStringParameters: { lang: 'cn' },
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.message).toBe('Retrieved successfully');
+      expect(parsed.body.data).toEqual([{ name: '柴犬简体' }]);
+      expect(animalModel.find).toHaveBeenCalledTimes(1);
+    });
+
     test('returns 400 when animalType is blank', async () => {
       const { handler, animalModel } = loadHandlerWithMocks();
       const result = await handler(
@@ -215,6 +248,24 @@ describe('pet-reference handler Tier 2 integration', () => {
           path: '/pet/reference/breed/%20%20',
           resource: '/pet/reference/breed/{animalType}',
           pathParameters: { animalType: '   ' },
+          queryStringParameters: { lang: 'zh' },
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('petReference.errors.invalidAnimalType');
+      expect(animalModel.find).not.toHaveBeenCalled();
+    });
+
+    test('returns 400 when animalType is URL-encoded whitespace', async () => {
+      const { handler, animalModel } = loadHandlerWithMocks();
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/reference/breed/%20%20',
+          resource: '/pet/reference/breed/{animalType}',
+          pathParameters: { animalType: '%20%20' },
           queryStringParameters: { lang: 'zh' },
         }),
         createContext()

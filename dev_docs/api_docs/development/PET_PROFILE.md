@@ -27,7 +27,7 @@ Pet profile creation, list/read, update, delete, and public tag lookup. The curr
 | --- | --- |
 | Success wrapper | All successful routes return the shared wrapper; list routes include `pagination` |
 | Create response | Create returns `data: { id, ...sanitizedFullPet }` |
-| Single-pet response | `GET /pet/profile/{petId}` returns `data: { id, ...selectedViewFields }` |
+| Single-pet response | `GET /pet/profile/{petId}` returns `data: { id, ...selectedViewFields }`; `view=basic` additionally includes `latestPetLostId` |
 | List response | `GET /pet/profile/me` returns `data: PetSummary[]` plus `pagination` for both user and NGO callers |
 | Patch response | PATCH returns no `data`; refetch if the updated pet document is needed |
 | Empty PATCH | An empty multipart PATCH is accepted as a `200` no-op and still saves the authorized pet document |
@@ -214,6 +214,10 @@ Delete success:
 - `updatedAt`
 - `location`
 - `position`
+- `latestPetLostId`
+
+`latestPetLostId` is the newest linked lost-report id for this pet, selected by
+`createdAt` descending. It is `null` when no linked lost report exists.
 
 #### Detail View Fields
 
@@ -467,11 +471,16 @@ Get one authorized pet profile.
     "id": "665f1a2b3c4d5e6f7a8b9c0d",
     "name": "Mochi",
     "animal": "Dog",
-    "status": "available"
+    "status": "available",
+    "latestPetLostId": "665f1a2b3c4d5e6f7a8b9c9a"
   },
   "requestId": "aws-lambda-request-id"
 }
 ```
+
+For `view=basic`, `latestPetLostId` is the newest linked lost-report id for the
+pet, or `null` when no linked lost report exists. `view=detail` and `view=full`
+do not add this helper field.
 
 #### Get Errors
 

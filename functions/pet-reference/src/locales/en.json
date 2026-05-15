@@ -2,7 +2,7 @@
   "petReference": {
     "errors": {
       "invalidAnimalType": "animalType is required",
-      "invalidLang": "lang must be en or zh",
+      "invalidLang": "lang must be en, zh, or cn",
       "breedListNotFound": "Breed list not found for the specified animal type and language"
     }
   }

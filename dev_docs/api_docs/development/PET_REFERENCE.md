@@ -118,12 +118,14 @@ Returns the nested breed payload stored under `animal_list.breeds[animalType][la
 
 The API does not reshape the nested breed payload. Whatever is stored in the collection for that key is returned in `data`.
 
+Supported `lang` values are `en`, `zh`, and `cn`.
+
 #### Breed Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `petReference.errors.invalidAnimalType` | `{animalType}` missing or blank |
-| 400 | `petReference.errors.invalidLang` | `lang` missing or not `en` / `zh` |
+| 400 | `petReference.errors.invalidLang` | `lang` missing or not `en` / `zh` / `cn` |
 | 404 | `petReference.errors.breedListNotFound` | No breed payload stored for that animalType/lang |
 | 429 | `common.rateLimited` | Per-IP limit exceeded |
 | 500 | `common.internalError` | Unexpected internal error |

@@ -83,6 +83,7 @@ function createFindChain(value) {
     sort: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(value),
   };
 }
@@ -140,6 +141,7 @@ function loadHandlerWithMocks({
   updatedPetDoc = null,
   petList = [],
   petCount = 0,
+  petLostDoc = null,
   publicTagPet = null,
   duplicateTag = null,
   duplicateNgoPet = null,
@@ -205,6 +207,7 @@ function loadHandlerWithMocks({
 
   const petFind = jest.fn(() => petFindChain);
   const petCountDocuments = jest.fn().mockResolvedValue(petCount);
+  const petLostFindOne = jest.fn(() => createFindChain(petLostDoc));
   const userFindOne = jest.fn(() => createLeanResult(userDoc));
   const rateLimitModel = {
     findOneAndUpdate: jest.fn().mockResolvedValue(rateLimitEntry),
@@ -229,6 +232,10 @@ function loadHandlerWithMocks({
     findOne: userFindOne,
   };
 
+  const petLostModel = {
+    findOne: petLostFindOne,
+  };
+
   const mongooseMock = {
     Schema: actualMongoose.Schema,
     Types: actualMongoose.Types,
@@ -238,6 +245,7 @@ function loadHandlerWithMocks({
     isValidObjectId: actualMongoose.isValidObjectId,
     model: jest.fn((name) => {
       if (name === 'Pet') return petModel;
+      if (name === 'PetLost') return petLostModel;
       if (name === 'User') return userModel;
       if (name === 'NgoCounters') return ngoCountersModel;
       if (name === 'ImageCollection') return imageCollectionModel;
@@ -310,6 +318,7 @@ function loadHandlerWithMocks({
     handler,
     authorizer,
     petModel,
+    petLostModel,
     petFindChain,
     userModel,
     ngoCountersModel,
@@ -592,6 +601,7 @@ describe('pet-profile handler Tier 2 integration', () => {
     test('returns only basic fields for GET /pet/profile/{petId}?view=basic', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
+      const petLostId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
         authUserId: userId,
         petDoc: {
@@ -603,6 +613,7 @@ describe('pet-profile handler Tier 2 integration', () => {
           motherName: 'Luna',
           deleted: false,
         },
+        petLostDoc: { _id: petLostId },
       });
 
       const result = await handler(
@@ -621,6 +632,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.data.name).toBe('Mochi');
       expect(parsed.body.data.tagId).toBe('TAG-001');
+      expect(parsed.body.data.latestPetLostId).toBe(petLostId);
       expect(parsed.body.data.chipId).toBeUndefined();
       expect(parsed.body.data.motherName).toBeUndefined();
     });

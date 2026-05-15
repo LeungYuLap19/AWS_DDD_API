@@ -7,7 +7,23 @@ import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 import { breedLookupQuerySchema, animalTypePathSchema } from '../zodSchema/referenceSchema';
 
-function parseLangQuery(ctx: RouteContext): { ok: true; lang: 'en' | 'zh' } | { ok: false; statusCode: number; errorKey: string } {
+function decodeAnimalType(raw: unknown): { ok: true; value: unknown } | { ok: false; statusCode: number; errorKey: string } {
+  if (typeof raw !== 'string') {
+    return { ok: true, value: raw };
+  }
+
+  try {
+    return { ok: true, value: decodeURIComponent(raw) };
+  } catch {
+    return {
+      ok: false,
+      statusCode: 400,
+      errorKey: 'petReference.errors.invalidAnimalType',
+    };
+  }
+}
+
+function parseLangQuery(ctx: RouteContext): { ok: true; lang: 'en' | 'zh' | 'cn' } | { ok: false; statusCode: number; errorKey: string } {
   const parsed = breedLookupQuerySchema.safeParse(ctx.event.queryStringParameters ?? {});
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -27,7 +43,12 @@ function parseLangQuery(ctx: RouteContext): { ok: true; lang: 'en' | 'zh' } | { 
  * so this handler reads and returns that nested value directly.
  */
 export async function handleGetBreedReference(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const animalTypeParam = parsePathParam(ctx.event.pathParameters?.animalType, animalTypePathSchema);
+  const decodedAnimalType = decodeAnimalType(ctx.event.pathParameters?.animalType);
+  if (!decodedAnimalType.ok) {
+    return response.errorResponse(decodedAnimalType.statusCode, decodedAnimalType.errorKey, ctx.event);
+  }
+
+  const animalTypeParam = parsePathParam(decodedAnimalType.value, animalTypePathSchema);
   if (!animalTypeParam.ok) {
     return response.errorResponse(animalTypeParam.statusCode, animalTypeParam.errorKey, ctx.event);
   }

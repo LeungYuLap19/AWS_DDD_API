@@ -13,7 +13,7 @@ export const breedLookupQuerySchema = z
       .trim()
       .min(1, 'petReference.errors.invalidLang')
       .max(2, 'petReference.errors.invalidLang')
-      .refine((value) => value === 'en' || value === 'zh', {
+      .refine((value) => value === 'en' || value === 'zh' || value === 'cn', {
         message: 'petReference.errors.invalidLang',
       }),
   })
