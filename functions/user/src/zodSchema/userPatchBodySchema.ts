@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+const optionalNullableString = (max: number) =>
+  z.string().trim().max(max, { message: 'common.invalidBodyParams' }).optional().nullable().or(z.literal(''));
+
 export const userPatchBodySchema = z
   .object({
     firstName: z.string().trim().max(100, 'common.invalidBodyParams').optional(),
@@ -28,11 +31,10 @@ export const userPatchBodySchema = z
         }
       }, { message: 'common.invalidBodyParams' })
       .optional(),
-    phoneNumber: z
-      .string()
-      .max(20, 'common.invalidBodyParams')
-      .refine((value) => /^\+[1-9]\d{1,14}$/.test(value.trim()), { message: 'common.invalidBodyParams' })
-      .optional(),
+    phoneNumber: optionalNullableString(20).refine(
+      (value) => !value || /^\+[1-9]\d{1,14}$/.test(value),
+      { message: 'common.invalidBodyParams' }
+    ),
   })
   .strict();
 

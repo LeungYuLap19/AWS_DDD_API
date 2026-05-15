@@ -127,6 +127,7 @@ function loadHandlerWithMocks({
   const findOneAndUpdate = jest.fn().mockResolvedValue(updatedUser);
   const updateOne = jest.fn().mockResolvedValue(updateOneResult);
   const deleteMany = jest.fn().mockResolvedValue(deleteManyResult);
+  const rateLimitFindOneAndUpdate = jest.fn().mockResolvedValue({ count: 1 });
 
   const userModel = {
     findOne,
@@ -138,6 +139,10 @@ function loadHandlerWithMocks({
     deleteMany,
   };
 
+  const rateLimitModel = {
+    findOneAndUpdate: rateLimitFindOneAndUpdate,
+  };
+
   const mongooseMock = {
     Schema: actualMongoose.Schema,
     Types: actualMongoose.Types,
@@ -147,6 +152,7 @@ function loadHandlerWithMocks({
     model: jest.fn((name) => {
       if (name === 'User') return userModel;
       if (name === 'RefreshToken') return refreshTokenModel;
+      if (name === 'RateLimit') return rateLimitModel;
       throw new Error(`Unexpected model ${name}`);
     }),
   };
@@ -469,6 +475,38 @@ describe('Tier 2 - user handler integration', () => {
     expect(JSON.parse(res.body).success).toBe(false);
   });
 
+  test('PATCH /user/me unsets phoneNumber when the payload explicitly clears it', async () => {
+    const { handler, userModel } = loadHandlerWithMocks({
+      updatedUser: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        email: 'tier2@test.com',
+        role: 'user',
+        deleted: false,
+      },
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'PATCH',
+        body: JSON.stringify({ phoneNumber: null }),
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'tier2@test.com',
+          userRole: 'user',
+        },
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: '507f1f77bcf86cd799439011', deleted: false },
+      { $set: {}, $unset: { phoneNumber: 1 } },
+      { returnDocument: 'after', lean: true }
+    );
+    expect(JSON.parse(res.body).data.phoneNumber).toBeUndefined();
+  });
+
   test('missing authorizer context is normalized to a 401 common.unauthorized response', async () => {
     const { handler } = loadHandlerWithMocks();
     const res = await handler(createEvent({ method: 'GET' }), createContext());
@@ -579,6 +617,24 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(getRes.status).toBe(200);
       expect(getRes.body.data.firstName).toBe('Renamed Primary');
       expect(getRes.body.data.district).toBe('Wan Chai');
+    });
+
+    samTest('PATCH /user/me clears phoneNumber from the stored user document', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const patchRes = await req(
+        'PATCH',
+        '/user/me',
+        { phoneNumber: null },
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 2}` })
+      );
+
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.data.phoneNumber).toBeUndefined();
+
+      const persisted = await usersCol().findOne({ _id: state.primaryUserId });
+      expect(persisted.phoneNumber).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(persisted, 'phoneNumber')).toBe(false);
     });
 
     samTest('repeated GET requests remain stable across warm invocations', async () => {

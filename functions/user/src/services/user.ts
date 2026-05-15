@@ -105,19 +105,31 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   }
 
   const updateFields: Record<string, unknown> = {};
+  const unsetFields: Record<string, 1> = {};
   if (firstName !== undefined) updateFields.firstName = firstName;
   if (lastName !== undefined) updateFields.lastName = lastName;
   if (district !== undefined) updateFields.district = district;
   if (image !== undefined) updateFields.image = image;
   if (email !== undefined) updateFields.email = normalizedEmail;
-  if (phoneNumber !== undefined) updateFields.phoneNumber = normalizedPhoneNumber;
+  if (phoneNumber !== undefined) {
+    if (normalizedPhoneNumber) updateFields.phoneNumber = normalizedPhoneNumber;
+    else unsetFields.phoneNumber = 1;
+  }
   if (birthday !== undefined) updateFields.birthday = birthday ? new Date(birthday) : null;
+
+  const updateOperation: {
+    $set: Record<string, unknown>;
+    $unset?: Record<string, 1>;
+  } = { $set: updateFields };
+  if (Object.keys(unsetFields).length > 0) {
+    updateOperation.$unset = unsetFields;
+  }
 
   let updatedUser: UserDocument | null;
   try {
     updatedUser = (await User.findOneAndUpdate(
       { _id: authContext.userId, deleted: false },
-      { $set: updateFields },
+      updateOperation,
       { returnDocument: 'after', lean: true }
     )) as UserDocument | null;
   } catch (error) {
