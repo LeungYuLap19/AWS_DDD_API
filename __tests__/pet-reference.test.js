@@ -225,6 +225,24 @@ describe('pet-reference handler Tier 2 integration', () => {
       expect(animalModel.find).not.toHaveBeenCalled();
     });
 
+    test('returns 400 when animalType is URL-encoded whitespace', async () => {
+      const { handler, animalModel } = loadHandlerWithMocks();
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/reference/breed/%20%20',
+          resource: '/pet/reference/breed/{animalType}',
+          pathParameters: { animalType: '%20%20' },
+          queryStringParameters: { lang: 'zh' },
+        }),
+        createContext()
+      );
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(400);
+      expect(parsed.body.errorKey).toBe('petReference.errors.invalidAnimalType');
+      expect(animalModel.find).not.toHaveBeenCalled();
+    });
+
     test('returns 400 when lang is missing or malformed', async () => {
       const { handler, animalModel } = loadHandlerWithMocks();
       const result = await handler(
