@@ -304,20 +304,28 @@ Create a lost-pet report using `multipart/form-data`.
 
 #### Lost Create Example Request
 
-Use multipart form-data. Representative text fields:
+Use `multipart/form-data`. Example with linked `petId` plus file uploads:
 
-```text
-name=Mochi
-sex=Female
-animal=Dog
-lostDate=01/02/2025
-lostLocation=Kowloon
-lostDistrict=Mong Kok
-weight=12.5
-sterilization=true
-ownerContact1=91234567
-petId=665f0000000000000000abcd
+```bash
+curl -X POST 'https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development/pet/recovery/lost' \
+  -H 'x-api-key: <api-key>' \
+  -H 'Authorization: Bearer <jwt>' \
+  -F 'name=Mochi' \
+  -F 'sex=Female' \
+  -F 'animal=Dog' \
+  -F 'lostDate=01/02/2025' \
+  -F 'lostLocation=Kowloon' \
+  -F 'lostDistrict=Mong Kok' \
+  -F 'weight=12.5' \
+  -F 'sterilization=true' \
+  -F 'ownerContact1=91234567' \
+  -F 'petId=665f0000000000000000abcd' \
+  -F 'file=@/path/to/lost-1.jpg;type=image/jpeg' \
+  -F 'file=@/path/to/lost-2.png;type=image/png'
 ```
+
+When `petId` is provided, backend copies the linked pet profile `breedimage[]`
+internally and merges those URLs with uploaded file URLs.
 
 #### Lost Create Success (201)
 
