@@ -102,7 +102,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
 
   // 3. Parse multipart form data + Zod validation
   const multiResult = await parseMultipartBody(ctx.event, purchaseConfirmationSchema, {
-    fallbackErrorKey: 'common.missingBodyParams',
+    fallbackErrorKey: 'common.invalidBodyParams',
   });
   if (!multiResult.ok) {
     return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);

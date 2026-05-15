@@ -25,7 +25,7 @@ Authenticated order checkout and order retrieval. The current DDD implementation
 | --- | --- |
 | Auth delta | `POST /commerce/orders` is protected in DDD; legacy public checkout behavior is no longer valid |
 | Checkout response | Order creation returns `data: { id, purchaseCode, price }`, not top-level `purchase_code`, `price`, or `_id` |
-| Price source | `price` is resolved server-side from `ShopInfo.price` using `shopCode`; client price is not accepted |
+| Price source | `price` is resolved server-side. When `shopCode` is provided, backend uses `ShopInfo.price`; when `shopCode` is empty, backend falls back to `0`. Client price is not accepted |
 | Order side effects | Successful checkout creates both `Order` and `OrderVerification`, generates a tag id, and may generate QR and short URLs |
 | Best-effort notifications | Confirmation email and WhatsApp send after persistence, but failures do not roll back a successful order |
 | List pagination | All list routes use shared pagination defaults: `page=1`, `limit=30`, max `limit=100` |
@@ -279,7 +279,7 @@ The backend detects MIME type from file bytes, not just the declared multipart c
 | `delivery` | string | Yes | Max 128 |
 | `petName` | string | Yes | Trimmed, max 100 |
 | `phoneNumber` | string | Yes | 7 to 15 digits only |
-| `shopCode` | string | Yes | Must resolve to an existing `ShopInfo.shopCode` |
+| `shopCode` | string | No | Defaults to `""` |
 | `type` | string | No | Defaults to `""` |
 | `promotionCode` | string | No | Defaults to `""` |
 | `petContact` | string | No | Defaults to `""` |
@@ -289,12 +289,14 @@ The backend detects MIME type from file bytes, not just the declared multipart c
 | `lang` | enum string | No | `chn` or `eng`, defaults to `eng` |
 
 The multipart field set is strict. Unknown text fields are rejected.
+For example, sending client-side `price` in checkout body is rejected with
+`400 common.invalidBodyParams`.
 
 #### Order Side Effects
 
 On success, the handler:
 
-1. creates an `Order` record using the canonical storefront price
+1. creates an `Order` record using canonical server-side price resolution (`ShopInfo.price` by `shopCode`, or `0` when `shopCode` is empty)
 2. classifies `isPTagAir` from `option`
 3. uploads `pet_img` and `discount_proof` when present
 4. generates a unique `tagId`
@@ -330,10 +332,10 @@ If order-verification creation fails after the order is saved, the handler compe
 | 400 | `orders.errors.invalidOption` | Invalid `option` format |
 | 400 | `orders.errors.invalidTempId` | Invalid `tempId` format |
 | 400 | `orders.errors.invalidPhone` | Invalid `phoneNumber` |
-| 400 | `orders.errors.invalidShopCode` | Unknown `shopCode` |
+| 400 | `orders.errors.invalidShopCode` | Unknown non-empty `shopCode` |
 | 400 | `orders.errors.invalidFileType` | Unsupported upload format |
 | 400 | `orders.errors.tooManyFiles` | More than one file supplied for `pet_img` or `discount_proof` |
-| 400 | `common.invalidBodyParams` | Strict-schema violation on text fields |
+| 400 | `common.invalidBodyParams` | Strict-schema violation (for example unknown/extra text fields such as `price`) |
 | 409 | `orders.errors.duplicateOrder` | `tempId` already exists |
 | 413 | `orders.errors.fileTooLarge` | Uploaded file exceeds 4 MB |
 | 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
@@ -473,7 +475,7 @@ Return minimal contact data for one order.
 
 ## Frontend Integration Guide
 
-1. Fetch storefront metadata first, display the returned price to the user, and submit only the selected `shopCode`; the checkout route does not accept a client-supplied `price` field.
+1. `shopCode` is optional for checkout. If you send it, backend resolves canonical `ShopInfo.price`; if omitted/empty, backend uses `price = 0`. The checkout route does not accept a client-supplied `price` field.
 2. Submit checkout as `multipart/form-data`; do not send JSON to `POST /commerce/orders`.
 3. Read successful checkout output from `data.purchaseCode` and `data.id`.
 4. Treat `orders.errors.duplicateOrder` as a client retry case with a newly generated `tempId`.
