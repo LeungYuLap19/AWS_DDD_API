@@ -15,6 +15,11 @@ type StorefrontShop = {
   price?: unknown;
 };
 
+type CanonicalShop = {
+  shopCode: string;
+  price: unknown | null;
+};
+
 type MultipartFile = {
   fieldname: string;
   filename?: string;
@@ -57,12 +62,15 @@ function isPdfFile(file: MultipartFile): boolean {
   return filename.endsWith('.pdf');
 }
 
-function extractShopCodeFromPdfBuffer(buffer: Buffer, canonicalCodeMap: Map<string, string>): string | null {
+function extractShopCodeFromPdfBuffer(
+  buffer: Buffer,
+  canonicalCodeMap: Map<string, CanonicalShop>
+): string | null {
   const rawText = buffer.toString('latin1').toUpperCase();
   const entries = [...canonicalCodeMap.entries()].sort((a, b) => b[0].length - a[0].length);
-  for (const [normalizedCode, canonicalCode] of entries) {
+  for (const [normalizedCode, canonicalShop] of entries) {
     if (rawText.includes(normalizedCode)) {
-      return canonicalCode;
+      return canonicalShop.shopCode;
     }
   }
   return null;
@@ -78,14 +86,17 @@ async function listStorefrontShops(page: number, limit: number): Promise<{ shops
   return { shops: shops as StorefrontShop[], total: total as number };
 }
 
-async function loadCanonicalShopCodeMap(): Promise<Map<string, string>> {
+async function loadCanonicalShopCodeMap(): Promise<Map<string, CanonicalShop>> {
   const ShopInfo = mongoose.model('ShopInfo');
-  const shops = (await ShopInfo.find({}, { shopCode: 1 }).lean()) as StorefrontShop[];
-  const map = new Map<string, string>();
+  const shops = (await ShopInfo.find({}, { shopCode: 1, price: 1 }).lean()) as StorefrontShop[];
+  const map = new Map<string, CanonicalShop>();
   for (const shop of shops) {
     const code = normalizeShopCode(shop.shopCode);
     if (!code) continue;
-    map.set(code.toUpperCase(), code);
+    map.set(code.toUpperCase(), {
+      shopCode: code,
+      price: shop.price ?? null,
+    });
   }
   return map;
 }
@@ -173,18 +184,20 @@ export async function handlePostStorefrontShopCodeVerification(ctx: RouteContext
         source,
         shopCode: null,
         matchedShopCode: null,
+        price: null,
       },
     });
   }
 
-  const matchedShopCode = canonicalCodeMap.get(resolvedShopCode.toUpperCase()) ?? null;
+  const matchedShop = canonicalCodeMap.get(resolvedShopCode.toUpperCase()) ?? null;
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: {
-      isValid: Boolean(matchedShopCode),
+      isValid: Boolean(matchedShop),
       source,
       shopCode: resolvedShopCode,
-      matchedShopCode,
+      matchedShopCode: matchedShop?.shopCode ?? null,
+      price: matchedShop?.price ?? null,
     },
   });
 }
