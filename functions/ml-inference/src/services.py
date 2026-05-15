@@ -39,7 +39,8 @@ def register_op(invocation: Any) -> Mapping[str, Any]:
     key = require_string(image, "key")
 
     # Stub response aligned with ML_server EnrollResponse shape (+ embedding for Mongo storage).
-    # Replace these fixed values when ML core is plugged in.
+    # Keep embedding non-empty so pet-biometric persistence flow can be validated
+    # before the real ML core is integrated.
     return {
         "status": "accepted",
         "angle": "front-face",
@@ -47,7 +48,7 @@ def register_op(invocation: Any) -> Mapping[str, Any]:
         "counts": {},
         "can_finish": False,
         "front_image": None,
-        "embedding": [],
+        "embedding": [0.0],
         "petId": invocation.pet_id,
         "petType": pet_type,
         "image": {"bucket": bucket, "key": key},

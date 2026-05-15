@@ -28,8 +28,8 @@ export type MlRegisterPayload = {
 /**
  * Verify-operation payload returned by `ml-inference`.
  *
- * The result is forwarded to the public API response together with the probe
- * image key and candidate count loaded from MongoDB.
+ * The result is mapped into a stable public verify response by
+ * `pet-biometric` (`matched`, `completed`, `status`, `similarity`, `angle`).
  */
 export type MlVerifyPayload = {
   status?: string;

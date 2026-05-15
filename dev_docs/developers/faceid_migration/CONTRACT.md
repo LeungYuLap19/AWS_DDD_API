@@ -24,6 +24,7 @@ Behavior:
 2. pet ownership check required
 3. Mongo-only read
 4. no `ml-inference` invoke
+5. `hasFaceId` is `true` only when enrollment completion is reached (`acceptedTotal >= 10`)
 
 Success response (`200 OK`):
 
@@ -157,6 +158,7 @@ Notes:
 2. `pet-biometric` uploads the probe image to S3 internally
 3. `pet-biometric` loads candidate embeddings from MongoDB by `petId`
 4. frontend does not send `candidates`
+5. probe image is transient and deleted after ML verification completes
 
 Success response:
 
@@ -164,26 +166,33 @@ Success response:
 {
   "message": "success.completed",
   "data": {
-    "petId": "pet123",
-    "petType": "cat",
-    "imageKey": "user-uploads/pets/pet123/face-id/verifications/q.jpg",
-    "candidatesCount": 3,
-    "result": {
-      "status": "no_match",
-      "similarity": 0.0,
-      "angle": "front-face",
-      "threshold": 0.5,
-      "petId": "pet123",
-      "petType": "cat",
-      "image": {
-        "bucket": "petpetclub",
-        "key": "user-uploads/pets/pet123/face-id/verifications/q.jpg"
-      },
-      "candidateCount": 3
-    }
+    "matched": false,
+    "completed": true,
+    "status": "no_match",
+    "similarity": 0.0,
+    "angle": "front-face"
   }
 }
 ```
+
+Response field meaning:
+
+1. `matched`
+   - whether the verification result is a positive identity match
+   - `true` only when ML status is `matched`
+2. `completed`
+   - whether verification reached a terminal compare result
+   - `true` for `matched` and `no_match`
+   - `false` for pre-compare statuses such as `no_face`, `low_quality`, and `no_enrollment`
+3. `status`
+   - raw ML verification status for frontend branching
+   - if ML response has no valid status string, fallback is `unknown`
+4. `similarity`
+   - numeric similarity score when provided by ML
+   - may be `null` for statuses that do not produce compare scores
+5. `angle`
+   - detected angle when provided by ML
+   - may be `null` when no valid face/angle is available
 
 ## 2) Internal API (`pet-biometric` -> `ml-inference`)
 
@@ -312,6 +321,16 @@ Special verify case:
    - `status: "no_enrollment"`
    - `similarity: null`
    - `angle: null`
+
+Public verify response shaping:
+
+1. `pet-biometric` does not expose probe `imageKey` in public responses because the probe object is deleted after verification
+2. `pet-biometric` maps ML verify output into:
+   - `matched`
+   - `completed`
+   - `status`
+   - `similarity`
+   - `angle`
 
 ## 3) Error Envelope From `ml-inference`
 

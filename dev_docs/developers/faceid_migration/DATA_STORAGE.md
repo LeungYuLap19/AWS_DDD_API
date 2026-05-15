@@ -157,8 +157,9 @@ Query:
 
 Has Face ID rule:
 
-1. if document exists and `embeddings.length > 0`, then `hasFaceId = true`
-2. otherwise `hasFaceId = false`
+1. count accepted front-facing embeddings (`front-face`, `high-face`, `low-face`)
+2. if cumulative accepted count is `>= 10`, then `hasFaceId = true`
+3. otherwise `hasFaceId = false`
 
 ### DELETE `/pet/biometric/{petId}`
 
@@ -178,6 +179,10 @@ After successful `ml-inference register` response:
 4. store:
    - `angle`
    - `embedding`
+5. persist each accepted image immediately (do not wait for entire batch)
+6. if a batch contains mixed accepted/rejected images:
+   - accepted ones are persisted
+   - rejected ones are skipped
 
 ### Verify flow
 

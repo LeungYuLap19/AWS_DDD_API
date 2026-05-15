@@ -1,10 +1,15 @@
-function normalizeNumber(value: unknown): number | undefined {
+function normalizeNumber(value: unknown): unknown {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
 
   const n = Number(value);
-  return Number.isFinite(n) ? n : undefined;
+  if (Number.isFinite(n)) {
+    return n;
+  }
+
+  // Keep the original value so schema validation can reject invalid numbers.
+  return value;
 }
 
 /**

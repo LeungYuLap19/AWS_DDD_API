@@ -37,6 +37,8 @@ import {
   verifyBiometricSchema,
 } from '../zodSchema/biometricSchemas';
 
+const VERIFY_SUCCESS_STATUSES = new Set(['matched', 'no_match']);
+
 /**
  * Returns the authenticated caller's biometric enrollment summary for one pet
  * after validating ownership against the pet record in MongoDB.
@@ -249,8 +251,8 @@ export async function handleRegisterBiometric(ctx: RouteContext): Promise<APIGat
  * an owned pet.
  *
  * The handler uploads the probe image to S3, loads Mongo-backed candidates by
- * `petId`, invokes `ml-inference verify`, and returns the ML result without
- * mutating the biometric record.
+ * `petId`, invokes `ml-inference verify`, and returns a stable verification
+ * outcome without mutating the biometric record.
  */
 export async function handleVerifyBiometric(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const auth = requireAuthContext(ctx.event);
@@ -328,22 +330,28 @@ export async function handleVerifyBiometric(ctx: RouteContext): Promise<APIGatew
     const errorKey = (error as { errorKey?: unknown })?.errorKey;
     if (typeof statusCode === 'number' && typeof errorKey === 'string') {
       return response.errorResponse(statusCode, errorKey, ctx.event);
-      }
-      throw error;
-    } finally {
-      // 7. Verification probe images are transient, so always clean them up after ML returns.
-      await cleanupUploadedImage(uploaded.key, 'verify.probe');
     }
+    throw error;
+  } finally {
+    // 7. Verification probe images are transient, so always clean them up after ML returns.
+    await cleanupUploadedImage(uploaded.key, 'verify.probe');
+  }
 
-  // 8. Return the verification result together with request-scoped metadata.
+  const status = typeof mlResult.status === 'string' ? mlResult.status : 'unknown';
+  const similarity = typeof mlResult.similarity === 'number' ? mlResult.similarity : null;
+  const angle = typeof mlResult.angle === 'string' ? mlResult.angle : null;
+  const matched = status === 'matched';
+  const completed = VERIFY_SUCCESS_STATUSES.has(status);
+
+  // 8. Return a stable public verify result without transient S3 probe references.
   return response.successResponse(200, ctx.event, {
     message: 'success.completed',
     data: {
-      petId,
-      petType: multiResult.data.petType,
-      imageKey: uploaded.key,
-      candidatesCount: candidates.length,
-      result: mlResult,
+      matched,
+      completed,
+      status,
+      similarity,
+      angle,
     },
   });
 }

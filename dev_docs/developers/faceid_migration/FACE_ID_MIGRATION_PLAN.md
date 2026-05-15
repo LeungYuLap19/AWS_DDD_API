@@ -108,14 +108,18 @@ Does not own:
      - `petType`
      - one or more `image` files
    - `pet-biometric` uploads files to S3 internally
-   - call `ml-inference` `register` with the S3 image reference
+   - call `ml-inference` `register` once per uploaded image using the S3 image reference
    - `ml-inference` reads image from S3, checks face/quality/angle, and extracts embedding
-   - if result is accepted, persist to Mongo:
+   - if result is accepted (`accepted` or `angle_full`), persist immediately to Mongo:
      - create biometric document if missing
      - append uploaded key into `imageKeys[]`
      - append returned `{ angle, embedding }` into `embeddings[]`
-   - return success to frontend
-   - if `ml-inference` returns reject status such as `no_face` or `low_quality`, do not store and return failure to frontend
+   - if `ml-inference` returns reject status such as `no_face` or `low_quality`, skip persistence for that image
+   - after processing all images in the batch:
+     - if at least one image was accepted, return `201` with enrollment progress:
+       - `remaining = max(0, 10 - acceptedTotal)`
+       - `canFinish = (acceptedTotal >= 10)`
+     - if all images were rejected, return error and do not persist
 
 2. `POST /pet/biometric/{petId}/verifications`
    - frontend sends multipart request with:
@@ -128,7 +132,13 @@ Does not own:
      - probe image S3 reference
      - candidate embeddings from Mongo
    - `ml-inference` reads probe image from S3, extracts query embedding, and compares against Mongo-loaded candidates
-   - return matched / no_match / no_face / low_quality / no_enrollment result to frontend
+   - delete transient probe image from S3 after verification call returns
+   - return stable verify result to frontend:
+     - `matched`
+     - `completed`
+     - `status`
+     - `similarity`
+     - `angle`
 
 ## 5) Data Model (MongoDB)
 

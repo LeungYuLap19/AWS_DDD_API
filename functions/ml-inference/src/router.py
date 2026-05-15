@@ -21,6 +21,16 @@ from src.utils.responses import JsonMap, error_response, success_response
 OperationHandler = Callable[[Invocation], Any]
 
 
+def _extract_op(event: Mapping[str, Any]) -> str | None:
+    """Best-effort extraction of operation name for error envelopes."""
+    raw_op = event.get("op")
+    if isinstance(raw_op, str):
+        normalized = raw_op.strip()
+        if normalized:
+            return normalized
+    return None
+
+
 def _dispatch_table() -> Dict[str, OperationHandler]:
     """Return supported operation handlers by operation name."""
     return {
@@ -45,7 +55,12 @@ def route_event(event: Mapping[str, Any], context: Any) -> JsonMap:
     try:
         invocation = parse_invocation(event)
     except MlInferenceError as err:
-        return error_response(err.status_code, err.error_key, err.message)
+        return error_response(
+            err.status_code,
+            err.error_key,
+            err.message,
+            op=_extract_op(event),
+        )
 
     handlers = _dispatch_table()
     handler = handlers.get(invocation.op)
