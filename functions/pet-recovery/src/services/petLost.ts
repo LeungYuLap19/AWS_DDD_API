@@ -11,7 +11,7 @@ import { normalizeLostMultipartBody } from '../utils/multipart';
 import { createPetLostSchema } from '../zodSchema/petLostSchema';
 import { connectToMongoDB } from '../config/db';
 
-type PetOwnershipRecord = { _id: unknown; userId?: unknown };
+type PetOwnershipRecord = { _id: unknown; userId?: unknown; breedimage?: unknown };
 
 /**
  * Returns the paginated public lost-pet report feed for authenticated callers.
@@ -74,10 +74,11 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
     return response.errorResponse(400, 'petRecovery.errors.petLost.lostDateRequired', ctx.event);
   }
 
+  let linkedPetBreedimage: string[] = [];
   if (data.petId) {
     const Pet = mongoose.model('Pet');
     const pet = (await Pet.findOne({ _id: data.petId, deleted: false })
-      .select('userId')
+      .select('userId breedimage')
       .lean()) as PetOwnershipRecord | null;
 
     if (!pet) {
@@ -86,6 +87,12 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
 
     if (String(pet.userId) !== authContext.userId) {
       return response.errorResponse(403, 'common.forbidden', ctx.event);
+    }
+
+    if (Array.isArray(pet.breedimage)) {
+      linkedPetBreedimage = pet.breedimage.filter(
+        (value): value is string => typeof value === 'string' && value.trim().length > 0
+      );
     }
 
     if (data.status) {
@@ -113,6 +120,7 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
       throw err;
     }
   }
+  const mergedBreedimage = Array.from(new Set([...linkedPetBreedimage, ...uploadedUrls]));
 
   const record = await PetLost.create({
     _id: recordId,
@@ -134,7 +142,7 @@ export async function handleCreatePetLost(ctx: RouteContext): Promise<APIGateway
     lostLocation: data.lostLocation,
     lostDistrict: data.lostDistrict,
     serial_number: serialNumber,
-    breedimage: uploadedUrls,
+    breedimage: mergedBreedimage,
   });
 
   return response.successResponse(201, ctx.event, {

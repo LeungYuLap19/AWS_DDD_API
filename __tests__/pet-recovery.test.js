@@ -511,6 +511,55 @@ describe('pet-recovery handler Tier 2 integration', () => {
       expect(createPayload.breedimage.length).toBe(1);
     });
 
+    test('POST /pet/recovery/lost merges linked pet profile image urls with uploaded files', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const petId = new mongoose.Types.ObjectId().toString();
+      const fileBuffer = makeJpegBuffer();
+      const existingUrlA = 'https://cdn.example.test/user-uploads/pets/source-a.jpg';
+      const existingUrlB = 'https://cdn.example.test/user-uploads/pets/source-b.jpg';
+      const { handler, petLostModel, s3SendMock } = loadHandlerWithMocks({
+        petOwnershipDoc: {
+          _id: petId,
+          userId,
+          breedimage: [existingUrlA, existingUrlB, '', null, 123],
+        },
+        multipartForm: {
+          petId,
+          name: 'Mochi',
+          sex: 'Female',
+          animal: 'Dog',
+          lostDate: '01/02/2025',
+          lostLocation: 'Kowloon',
+          lostDistrict: 'Mong Kok',
+          files: [{ content: fileBuffer, filename: 'photo.jpg' }],
+        },
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'POST',
+          path: '/pet/recovery/lost',
+          resource: '/pet/recovery/lost',
+          body: 'multipart',
+          authorizer: createAuthorizer({ userId }),
+          headers: { 'content-type': 'multipart/form-data; boundary=---abc' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(201);
+      expect(petLostModel.create).toHaveBeenCalled();
+      expect(s3SendMock).toHaveBeenCalledTimes(1);
+
+      const createPayload = petLostModel.create.mock.calls[0][0];
+      expect(createPayload.breedimage).toEqual([
+        existingUrlA,
+        existingUrlB,
+        expect.stringMatching(/^https:\/\/cdn\.example\.test\//),
+      ]);
+    });
+
     test('POST /pet/recovery/found creates record without ownership lookup', async () => {
       const userId = new mongoose.Types.ObjectId().toString();
       const { handler, petFoundModel, petModel } = loadHandlerWithMocks({
