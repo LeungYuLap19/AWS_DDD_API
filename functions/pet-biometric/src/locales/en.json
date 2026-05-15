@@ -1,1 +1,13 @@
-{}
+{
+  "petBiometric": {
+    "errors": {
+      "petNotFound": "Pet not found",
+      "noFilesUploaded": "No image files uploaded",
+      "tooManyFiles": "Only one image file is allowed per request",
+      "invalidFileType": "Unsupported file type. Only JPEG, PNG, GIF, and WebP are allowed",
+      "fileTooLarge": "File exceeds the maximum allowed size (4 MB)",
+      "petTypeMismatch": "Pet type does not match the existing biometric record",
+      "noAcceptedImages": "No uploaded images passed Face ID registration validation"
+    }
+  }
+}

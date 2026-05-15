@@ -1,1 +1,13 @@
-{}
+{
+  "petBiometric": {
+    "errors": {
+      "petNotFound": "找不到寵物",
+      "noFilesUploaded": "未上傳任何圖片檔案",
+      "tooManyFiles": "每次請求僅允許上傳一個圖片檔案",
+      "invalidFileType": "不支援的檔案格式，僅允許 JPEG、PNG、GIF 及 WebP",
+      "fileTooLarge": "檔案超過允許的大小上限（4 MB）",
+      "petTypeMismatch": "寵物類型與既有生物識別資料不一致",
+      "noAcceptedImages": "所有上傳圖片都未通過 Face ID 註冊驗證"
+    }
+  }
+}
