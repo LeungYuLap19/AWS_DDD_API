@@ -14,7 +14,7 @@ Medical record management for pets across five sub-domains:
 
 The public dewormer brand reference data now lives in `PET_REFERENCE.md` under the new `pet-reference` Lambda.
 
-Most routes require `x-api-key` and a Bearer JWT. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe `form.medical`, `form.medication`, or delete responses with record ids are stale.
+The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe `form.medical`, `form.medication`, or delete responses with record ids are stale.
 
 ---
 
@@ -61,35 +61,11 @@ Most routes require `x-api-key` and a Bearer JWT. The current DDD implementation
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for pet-medical routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-| Route group | API key required | API Gateway authorizer |
-| --- | --- | --- |
-| All GET / POST / PATCH / DELETE `pet-medical` CRUD routes | Yes | `DddTokenAuthorizer` |
-| All `OPTIONS` `pet-medical` routes | No | None |
-
-Protected CRUD requests must send:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-The public reference routes now live in `PET_REFERENCE.md` and only require:
-
-```http
-x-api-key: <api-gateway-api-key>
-```
-
-POST and PATCH requests must also send:
-
-```http
-Content-Type: application/json
-```
-
-### Authorization Rules
+### Endpoint-Specific Authorization
 
 The handler loads the target pet and authorizes the caller when either condition is true:
 

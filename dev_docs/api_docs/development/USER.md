@@ -31,38 +31,14 @@ Authenticated self-service profile endpoints for the current user. All routes op
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for `/user/me` is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-All `/user/me` routes inherit the API default authorizer and API-key requirement.
+### Endpoint-Specific Authorization
 
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `/user/me` GET, PATCH, DELETE | Yes | `DddTokenAuthorizer` |
-| `/user/me` OPTIONS | No | None |
-
-Required deployed headers:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
-
-PATCH requests must also send:
-
-```http
-Content-Type: application/json
-```
-
-### Authentication Rules
-
-- The route identity comes entirely from the Bearer JWT
-- Missing/invalid API key or JWT can be rejected at API Gateway before Lambda authorization begins
 - There is no admin bypass or alternate path for reading another user through this Lambda
-- The handler does not require `userRole === "user"`; a valid NGO-scoped token can read, update, or delete its own underlying `User` document as long as the JWT `userId` resolves to that record
+- The handler does not require `userRole === "user"`; an NGO-scoped caller can read, update, or delete its own underlying `User` document as long as the resolved `userId` matches that record
 
 ### Rate Limits
 
@@ -211,7 +187,6 @@ None.
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | User does not exist or was already deleted |
 | 500 | `common.internalError` | Unexpected internal error |
 
@@ -266,7 +241,6 @@ Partially update the current user profile.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidBodyParams` | Malformed JSON, invalid email, invalid phone, invalid birthday, invalid image URL, invalid field shape, or unknown top-level PATCH field |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | User no longer exists or is deleted |
 | 409 | `user.errors.emailExists` | Another active user already owns the email |
 | 409 | `user.errors.phoneExists` | Another active user already owns the phone number |
@@ -304,7 +278,6 @@ None.
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | User already deleted or not found |
 | 429 | `common.rateLimited` | Delete rate limit exceeded |
 | 500 | `common.internalError` | Unexpected internal error |
@@ -324,4 +297,4 @@ None.
 
 ## Verification Snapshot
 
-Current verification evidence is in `__tests__/user.test.js`. That suite proves the `data` wrapper on GET/PATCH, sanitization of returned user objects, duplicate email/phone handling, PATCH unknown-field rejection, valid NGO-role access to the same underlying user record, and the delete-then-refresh invalidation path. Deployed development-stage verification is still the authoritative final check for API Gateway auth behavior.
+Current verification evidence is in `__tests__/user.test.js`. That suite proves the `data` wrapper on GET/PATCH, sanitization of returned user objects, duplicate email/phone handling, PATCH unknown-field rejection, valid NGO-role access to the same underlying user record, and the delete-then-refresh invalidation path. Deployed development-stage verification is still the authoritative runtime check for the live route contract.

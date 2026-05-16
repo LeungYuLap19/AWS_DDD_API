@@ -57,28 +57,11 @@ This document is written against the current `AWS_DDD_API` implementation, `temp
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for auth routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-All routes in this document require a valid API Gateway API key.
-
-```http
-x-api-key: <api-gateway-api-key>
-```
-
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `/auth/challenges` | Yes | None |
-| `/auth/challenges/verify` | Yes | None at API Gateway. Optional JWT is parsed inside the Lambda for linking. |
-| `/auth/login/ngo` | Yes | None |
-| `/auth/registrations/user` | Yes | None |
-| `/auth/registrations/ngo` | Yes | None |
-| `/auth/tokens/refresh` | Yes | None |
-
-`OPTIONS` preflight requests do not require `x-api-key`.
-
-### Authentication Rules
+### Route-Specific Requirements
 
 | Scenario | Requirement |
 | --- | --- |
@@ -91,21 +74,6 @@ x-api-key: <api-gateway-api-key>
 | Refresh | `x-api-key` + `Cookie: refreshToken=<token>` |
 
 Access tokens use HS256 and expire in 15 minutes.
-
-Important boundary:
-
-- `POST /auth/challenges/verify` does **not** use the API Gateway default authorizer
-- if that route receives an `Authorization: Bearer <access-token>` header, the `auth` Lambda verifies the JWT itself for the optional linking branch
-- therefore an expired/invalid JWT on this one route still reaches the Lambda and returns a unified `401 common.unauthorized`
-- this is different from the repo's other protected APIs, where API Gateway + `RequestAuthorizerFunction` usually reject expired/invalid JWTs before the domain Lambda runs
-
-### Required Headers
-
-| Scenario | Headers |
-| --- | --- |
-| JSON request | `Content-Type: application/json`, `x-api-key: <key>` |
-| Linking verify request | Add `Authorization: Bearer <access-token>` |
-| Refresh | `x-api-key: <key>`, `Cookie: refreshToken=<token>` |
 
 ### Refresh Cookie Contract
 
@@ -406,14 +374,11 @@ For SMS linking, `linked` contains `phoneNumber` instead.
 | 400 | `auth.challenge.codeIncorrect` | SMS verify status returned `pending` |
 | 400 | `auth.challenge.codeExpired` | SMS verify status returned `expired` or `canceled` |
 | 400 | `auth.challenge.verificationFailed` | SMS verify returned another non-approved status not mapped to a more specific key |
-| 401 | `common.unauthorized` | Only for the optional linking branch on this route: JWT was invalid/expired, or the current user no longer exists |
 | 409 | `auth.challenge.emailAlreadyLinked` | Email already belongs to another user during linking |
 | 409 | `auth.challenge.phoneAlreadyLinked` | Phone already belongs to another user during linking |
 | 429 | `common.rateLimited` | Rate limit or failure cooldown exceeded |
 | 503 | `auth.challenge.smsServiceUnavailable` | SMS verify provider unavailable |
 | 500 | `common.internalError` | Unexpected internal error |
-
-This `401 common.unauthorized` row is specific to `POST /auth/challenges/verify` because the route is `Authorizer: NONE` at API Gateway and parses the optional JWT inside the Lambda. Do not reuse this expectation for other protected APIs whose JWT checks happen in the gateway authorizer.
 
 ### POST /auth/registrations/user
 

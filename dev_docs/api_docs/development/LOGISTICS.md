@@ -25,7 +25,6 @@ SF Express integration for public metadata lookups, shipment creation, and cloud
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Token route auth | `POST /logistics/token` is public at API Gateway and in the handler; the old protected-doc version is wrong |
 | Lookup routes | All three lookups are public and IP-rate-limited only |
 | Shipment ownership | Non-privileged callers can only create shipments for orders whose `email` matches `jwt.userEmail` |
 | Privileged roles | `admin`, `ngo`, `staff`, and `developer` bypass the order-email ownership check |
@@ -35,36 +34,14 @@ SF Express integration for public metadata lookups, shipment creation, and cloud
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for logistics routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `/logistics/token` | Yes | None |
-| `/logistics/lookups/*` | Yes | None |
-| `/logistics/shipments` | Yes | `DddTokenAuthorizer` |
-| `/logistics/cloud-waybill` | Yes | `DddTokenAuthorizer` |
-| `OPTIONS` for all logistics routes | No | None |
+### Endpoint-Specific Authorization
 
-### Required Headers
-
-Public logistics requests:
-
-```http
-x-api-key: <api-gateway-api-key>
-Content-Type: application/json
-```
-
-Protected logistics requests:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-Content-Type: application/json
-```
-
-If the API key or Bearer JWT is missing/invalid on protected logistics routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
+- Non-privileged callers can only create shipments for orders whose `email` matches `jwt.userEmail`
+- `admin`, `ngo`, `staff`, and `developer` bypass the shipment ownership check
 
 ### Rate Limits
 
@@ -323,7 +300,6 @@ Create a shipment and write the returned waybill number onto matched orders.
 | 400 | `logistics.validation.phoneNumberRequired` | Missing or empty `phoneNumber` |
 | 400 | `logistics.validation.addressRequired` | Missing or empty `address` |
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Non-privileged caller does not own linked order(s) |
 | 429 | `common.rateLimited` | Shipment rate limit exceeded |
 | 500 | `logistics.missingWaybill` | SF returned no waybill number |
@@ -367,7 +343,6 @@ Generate a cloud-print PDF for a waybill and email it internally.
 | --- | --- | --- |
 | 400 | `logistics.validation.waybillNoRequired` | Missing or empty `waybillNo` |
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 429 | `common.rateLimited` | Cloud-waybill rate limit exceeded |
 | 500 | `logistics.sfApiError` | SF returned a failure state |
 | 500 | `logistics.missingPrintFile` | SF returned no PDF file entry |

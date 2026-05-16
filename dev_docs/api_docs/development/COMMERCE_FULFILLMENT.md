@@ -39,26 +39,11 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for commerce-fulfillment routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| All `/commerce/fulfillment*` routes | Yes | `DddTokenAuthorizer` |
-| `POST /commerce/commands/ptag-detection-email` | Yes | `DddTokenAuthorizer` |
-| `OPTIONS` for the above routes | No | None |
-
-Protected requests must send:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
-
-### Authorization Rules
+### Endpoint-Specific Authorization
 
 | Route | Rule |
 | --- | --- |
@@ -231,7 +216,6 @@ Each item in `data` is sanitized to:
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller is not `admin` or `developer` |
 | 500 | `common.internalError` | Unexpected database or server error |
 
@@ -266,7 +250,6 @@ The handler sets `cancelled: true` and does not hard-delete the record.
 | --- | --- | --- |
 | 400 | `common.missingPathParams` | Missing `orderVerificationId` |
 | 400 | `common.invalidObjectId` | Invalid `orderVerificationId` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller is not `admin` or `developer` |
 | 404 | `fulfillment.errors.notFound` | Verification not found |
 | 409 | `fulfillment.errors.alreadyCancelled` | Verification already cancelled |
@@ -323,7 +306,6 @@ Read one tag-bound fulfillment record plus linked SF waybill number.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidPathParams` | Missing or invalid `tagId` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `fulfillment.errors.notFound` | Verification not found for `tagId` |
 | 500 | `common.internalError` | Unexpected database or server error |
 
@@ -379,7 +361,6 @@ After a successful update, the handler attempts to send a WhatsApp tracking mess
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
 | 400 | `common.noFieldsToUpdate` | Body parsed but no supported non-empty fields were supplied |
 | 400 | `fulfillment.errors.invalidDate` | `verifyDate` failed fulfillment date parsing |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `fulfillment.errors.notFound` | Verification not found for `tagId` |
 | 409 | `fulfillment.errors.duplicateOrderId` | Another verification already uses the requested `orderId` |
 | 500 | `common.internalError` | Unexpected database or server error |
@@ -442,7 +423,6 @@ The handler resolves the supplied identifier in this order:
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidPathParams` | Missing or invalid `orderId` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the linked order and is not privileged |
 | 404 | `fulfillment.errors.notFound` | No matching verification found |
 | 500 | `common.internalError` | Unexpected database or server error |
@@ -491,7 +471,6 @@ The body schema is strict. Extra keys are rejected.
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
 | 400 | `common.noFieldsToUpdate` | Body parsed but no supported non-empty fields were supplied |
 | 400 | `fulfillment.errors.invalidPendingStatus` | `pendingStatus` is not boolean |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the linked order and is not privileged |
 | 404 | `fulfillment.errors.notFound` | No matching verification found |
 | 500 | `common.internalError` | Unexpected database or server error |
@@ -549,7 +528,6 @@ Read one fulfillment record for the WhatsApp share-link flow.
 | --- | --- | --- |
 | 400 | `common.missingPathParams` | Missing `verificationId` |
 | 400 | `common.invalidObjectId` | Invalid `verificationId` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the linked order and is not privileged |
 | 404 | `fulfillment.errors.notFound` | Verification not found |
 | 500 | `common.internalError` | Unexpected database or server error |
@@ -608,7 +586,6 @@ On success, the Lambda sends the rendered HTML email to the provided `email` add
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
 | 400 | `fulfillment.errors.invalidLocationURL` | `locationURL` is not a valid `https://` URL |
 | 400 | `fulfillment.errors.invalidEmail` | Invalid email |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller is not `admin` or `developer` |
 | 503 | `fulfillment.errors.emailServiceUnavailable` | SMTP send failed |
 | 500 | `common.internalError` | Unexpected server error |

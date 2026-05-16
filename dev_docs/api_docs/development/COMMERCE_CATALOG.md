@@ -23,7 +23,6 @@ Public commerce browsing endpoints for product catalog, storefront metadata, pro
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Auth | All four routes are public at the Lambda level, but still require API Gateway `x-api-key` |
 | Pagination | Both GET endpoints use the shared pagination schema with default `page=1`, `limit=30`, max `limit=100` |
 | Catalog response | `GET /commerce/catalog` returns product records inside `data`, not top-level `items` |
 | Storefront response | `GET /commerce/storefront` returns storefront rows inside `data`, not top-level `shops` |
@@ -35,25 +34,9 @@ Public commerce browsing endpoints for product catalog, storefront metadata, pro
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
-
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `GET /commerce/catalog` | Yes | None |
-| `POST /commerce/catalog/events` | Yes | None |
-| `GET /commerce/storefront` | Yes | None |
-| `POST /commerce/storefront/shop-code-verifications` | Yes | None |
-| `OPTIONS` for the above routes | No | None |
-
-Required deployed header:
-
-```http
-x-api-key: <api-gateway-api-key>
-```
-
-`Authorization` is not required for any route in this Lambda.
+Gateway/API-key/JWT behavior for commerce-catalog routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
 ### API Gateway Body Validation
 

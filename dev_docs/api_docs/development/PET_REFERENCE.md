@@ -6,7 +6,6 @@
 
 Public reference data for breed lookups and dewormer brands.
 
-These routes are public at the Lambda layer but still require `x-api-key` at API Gateway. No Bearer JWT is required.
 The shared response helper localizes the `message` field from the request locale; `errorKey` stays stable.
 
 ---
@@ -24,7 +23,6 @@ The shared response helper localizes the `message` field from the request locale
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| API Gateway auth | `Auth: Authorizer: NONE` on the route, but `x-api-key` is still required globally |
 | Breed lookup | Reads `animal_list` and returns the nested `breeds[animalType][lang]` payload directly |
 | Deworm lookup | Reads `anthelmintic` and returns `_id` + `brandName` only |
 | Response envelope | Shared `{ success, message, data, requestId }` envelope |
@@ -32,17 +30,9 @@ The shared response helper localizes the `message` field from the request locale
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
-
-| Route | API key required | API Gateway authorizer |
-| --- | --- | --- |
-| `GET /pet/reference/breed/{animalType}` | Yes | None (no JWT required) |
-| `GET /pet/reference/deworm` | Yes | None (no JWT required) |
-| All `OPTIONS` `pet-reference` routes | No | None |
-
-Protected requests are not applicable here because both routes are public.
+Gateway/API-key/JWT behavior for pet-reference routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
 ### Rate Limits
 
