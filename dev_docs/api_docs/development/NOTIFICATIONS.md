@@ -33,35 +33,15 @@ Per-user notification inbox plus authenticated dispatch. The current DDD impleme
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for notifications routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-All routes use the API key requirement and default token authorizer.
-
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `GET /notifications/me` | Yes | `DddTokenAuthorizer` |
-| `PATCH /notifications/me/{notificationId}` | Yes | `DddTokenAuthorizer` |
-| `POST /notifications/dispatch` | Yes | `DddTokenAuthorizer` |
-| `OPTIONS` for the above routes | No | None |
-
-Protected deployed requests must send:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
-
-Dispatch requests must also send `Content-Type: application/json`.
-
-### Authorization Rules
+### Endpoint-Specific Authorization
 
 - `GET /notifications/me` scopes results to `jwt.userId`
 - `PATCH /notifications/me/{notificationId}` only archives rows where `_id` and `userId` both match
-- `POST /notifications/dispatch` requires JWT auth
+- `POST /notifications/dispatch` does not enforce target ownership and can dispatch to any `targetUserId`
 
 ### Localization
 
@@ -210,7 +190,6 @@ The result is sorted by `createdAt` descending.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid pagination query |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected internal error |
 
 ### PATCH /notifications/me/{notificationId}
@@ -235,7 +214,6 @@ None required. The handler ignores body content.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `notificationId` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 404 | `common.notFound` | Notification not found or not owned by caller |
 | 500 | `common.internalError` | Unexpected internal error |
 
@@ -280,7 +258,6 @@ The body schema is strict. Extra keys are rejected.
 | 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
 | 400 | `notifications.errors.typeRequired` | Invalid or missing notification type |
 | 400 | `notifications.errors.invalidDate` | Invalid `nextEventDate` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 429 | `common.rateLimited` | Dispatch write rate limit exceeded |
 | 500 | `common.internalError` | Unexpected internal error |
 

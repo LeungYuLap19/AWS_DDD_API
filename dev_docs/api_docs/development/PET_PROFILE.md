@@ -39,32 +39,11 @@ Pet profile creation, list/read, update, delete, and public tag lookup. The curr
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for pet-profile routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `POST /pet/profile` | Yes | `DddTokenAuthorizer` |
-| `GET /pet/profile/me` | Yes | `DddTokenAuthorizer` |
-| `GET /pet/profile/{petId}` | Yes | `DddTokenAuthorizer` |
-| `PATCH /pet/profile/{petId}` | Yes | `DddTokenAuthorizer` |
-| `DELETE /pet/profile/{petId}` | Yes | `DddTokenAuthorizer` |
-| `GET /pet/profile/by-tag/{tagId}` | Yes | None |
-| `OPTIONS` for the above routes | No | None |
-
-Protected deployed requests must send:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-If the API key or Bearer JWT is missing/invalid on protected routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
-
-Create and patch requests must use multipart form-data.
-
-### Authorization Rules
+### Endpoint-Specific Authorization
 
 Protected routes authorize access when either condition is true:
 
@@ -444,7 +423,6 @@ Current implementation note: the handler switches into the NGO list branch whene
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid pagination query values |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected internal error |
 
 ### GET /pet/profile/{petId}

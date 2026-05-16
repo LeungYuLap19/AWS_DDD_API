@@ -37,31 +37,11 @@ Lost and found recovery listings and submissions. All routes are authenticated. 
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for pet-recovery routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-These routes inherit the API's default authorizer and API-key requirement.
-
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `/pet/recovery/*` GET, POST, DELETE | Yes | `DddTokenAuthorizer` |
-| `/pet/recovery/*` OPTIONS | No | None |
-
-Required deployed headers:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
-
-For POST requests, send `multipart/form-data` and let the client set the boundary automatically.
-
-### Authorization Rules
-
-All routes require a valid Bearer JWT.
+### Endpoint-Specific Authorization
 
 Additional route-specific checks:
 
@@ -86,9 +66,8 @@ Exceeded limits return `429 common.rateLimited`.
 - Default locale is `en`
 - `errorKey` is the stable integration key
 
-### Authentication And Parse Behavior
+### Request Body Validation
 
-- Missing/invalid API key or JWT can be rejected at API Gateway before Lambda parsing or authorization begins
 - POST routes are multipart-only and use `parseMultipartBody` with strict schemas plus route-specific normalization
 - Multipart parse failures, malformed normalized field types, and unknown extra text fields return `400 common.invalidBodyParams`
 
@@ -269,7 +248,6 @@ ownership/status handling on write. The list response does not expose `petId`.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected error |
 
 ### POST /pet/recovery/lost
@@ -381,7 +359,6 @@ Delete a caller-owned lost-pet report.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `petLostID` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the record |
 | 404 | `petRecovery.errors.petLost.notFound` | Record not found |
 | 500 | `common.internalError` | Unexpected error |
@@ -421,7 +398,6 @@ List found-pet reports sorted by `foundDate` descending.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 500 | `common.internalError` | Unexpected error |
 
 ### POST /pet/recovery/found
@@ -509,7 +485,6 @@ Delete a caller-owned found-pet report.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `petFoundID` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the record |
 | 404 | `petRecovery.errors.petFound.notFound` | Record not found |
 | 500 | `common.internalError` | Unexpected error |

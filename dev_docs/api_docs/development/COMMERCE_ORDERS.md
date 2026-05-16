@@ -34,23 +34,9 @@ Authenticated order checkout and order retrieval. The current DDD implementation
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
-
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| All `/commerce/orders` routes | Yes | `DddTokenAuthorizer` |
-| `OPTIONS` for `/commerce/orders*` | No | None |
-
-Protected requests must send:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-If the API key is missing/invalid, or the Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those gateway-originated auth failures should not be treated as guaranteed `{ success, errorKey, requestId }` responses.
+Gateway/API-key/JWT behavior for commerce-orders routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
 ### API Gateway Body Validation
 
@@ -60,7 +46,7 @@ If the API key is missing/invalid, or the Bearer JWT is missing/invalid, API Gat
 - The documented 400/409/413 `errorKey` values for checkout are still Lambda-generated responses
 - Do not assume API Gateway will return shared `common.*` keys for malformed or missing auth headers
 
-### Authorization Rules
+### Endpoint-Specific Authorization
 
 | Route | Rule |
 | --- | --- |
@@ -245,7 +231,6 @@ Each item in `data` is sanitized to:
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller is not `admin` or `developer` |
 | 500 | `common.internalError` | Unexpected database or server error |
 
@@ -338,7 +323,6 @@ If order-verification creation fails after the order is saved, the handler compe
 | 400 | `common.invalidBodyParams` | Strict-schema violation (for example unknown/extra text fields such as `price`) |
 | 409 | `orders.errors.duplicateOrder` | `tempId` already exists |
 | 413 | `orders.errors.fileTooLarge` | Uploaded file exceeds 4 MB |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 429 | `common.rateLimited` | Checkout rate limit exceeded |
 | 500 | `common.internalError` | Unexpected server error |
 
@@ -428,7 +412,6 @@ Each item in `data` is sanitized to:
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller is not `admin` or `developer` |
 | 500 | `common.internalError` | Unexpected database or server error |
 
@@ -466,7 +449,6 @@ Return minimal contact data for one order.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidPathParams` | Missing or invalid `tempId` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the order |
 | 404 | `orders.errors.orderNotFound` | No order found for `tempId` |
 | 500 | `common.internalError` | Unexpected database or server error |

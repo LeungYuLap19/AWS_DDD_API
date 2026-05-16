@@ -31,34 +31,11 @@ Protected NGO self-service endpoints for the current NGO-scoped caller. These ro
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for NGO routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-All `/ngo/*` routes inherit the API default authorizer and API-key requirement.
-
-| Route group | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `/ngo/me` GET, PATCH | Yes | `DddTokenAuthorizer` |
-| `/ngo/me/members` GET | Yes | `DddTokenAuthorizer` |
-| `/ngo/*` OPTIONS | No | None |
-
-Required deployed headers:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-```
-
-If the API key or Bearer JWT is missing/invalid, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
-
-PATCH requests must also send:
-
-```http
-Content-Type: application/json
-```
-
-### Authorization Rules
+### Endpoint-Specific Authorization
 
 The Lambda first requires:
 
@@ -80,11 +57,6 @@ Failures return:
 | NGO record missing | 404 | `ngo.errors.notFound` |
 | NGO inactive or unverified | 403 | `common.forbidden` |
 | Missing active NGO access row | 403 | `common.forbidden` |
-
-Auth failure note:
-
-- The handler-level branch for wrong role or missing `ngoId` is `403 common.forbidden`
-- Missing/invalid API key or JWT can be rejected by API Gateway before Lambda handling begins
 
 ### Rate Limits
 
@@ -272,7 +244,7 @@ Typical fields include:
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 401 / 403 | `common.forbidden` or gateway-generated 401/403 | Missing/invalid API key or JWT can be rejected before Lambda runs; valid JWTs can still fail NGO role/access checks in Lambda |
+| 403 | `common.forbidden` | Caller is not NGO-scoped, the NGO is inactive/unverified, or the caller lacks active NGO access |
 | 404 | `ngo.errors.notFound` | NGO record does not exist |
 | 500 | `common.internalError` | Unexpected internal error |
 
@@ -437,7 +409,7 @@ Important distinction: an empty or malformed JSON body still fails earlier with 
 | --- | --- | --- |
 | 400 | `common.invalidBodyParams` | Malformed JSON, invalid nested types, invalid email, invalid phone, or invalid field shape |
 | 400 | `common.missingBodyParams` | Missing or empty JSON body |
-| 401 / 403 | `common.forbidden` or gateway-generated 401/403 | Missing/invalid API key or JWT can be rejected before Lambda runs; valid JWTs can still fail NGO role, access, or admin-only checks in Lambda |
+| 403 | `common.forbidden` | Caller is not NGO-scoped, the NGO is inactive/unverified, the caller lacks active NGO access, or a non-admin caller attempted NGO-admin sections |
 | 404 | `ngo.errors.notFound` | NGO record does not exist |
 | 409 | `ngo.errors.emailExists` | Another active user already owns the requested email |
 | 409 | `ngo.errors.phoneExists` | Another active user already owns the requested phone number |
@@ -510,7 +482,7 @@ Return the NGO's active member list.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 401 / 403 | `common.forbidden` or gateway-generated 401/403 | Missing/invalid API key or JWT can be rejected before Lambda runs; valid JWTs can still fail NGO role/access checks in Lambda |
+| 403 | `common.forbidden` | Caller is not NGO-scoped, the NGO is inactive/unverified, or the caller lacks active NGO access |
 | 404 | `ngo.errors.notFound` | NGO record does not exist |
 | 500 | `common.internalError` | Unexpected internal error |
 

@@ -41,37 +41,11 @@ The current DDD implementation uses the shared `{ success, message, data, pagina
 
 ---
 
-## API Gateway And Auth Rules
+## Auth Reference
 
-### API Gateway Requirements
+Gateway/API-key/JWT behavior for adoption routes is defined only in [ENDPOINT_AUTH_BEHAVIOR.md](./ENDPOINT_AUTH_BEHAVIOR.md).
 
-| Route | API key required at API Gateway | API Gateway authorizer |
-| --- | --- | --- |
-| `GET /pet/adoption` | Yes | None |
-| `GET /pet/adoption/detail/{adoptionId}` | Yes | None |
-| `GET /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
-| `POST /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
-| `PATCH /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
-| `DELETE /pet/adoption/{petId}` | Yes | `DddTokenAuthorizer` |
-| `OPTIONS /pet/adoption`, `/pet/adoption/detail/{adoptionId}`, and `/pet/adoption/{petId}` | No | None |
-
-Public browse requests require only:
-
-```http
-x-api-key: <api-gateway-api-key>
-```
-
-Managed create, update, and delete requests must send:
-
-```http
-x-api-key: <api-gateway-api-key>
-Authorization: Bearer <access-token>
-Content-Type: application/json
-```
-
-If the API key or Bearer JWT is missing/invalid on managed routes, API Gateway can reject the request before the Lambda runs. In deployed environments, those auth failures are not guaranteed to use the shared `{ success, errorKey, requestId }` envelope.
-
-### Authorization Rules For Managed Operations
+### Endpoint-Specific Authorization For Managed Operations
 
 Managed operations authorize access when either condition is true:
 
@@ -368,7 +342,6 @@ Get the managed adoption record for an owned pet.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `{petId}` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 500 | `common.internalError` | Unexpected internal error |
@@ -431,7 +404,6 @@ The body schema is strict. Extra keys are rejected.
 | 400 | `common.missingBodyParams` | Missing or empty JSON body |
 | 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
 | 400 | `petAdoption.errors.managed.invalidDateFormat` | Invalid date in one of the managed date fields |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 409 | `petAdoption.errors.managed.duplicateRecord` | Managed record already exists for the pet |
@@ -467,7 +439,6 @@ Any subset of the same fields accepted by managed create may be supplied.
 | 400 | `common.missingBodyParams` | Missing or empty JSON body |
 | 400 | `common.invalidBodyParams` | Malformed JSON, strict-schema violation, or invalid field type |
 | 400 | `petAdoption.errors.managed.invalidDateFormat` | Invalid date in one of the managed date fields |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 404 | `petAdoption.errors.managed.recordNotFound` | No managed adoption record exists for that pet |
@@ -492,7 +463,6 @@ None.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidObjectId` | Invalid `{id}` |
-| 401 / 403 | Gateway-generated; do not rely on unified `errorKey` | Missing/invalid API key or JWT can be rejected before Lambda runs |
 | 403 | `common.forbidden` | Caller does not own the pet |
 | 404 | `petAdoption.errors.managed.petNotFound` | Pet does not exist or is deleted |
 | 404 | `petAdoption.errors.managed.recordNotFound` | No managed adoption record exists for that pet |
