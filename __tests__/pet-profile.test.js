@@ -1714,7 +1714,7 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.body.pagination.total).toBe(0);
     });
 
-    test('returns 200 with null-filled form when no pet matches a public tag lookup', async () => {
+    test('returns 404 when no pet matches a public tag lookup', async () => {
       const { handler } = loadHandlerWithMocks({
         publicTagPet: null,
       });
@@ -1730,10 +1730,8 @@ describe('pet-profile handler Tier 2 integration', () => {
       );
 
       const parsed = parseResponse(result);
-      expect(parsed.statusCode).toBe(200);
-      expect(parsed.body.data.name).toBeNull();
-      expect(parsed.body.data.breedimage).toBeNull();
-      expect(parsed.body.data.status).toBeNull();
+      expect(parsed.statusCode).toBe(404);
+      expect(parsed.body.errorKey).toBe('common.notFound');
     });
 
     test('returns 429 with retry-after header when create exceeds the rate limit', async () => {

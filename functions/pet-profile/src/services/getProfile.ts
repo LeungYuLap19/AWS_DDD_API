@@ -73,6 +73,10 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
     PUBLIC_TAG_PROJECTION
   ).lean();
 
+  if (!pet) {
+    return response.errorResponse(404, 'common.notFound', ctx.event);
+  }
+
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
     data: sanitizePublicTagLookupPet(pet),
