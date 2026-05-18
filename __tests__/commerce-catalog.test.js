@@ -140,6 +140,9 @@ function resetEnv(overrides = {}) {
  * productLogError    — thrown by ProductLog.create()
  * shopInfoResult     — value returned by ShopInfo.find().lean()
  * shopInfoError      — thrown by ShopInfo.find().lean()
+ * ptagProductResult  — value returned by PtagProduct.find().lean()
+ * ptagProductByIdResult — value returned by PtagProduct.findById().lean()
+ * ptagProductError   — thrown by PtagProduct.find()/findById().lean()
  * connectError       — thrown by mongoose.connect
  */
 function loadHandlerWithMocks({
@@ -149,6 +152,9 @@ function loadHandlerWithMocks({
   productLogError = null,
   shopInfoResult = [],
   shopInfoError = null,
+  ptagProductResult = [],
+  ptagProductByIdResult = null,
+  ptagProductError = null,
   connectError = null,
 } = {}) {
   jest.resetModules();
@@ -177,6 +183,21 @@ function loadHandlerWithMocks({
       : jest.fn().mockResolvedValue(shopInfoResult),
   });
 
+  const ptagProductFind = jest.fn().mockReturnValue({
+    sort: jest.fn().mockReturnThis(),
+    lean: ptagProductError
+      ? jest.fn().mockRejectedValue(ptagProductError)
+      : jest.fn().mockResolvedValue(ptagProductResult),
+  });
+
+  const ptagProductFindById = ptagProductError
+    ? jest.fn().mockReturnValue({
+        lean: jest.fn().mockRejectedValue(ptagProductError),
+      })
+    : jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(ptagProductByIdResult),
+      });
+
   const rateLimitModel = {
     findOne: jest.fn(() => ({
       lean: jest.fn().mockResolvedValue(null),
@@ -201,6 +222,7 @@ function loadHandlerWithMocks({
       if (name === 'ProductList') return { find: productListFind, countDocuments: jest.fn().mockResolvedValue(productListResult.length) };
       if (name === 'ProductLog') return { create: productLogModelCreate };
       if (name === 'ShopInfo') return { find: shopInfoFind, countDocuments: jest.fn().mockResolvedValue(shopInfoResult.length) };
+      if (name === 'PtagProduct') return { find: ptagProductFind, findById: ptagProductFindById };
       if (name === 'RateLimit' || name === 'MongoRateLimit') return rateLimitModel;
       throw new Error(`Unexpected model "${name}"`);
     }),
@@ -216,7 +238,7 @@ function loadHandlerWithMocks({
   jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
 
   const { handler } = require(handlerModulePath);
-  return { handler, productListFind, productLogModelCreate, shopInfoFind };
+  return { handler, productListFind, productLogModelCreate, shopInfoFind, ptagProductFind, ptagProductFindById };
 }
 
 // ─── handler infrastructure ───────────────────────────────────────────────────
@@ -734,6 +756,167 @@ describe('GET /commerce/storefront', () => {
     );
 
     expect(parseResponse(result).statusCode).toBe(405);
+  });
+});
+
+// ─── GET /commerce/catalog/ptag-products ─────────────────────────────────────
+
+describe('GET /commerce/catalog/ptag-products', () => {
+  test('happy path — returns ptag products list from DB shape', async () => {
+    const sampleId = new mongoose.Types.ObjectId();
+    const { handler } = loadHandlerWithMocks({
+      ptagProductResult: [
+        {
+          _id: sampleId,
+          name: 'ptag air',
+          deliveryCharge: 50,
+          options: { sizes: [], colours: [] },
+          tiers: [{ type: 'standard', price: 199 }],
+          createdAt: new Date('2026-05-18T09:45:00.000Z'),
+          updatedAt: new Date('2026-05-18T09:45:00.000Z'),
+        },
+      ],
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: '/commerce/catalog/ptag-products',
+        resource: '/commerce/catalog/ptag-products',
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(Array.isArray(parsed.body.data)).toBe(true);
+    expect(parsed.body.data).toHaveLength(1);
+    expect(parsed.body.data[0]).toMatchObject({
+      productId: sampleId.toString(),
+      name: 'ptag air',
+      deliveryCharge: 50,
+      options: { sizes: [], colours: [] },
+      tiers: [{ type: 'standard', price: 199 }],
+      createdAt: '2026-05-18T09:45:00.000Z',
+      updatedAt: '2026-05-18T09:45:00.000Z',
+    });
+  });
+
+  test('returns 405 for unsupported method on ptag-products collection route', async () => {
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/commerce/catalog/ptag-products',
+        resource: '/commerce/catalog/ptag-products',
+      }),
+      createContext()
+    );
+
+    expect(parseResponse(result).statusCode).toBe(405);
+  });
+});
+
+// ─── GET /commerce/catalog/ptag-products/{productId} ────────────────────────
+
+describe('GET /commerce/catalog/ptag-products/{productId}', () => {
+  test('happy path — returns one ptag product by productId', async () => {
+    const productId = new mongoose.Types.ObjectId().toString();
+    const { handler } = loadHandlerWithMocks({
+      ptagProductByIdResult: {
+        _id: productId,
+        name: 'PTag',
+        deliveryCharge: 50,
+        options: { sizes: ['25mm', '30mm'], colours: ['gold', 'silver'] },
+        tiers: [
+          { type: 'normal', price: 259 },
+          { type: 'custom', price: 279 },
+        ],
+        createdAt: new Date('2026-05-18T09:45:00.000Z'),
+        updatedAt: new Date('2026-05-18T09:45:00.000Z'),
+      },
+    });
+
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: `/commerce/catalog/ptag-products/${productId}`,
+        resource: '/commerce/catalog/ptag-products/{productId}',
+        pathParameters: { productId },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data).toMatchObject({
+      productId,
+      name: 'PTag',
+      deliveryCharge: 50,
+      options: { sizes: ['25mm', '30mm'], colours: ['gold', 'silver'] },
+      tiers: [
+        { type: 'normal', price: 259 },
+        { type: 'custom', price: 279 },
+      ],
+      createdAt: '2026-05-18T09:45:00.000Z',
+      updatedAt: '2026-05-18T09:45:00.000Z',
+    });
+  });
+
+  test('returns 404 for unknown productId', async () => {
+    const productId = new mongoose.Types.ObjectId().toString();
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: `/commerce/catalog/ptag-products/${productId}`,
+        resource: '/commerce/catalog/ptag-products/{productId}',
+        pathParameters: { productId },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(404);
+    expect(parsed.body.errorKey).toBe('common.notFound');
+  });
+
+  test('returns 400 when productId path parameter is missing/invalid', async () => {
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: '/commerce/catalog/ptag-products/',
+        resource: '/commerce/catalog/ptag-products/{productId}',
+        pathParameters: { productId: '' },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
+  });
+
+  test('returns 400 when productId is not an ObjectId', async () => {
+    const { handler } = loadHandlerWithMocks();
+
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: '/commerce/catalog/ptag-products/not-an-objectid',
+        resource: '/commerce/catalog/ptag-products/{productId}',
+        pathParameters: { productId: 'not-an-objectid' },
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.invalidObjectId');
   });
 });
 

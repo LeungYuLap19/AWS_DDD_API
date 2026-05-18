@@ -1971,6 +1971,22 @@ Resources:
               Model: GenericJsonObjectRequest
               Required: false
               ValidateBody: true
+        CommerceCatalogPtagProductsGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog/ptag-products
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        CommerceCatalogPtagProductByIdGET:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog/ptag-products/{productId}
+            Method: GET
+            Auth:
+              Authorizer: NONE
         CommerceStorefrontGET:
           Type: Api
           Properties:
@@ -2001,6 +2017,24 @@ Resources:
           Properties:
             RestApiId: !Ref RestApi
             Path: /commerce/catalog/events
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceCatalogPtagProductsOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog/ptag-products
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+              ApiKeyRequired: false
+        CommerceCatalogPtagProductByIdOPTIONS:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /commerce/catalog/ptag-products/{productId}
             Method: OPTIONS
             Auth:
               Authorizer: NONE
