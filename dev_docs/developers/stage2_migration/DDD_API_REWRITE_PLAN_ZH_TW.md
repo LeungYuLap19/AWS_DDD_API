@@ -827,6 +827,8 @@ sam deploy --config-env production
 | --- | --- | --- | --- | --- |
 | `GET /commerce/catalog` | `GET /product/productList` | `GetBreed` | `commerce-catalog` | product catalog / reference list。 |
 | `POST /commerce/catalog/events` | `POST /product/productLog` | `GetBreed` | `commerce-catalog` | product access/view event logging。 |
+| `GET /commerce/catalog/ptag-products` | — | — | `commerce-catalog` | PTag 商品清單（DB collection: `ptagProduct`）。 |
+| `GET /commerce/catalog/ptag-products/{productId}` | — | — | `commerce-catalog` | 以 `productId`（ObjectId）取得單一 PTag 商品。 |
 | `GET /commerce/storefront` | `GET /purchase/shop-info` | `purchaseConfirmation` | `commerce-catalog` | checkout/storefront metadata。 |
 | `POST /commerce/storefront/shop-code-verifications` | — | — | `commerce-catalog` | 驗證 shop code（可由 `shopCode` 或 PDF 內容解析）。 |
 | `GET /commerce/orders` | `GET /purchase/orders` | `purchaseConfirmation` | `commerce-orders` | order list。 |
