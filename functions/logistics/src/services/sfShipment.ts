@@ -87,45 +87,47 @@ export async function createShipment({
   let apiResultData: Record<string, unknown>;
   try {
     accessToken = await getAccessToken();
+    const attrName = customerDetails.attrName?.trim();
+    const netCode = customerDetails.netCode?.trim();
+    const msgData: Record<string, unknown> = {
+      expressTypeId: 1,
+      payMethod: 1,
+      isGenEletricPic: 1,
+      isReturnRouteLabel: 1,
+      cargoDetails: [{ name: 'PTag', count: customerDetails.count || 1 }],
+      contactInfoList: [
+        {
+          contactType: 1,
+          contact: 'Pet Pet Club',
+          tel: '85255764375',
+          country: 'HK',
+          province: 'Hong Kong',
+          city: 'Tsuen Wan',
+          address: 'D3, 29/F, TML Tower, 3 Hoi Shing Road, Tsuen Wan',
+        },
+        {
+          contactType: 2,
+          contact: customerDetails.lastName,
+          tel: customerDetails.phoneNumber,
+          country: 'HK',
+          province: 'Hong Kong',
+          city: 'Hong Kong',
+          address: customerDetails.address,
+        },
+      ],
+      language: 'zh-CN',
+      orderId: `T${Math.floor(Math.random() * 1e10)}`,
+      custId: process.env.SF_CUSTOMER_CODE,
+    };
+
+    if (attrName && netCode) {
+      msgData.extraInfoList = [{ attrName, attrVal: netCode }];
+    }
+
     apiResultData = await callSfService({
       serviceCode: 'EXP_RECE_CREATE_ORDER',
       accessToken,
-      msgData: {
-        expressTypeId: 1,
-        payMethod: 1,
-        isGenEletricPic: 1,
-        isReturnRouteLabel: 1,
-        cargoDetails: [{ name: 'PTag', count: customerDetails.count || 1 }],
-        contactInfoList: [
-          {
-            contactType: 1,
-            contact: 'Pet Pet Club',
-            tel: '85255764375',
-            country: 'HK',
-            province: 'Hong Kong',
-            city: 'Tsuen Wan',
-            address: 'D3, 29/F, TML Tower, 3 Hoi Shing Road, Tsuen Wan',
-          },
-          {
-            contactType: 2,
-            contact: customerDetails.lastName,
-            tel: customerDetails.phoneNumber,
-            country: 'HK',
-            province: 'Hong Kong',
-            city: 'Hong Kong',
-            address: customerDetails.address,
-          },
-        ],
-        language: 'zh-CN',
-        orderId: `T${Math.floor(Math.random() * 1e10)}`,
-        custId: process.env.SF_CUSTOMER_CODE,
-        extraInfoList: [
-          {
-            attrName: customerDetails.attrName,
-            attrVal: customerDetails.netCode,
-          },
-        ],
-      },
+      msgData,
     });
   } catch {
     return response.errorResponse(502, 'logistics.sfApiError', event);

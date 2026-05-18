@@ -1,6 +1,7 @@
 const fs = require('fs');
 
 const env = JSON.parse(fs.readFileSync('env.development.json', 'utf8'));
+const stripBearerPrefix = (value) => String(value ?? '').trim().replace(/^Bearer\s+/i, '');
 
 const values = {
   DEV_ALLOWED_ORIGINS: env.Parameters.ALLOWED_ORIGINS,
@@ -34,7 +35,7 @@ const values = {
   DEV_COMMERCE_SMTP_USER: env.CommerceFulfillmentFunction.SMTP_USER,
   DEV_COMMERCE_SMTP_PASS: env.CommerceFulfillmentFunction.SMTP_PASS,
   DEV_COMMERCE_SMTP_FROM: env.CommerceFulfillmentFunction.SMTP_FROM,
-  DEV_WHATSAPP_BEARER_TOKEN: env.CommerceFulfillmentFunction.WHATSAPP_BEARER_TOKEN,
+  DEV_WHATSAPP_BEARER_TOKEN: stripBearerPrefix(env.CommerceFulfillmentFunction.WHATSAPP_BEARER_TOKEN),
   DEV_WHATSAPP_PHONE_NUMBER_ID: env.CommerceFulfillmentFunction.WHATSAPP_PHONE_NUMBER_ID,
   DEV_CUTTLY_API_KEY: env.CommerceFulfillmentFunction.CUTTLY_API_KEY,
   DEV_SF_CUSTOMER_CODE: env.LogisticsFunction.SF_CUSTOMER_CODE,

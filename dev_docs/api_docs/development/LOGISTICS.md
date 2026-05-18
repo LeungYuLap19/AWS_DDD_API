@@ -358,6 +358,7 @@ Generate a cloud-print PDF for a waybill and email it internally.
 3. Use `tempId` or `tempIdList` only when shipment creation should also update matching orders.
 4. Do not assume shipment success always returns `tempIdList`; that field is only echoed when it was sent in the request.
 5. For non-privileged callers, ensure the shipment is tied to orders owned by the current user's email or the request will fail with `common.forbidden`.
+6. `attrName` and `netCode` are treated as a pair for SF pickup metadata. Send both to include `extraInfoList`; if either is missing, shipment creation is sent as address-only delivery.
 
 ---
 
