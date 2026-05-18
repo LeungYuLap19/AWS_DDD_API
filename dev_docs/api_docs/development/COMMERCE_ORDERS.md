@@ -259,20 +259,33 @@ The backend detects MIME type from file bytes, not just the declared multipart c
 | `lastName` | string | Yes | Trimmed, max 100 |
 | `email` | string | Yes | Valid email |
 | `address` | string | Yes | Trimmed, max 500 |
-| `option` | string | Yes | Max 64, must match `[A-Za-z0-9_-]+` |
+| `option` | string | Yes | Must be one of: `PTag`, `PTagAir` |
+| `type` | string | No | Tier within the product. `PTag`: `normal` or `custom`. `PTagAir`: `standard` (or omit — defaults to standard). Defaults to `""` |
+| `optionSize` | string | Conditional | Required when `option=PTag`. Must be one of: `25mm`, `30mm`. Not required for `PTagAir` (no sizes defined) |
+| `optionColor` | string | Conditional | Required when `option=PTag`. Must be one of: `gold`, `silver`. Not required for `PTagAir` (no colours defined) |
 | `tempId` | string | Yes | Max 64, must match `[A-Za-z0-9_-]+` |
 | `paymentWay` | string | Yes | Max 128 |
 | `delivery` | string | Yes | Max 128 |
+| `lastName` | string | Yes | Trimmed, max 100 |
+| `email` | string | Yes | Valid email |
+| `address` | string | Yes | Trimmed, max 500 |
 | `petName` | string | Yes | Trimmed, max 100 |
 | `phoneNumber` | string | Yes | 7 to 15 digits only |
 | `shopCode` | string | No | Defaults to `""` |
-| `type` | string | No | Defaults to `""` |
 | `promotionCode` | string | No | Defaults to `""` |
 | `petContact` | string | No | Defaults to `""` |
 | `optionImg` | string | No | Accepted by schema but not used by handler output or response |
-| `optionSize` | string | No | Defaults to `""`. If the product defines available sizes, must match one of them; validated during pricing resolution |
-| `optionColor` | string | No | Defaults to `""`. If the product defines available colours, must match one of them; validated during pricing resolution |
 | `lang` | enum string | No | `chn` or `eng`, defaults to `eng` |
+
+##### Product Reference (current DB state)
+
+| `option` | `type` | `optionSize` | `optionColor` | Base price | Delivery |
+| --- | --- | --- | --- | --- | --- |
+| `PTag` | `normal` | `25mm` or `30mm` | `gold` or `silver` | $259 | $50 |
+| `PTag` | `custom` | `25mm` or `30mm` | `gold` or `silver` | $279 | $50 |
+| `PTagAir` | `standard` (or `""`) | — | — | $199 | $50 |
+
+`optionSize` and `optionColor` are validated against the live `ptagProduct` collection at order time. If the product's options arrays are non-empty and the submitted value does not match, the order is rejected with `400 orders.errors.invalidProductSelection`.
 
 The multipart field set is strict. Unknown text fields are rejected.
 For example, sending client-side `price` in checkout body is rejected with
