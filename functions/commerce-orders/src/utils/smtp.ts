@@ -27,6 +27,7 @@ interface OrderEmailData {
   shopCode: string;
   delivery: string;
   price: number;
+  deliveryFee: number;
   promotionCode: string;
   petContact: string;
   petName: string;
@@ -51,7 +52,9 @@ function buildOrderConfirmationEmail(order: OrderEmailData, newOrderVerification
 
   const printContentLabel = order.isPTagAir ? 'Ptag Air' : 'Ptag';
   const unitPrice = typeof order.price === 'number' ? order.price : parseFloat(String(order.price)) || 0;
-  const totalPrice = unitPrice + 50;
+  const deliveryFee = typeof order.deliveryFee === 'number' ? order.deliveryFee : 50;
+  const itemPrice = unitPrice - deliveryFee;
+  const totalPrice = unitPrice;
   const petImageSrc =
     order.petImg ||
     'https://petpetclub.s3.ap-southeast-1.amazonaws.com/user-uploads/pets/68e37c919c1c33505d734e28/68e37ec59c1c33505d734e38.png';
@@ -75,6 +78,8 @@ function buildOrderConfirmationEmail(order: OrderEmailData, newOrderVerification
     ADDRESS: order.address,
     PAYMENT_WAY: order.paymentWay,
     UNIT_PRICE: String(unitPrice),
+    ITEM_PRICE: String(itemPrice),
+    DELIVERY_FEE: String(deliveryFee),
     TOTAL_PRICE: String(totalPrice),
     CONFIRMATION_LINK: confirmationLink,
   });

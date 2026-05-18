@@ -342,7 +342,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     }
     return response.errorResponse(400, 'orders.errors.invalidShopCode', ctx.event);
   }
-  const { finalPrice } = pricing.data;
+  const { finalPrice, deliveryFee } = pricing.data;
 
   // 5. Upload optional files after pricing is validated.
   const normalizedFiles: CheckoutFile[] = multiResult.files
@@ -403,7 +403,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
       {
         lastName, phoneNumber, address, email, option, type, tempId,
         petImg: petImgUrl, paymentWay, shopCode, delivery, price: finalPrice,
-        promotionCode, petContact, petName, optionColor, optionSize, isPTagAir,
+        deliveryFee, promotionCode, petContact, petName, optionColor, optionSize, isPTagAir,
       },
       'support@ptag.com.hk',
       newOrderVerificationId
