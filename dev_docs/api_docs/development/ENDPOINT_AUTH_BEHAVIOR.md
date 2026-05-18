@@ -145,6 +145,8 @@ Every documented route belongs to exactly one auth class.
 - `GET /pet/reference/deworm`
 - `GET /commerce/catalog`
 - `POST /commerce/catalog/events`
+- `GET /commerce/catalog/ptag-products`
+- `GET /commerce/catalog/ptag-products/{productId}`
 - `GET /commerce/storefront`
 - `POST /commerce/storefront/shop-code-verifications`
 - `POST /logistics/token`

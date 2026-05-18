@@ -4,7 +4,7 @@
 
 **Lambda:** `aws-ddd-api-{stage}-commerce-catalog`
 
-Public commerce browsing endpoints for product catalog, storefront metadata, product-view event logging, and storefront shop-code verification. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `items`, `shops`, or `id` payloads are stale.
+Public commerce browsing endpoints for legacy product catalog, PTag product catalog, storefront metadata, product-view event logging, and storefront shop-code verification. The current DDD implementation uses the shared `{ success, message, data, pagination?, requestId }` envelope. Older docs that describe top-level `items`, `shops`, or `id` payloads are stale.
 
 ---
 
@@ -16,6 +16,8 @@ Public commerce browsing endpoints for product catalog, storefront metadata, pro
 | --- | --- | --- | --- | --- |
 | GET | `/commerce/catalog` | `x-api-key` only | — | Paginated product list |
 | POST | `/commerce/catalog/events` | `x-api-key` only | `application/json` | Record a product-view event |
+| GET | `/commerce/catalog/ptag-products` | `x-api-key` only | — | PTag product list |
+| GET | `/commerce/catalog/ptag-products/{productId}` | `x-api-key` only | — | PTag product detail |
 | GET | `/commerce/storefront` | `x-api-key` only | — | Paginated storefront list |
 | POST | `/commerce/storefront/shop-code-verifications` | `x-api-key` only | `application/json` or `multipart/form-data` | Verify a storefront shop code |
 
@@ -23,8 +25,10 @@ Public commerce browsing endpoints for product catalog, storefront metadata, pro
 
 | Topic | Current DDD behavior |
 | --- | --- |
-| Pagination | Both GET endpoints use the shared pagination schema with default `page=1`, `limit=30`, max `limit=100` |
+| Pagination | `GET /commerce/catalog` and `GET /commerce/storefront` use shared pagination defaults `page=1`, `limit=30`, max `limit=100` |
 | Catalog response | `GET /commerce/catalog` returns product records inside `data`, not top-level `items` |
+| PTag product list response | `GET /commerce/catalog/ptag-products` returns sanitized records from `ptagProduct` collection, each with `productId` mapped from `_id` |
+| PTag product detail path | `GET /commerce/catalog/ptag-products/{productId}` requires MongoDB ObjectId path param and returns `400 common.invalidObjectId` for invalid IDs |
 | Storefront response | `GET /commerce/storefront` returns storefront rows inside `data`, not top-level `shops` |
 | Event response | `POST /commerce/catalog/events` returns `201` with `data: { id }` |
 | Event validation | Event body is strict JSON; extra keys are rejected |
@@ -212,6 +216,104 @@ The body schema is strict. Extra keys are rejected.
 | 429 | `common.rateLimited` | Event rate limit exceeded |
 | 500 | `common.internalError` | Unexpected database or server error |
 
+### GET /commerce/catalog/ptag-products
+
+Return PTag product list from `ptagProduct` collection.
+
+**Lambda owner:** `commerce-catalog`  
+**Auth:** `x-api-key` only
+
+#### Returned PTag Product Shape
+
+Each row is sanitized and returned as:
+
+- `productId` (string; mapped from MongoDB `_id`)
+- `name` (string or `null`)
+- `deliveryCharge` (number or `null`)
+- `options.sizes` (string[])
+- `options.colours` (string[])
+- `tiers[]` with `{ type, price }` where `type` is non-empty string and `price` is number or `null`
+- `createdAt` (ISO string or `null`)
+- `updatedAt` (ISO string or `null`)
+
+#### PTag Product List Success (200)
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": [
+    {
+      "productId": "68298a5b7f8f0b2a81d8aa12",
+      "name": "PTag",
+      "deliveryCharge": 50,
+      "options": {
+        "sizes": ["25mm", "30mm"],
+        "colours": ["gold", "silver"]
+      },
+      "tiers": [
+        { "type": "normal", "price": 259 },
+        { "type": "custom", "price": 279 }
+      ],
+      "createdAt": "2026-05-18T09:45:00.000Z",
+      "updatedAt": "2026-05-18T09:45:00.000Z"
+    }
+  ],
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+#### PTag Product List Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 500 | `common.internalError` | Unexpected database or server error |
+
+### GET /commerce/catalog/ptag-products/{productId}
+
+Return a single PTag product by MongoDB ObjectId.
+
+**Lambda owner:** `commerce-catalog`  
+**Auth:** `x-api-key` only
+
+#### Path Parameters
+
+| Param | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `productId` | string | Yes | MongoDB ObjectId |
+
+#### PTag Product Detail Success (200)
+
+```json
+{
+  "success": true,
+  "message": "Retrieved successfully",
+  "data": {
+    "productId": "68298a5b7f8f0b2a81d8aa12",
+    "name": "ptag air",
+    "deliveryCharge": 50,
+    "options": {
+      "sizes": [],
+      "colours": []
+    },
+    "tiers": [
+      { "type": "standard", "price": 199 }
+    ],
+    "createdAt": "2026-05-18T09:45:00.000Z",
+    "updatedAt": "2026-05-18T09:45:00.000Z"
+  },
+  "requestId": "aws-lambda-request-id"
+}
+```
+
+#### PTag Product Detail Errors
+
+| Status | `errorKey` | Cause |
+| --- | --- | --- |
+| 400 | `common.invalidObjectId` | `productId` is missing or not a valid ObjectId |
+| 404 | `common.notFound` | Product document not found |
+| 500 | `common.internalError` | Unexpected database or server error |
+
 ### GET /commerce/storefront
 
 Return paginated storefront records.
@@ -357,11 +459,12 @@ Multipart mode:
 
 1. Use `GET /commerce/storefront` to fetch server-authoritative `shopCode` and `price` values before checkout.
 2. Use `GET /commerce/catalog` for paginated browsing and read records from `data`, not old top-level `items`.
-3. Treat `POST /commerce/catalog/events` as fire-and-forget analytics. It is public but rate-limited, so the client should not retry aggressively on `429`.
-4. For shop-code checks, prefer sending `shopCode` directly. Use PDF upload only when frontend cannot reliably provide the code as text.
+3. Use `GET /commerce/catalog/ptag-products` and `GET /commerce/catalog/ptag-products/{productId}` for checkout-ready PTag product metadata (`deliveryCharge`, `options`, `tiers`) and treat `productId` as the canonical identifier.
+4. Treat `POST /commerce/catalog/events` as fire-and-forget analytics. It is public but rate-limited, so the client should not retry aggressively on `429`.
+5. For shop-code checks, prefer sending `shopCode` directly. Use PDF upload only when frontend cannot reliably provide the code as text.
 
 ---
 
 ## Verification Snapshot
 
-This document is grounded in `functions/commerce-catalog/src/services/catalog.ts`, `storefront.ts`, `catalogEventBodySchema.ts`, `verifyShopCodeBodySchema.ts`, and the route wiring in `template.yaml`.
+This document is grounded in `functions/commerce-catalog/src/services/catalog.ts`, `ptagProducts.ts`, `storefront.ts`, `catalogEventBodySchema.ts`, `verifyShopCodeBodySchema.ts`, `models/PtagProduct.ts`, and the route wiring in `template.yaml`.

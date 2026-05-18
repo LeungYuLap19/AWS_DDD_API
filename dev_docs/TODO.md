@@ -62,7 +62,7 @@
   - endpoints to fix:
   - `POST /commerce/orders`
 
-- [ ] product ednpoints
+- [x] product endpoints
   - `GET /commerce/catalog/ptag-products`
   - `GET /commerce/catalog/ptag-products/{productId}`
 
