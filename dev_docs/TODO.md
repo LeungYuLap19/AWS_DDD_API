@@ -88,5 +88,3 @@
 - [ ] Remove dead S3 env vars from `PetBiometricFunction` and `CommerceFulfillmentFunction`
   - `AWS_BUCKET_NAME`, `AWS_BUCKET_BASE_URL`, `AWS_BUCKET_REGION` declared in `envSchema.ts` and wired in `template.yaml` but never consumed by any service, router, or utility
   - Remove from both `envSchema.ts` files and from the `Environment.Variables` blocks in `template.yaml`
-
-- [logistics] SF address client uses `hksfaddsit.sf-express.com` (SIT/staging environment) for area, netCode, and address lookups. Only the login URL uses the production `hksfadd` subdomain. Carried over from legacy unchanged. Confirm with SF Express whether separate production URLs exist for these endpoints. Revisit after frontend integration tests
