@@ -310,7 +310,7 @@ function loadHandlerWithMocks({
 
   jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
 
-  mockLogisticsExternalClients({
+  const externalClientMocks = mockLogisticsExternalClients({
     fetchAddressTokenResult,
     fetchAddressTokenError,
     fetchAreaListResult,
@@ -329,7 +329,7 @@ function loadHandlerWithMocks({
   });
 
   const { handler } = require(handlerModulePath);
-  return { handler, orderModel, rateLimitModel };
+  return { handler, orderModel, rateLimitModel, ...externalClientMocks };
 }
 
 // ─── test suites ─────────────────────────────────────────────────────────────
@@ -712,6 +712,68 @@ describe('POST /logistics/shipments', () => {
     expect(parsed.statusCode).toBe(200);
     expect(parsed.body.data.trackingNumber).toBe('SF9999999999');
     expect(orderModel.updateMany).not.toHaveBeenCalled(); // no tempIds matched
+  });
+
+  test('omits extraInfoList when attrName/netCode are not provided', async () => {
+    const { handler, httpsRequest } = loadHandlerWithMocks({
+      callSfServiceResult: {
+        msgData: { waybillNoInfoList: [{ waybillNo: 'SF7770001112' }] },
+      },
+    });
+
+    await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/shipments',
+        body: {
+          lastName: 'Chan',
+          phoneNumber: '+85291234567',
+          address: '1 Test Road, HK',
+        },
+      }),
+      createContext()
+    );
+
+    const sfCallIndex = httpsRequest.mock.calls.findIndex(([options]) =>
+      String(options.path || '').includes('/std/service')
+    );
+    expect(sfCallIndex).toBeGreaterThanOrEqual(0);
+
+    const requestBody = httpsRequest.mock.results[sfCallIndex].value.write.mock.calls[0][0];
+    const msgData = JSON.parse(new URLSearchParams(requestBody).get('msgData') || '{}');
+    expect(msgData.extraInfoList).toBeUndefined();
+  });
+
+  test('includes extraInfoList when attrName/netCode are provided', async () => {
+    const { handler, httpsRequest } = loadHandlerWithMocks({
+      callSfServiceResult: {
+        msgData: { waybillNoInfoList: [{ waybillNo: 'SF7770001113' }] },
+      },
+    });
+
+    await handler(
+      createEvent({
+        method: 'POST',
+        path: '/logistics/shipments',
+        body: {
+          lastName: 'Chan',
+          phoneNumber: '+85291234567',
+          address: '1 Test Road, HK',
+          attrName: 'serviceCode',
+          netCode: '852BA',
+        },
+      }),
+      createContext()
+    );
+
+    const sfCallIndex = httpsRequest.mock.calls.findIndex(([options]) =>
+      String(options.path || '').includes('/std/service')
+    );
+    expect(sfCallIndex).toBeGreaterThanOrEqual(0);
+
+    const requestBody = httpsRequest.mock.results[sfCallIndex].value.write.mock.calls[0][0];
+    const msgData = JSON.parse(new URLSearchParams(requestBody).get('msgData') || '{}');
+    expect(msgData.extraInfoList).toEqual([{ attrName: 'serviceCode', attrVal: '852BA' }]);
   });
 
   test('writes waybill number to matched orders', async () => {

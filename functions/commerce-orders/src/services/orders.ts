@@ -459,7 +459,11 @@ export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGate
   const safeOrder = sanitizeOrder(order);
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    data: { id: String(safeOrder['_id']), petContact: safeOrder['petContact'] as string | undefined },
+    data: { 
+      id: String(safeOrder['_id']), 
+      petContact: safeOrder['petContact'] as string | undefined,
+      sfWayBillNumber: safeOrder['sfWayBillNumber'] as string | undefined
+    },
   });
 }
 
