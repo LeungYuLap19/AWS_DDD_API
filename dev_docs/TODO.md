@@ -57,7 +57,8 @@
 - [x] POST /commerce/storefront/shop-code-verifications
 
 - [x] commerce pricing must be backend-authoritative (item price, discount, delivery fee)
-  - target formula: `finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee`
+  - actual formula: with shopCode → `finalPrice = ShopInfo.price + deliveryFee`; without → `finalPrice = itemBasePrice + deliveryFee`
+  - ShopInfo.price is the shop's authoritative item price (e.g. SPCA VIP $199), not a discount
   - never trust client price math (`price`, `discount`, `deliveryFee` from frontend payload)
   - endpoints to fix:
   - `POST /commerce/orders`
@@ -79,6 +80,7 @@
 - [ ] what can be extract to shared (SoC) - delay
   - db connection, ratelimit, self access
 - [ ] mongodb indexing - delay
+  - `order.tempId` has `unique: true, sparse: true` in schema but the unique index is NOT enforced in the live DB — duplicate tempIds accepted in live tests (3 orders created with same tempId). Need to run `db.order.createIndex({ tempId: 1 }, { unique: true, sparse: true })` against the deployed collection, or add `autoIndex: true` / call `syncIndexes()` on connect.
 - [ ] admin protected routes need db identity checking
 - [ ] better notification flow (currently allow cross user notification writes)
 - [ ] business logics optimisation - delay

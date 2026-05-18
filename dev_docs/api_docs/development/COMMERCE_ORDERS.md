@@ -25,7 +25,7 @@ Authenticated order checkout and order retrieval. The current DDD implementation
 | --- | --- |
 | Auth delta | `POST /commerce/orders` is protected in DDD; legacy public checkout behavior is no longer valid |
 | Checkout response | Order creation returns `data: { id, purchaseCode, price }`, not top-level `purchase_code`, `price`, or `_id` |
-| Price source | `price` is resolved server-side from MongoDB only. Formula: `finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee` where `itemBasePrice` and `deliveryFee` come from `ptagProduct`, and `shopCodeDiscount` comes from `ShopInfo.price`. Client price fields are not accepted |
+| Price source | `price` is resolved server-side from MongoDB only. With a `shopCode`: `finalPrice = ShopInfo.price + deliveryFee` (ShopInfo.price is the shop's authoritative item price). Without a `shopCode`: `finalPrice = ptagProduct tier basePrice + deliveryFee`. Client price fields are not accepted |
 | Money precision | Checkout price math is performed in cents and normalized to 2 decimal places to avoid floating-point precision artifacts |
 | Order side effects | Successful checkout creates both `Order` and `OrderVerification`, generates a tag id, and may generate QR and short URLs |
 | Best-effort notifications | Confirmation email and WhatsApp send after persistence, but failures do not roll back a successful order |
@@ -270,8 +270,8 @@ The backend detects MIME type from file bytes, not just the declared multipart c
 | `promotionCode` | string | No | Defaults to `""` |
 | `petContact` | string | No | Defaults to `""` |
 | `optionImg` | string | No | Accepted by schema but not used by handler output or response |
-| `optionSize` | string | No | Defaults to `""` |
-| `optionColor` | string | No | Defaults to `""` |
+| `optionSize` | string | No | Defaults to `""`. If the product defines available sizes, must match one of them; validated during pricing resolution |
+| `optionColor` | string | No | Defaults to `""`. If the product defines available colours, must match one of them; validated during pricing resolution |
 | `lang` | enum string | No | `chn` or `eng`, defaults to `eng` |
 
 The multipart field set is strict. Unknown text fields are rejected.
@@ -285,9 +285,12 @@ On success, the handler:
 1. resolves authoritative backend pricing from DB only:
    - resolves product and tier from `option` / `type` against `ptagProduct`
    - uses selected tier price as `itemBasePrice`
+   - validates `optionSize` against `ptagProduct.options.sizes` if the array is non-empty; rejects with `orders.errors.invalidProductSelection` on mismatch
+   - validates `optionColor` against `ptagProduct.options.colours` if the array is non-empty; rejects with `orders.errors.invalidProductSelection` on mismatch
    - uses `ptagProduct.deliveryCharge` as `deliveryFee`
-   - resolves `shopCodeDiscount` from `ShopInfo.price` when `shopCode` is provided (or `0` when empty)
-   - computes `finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee` (floored at `0`)
+   - when `shopCode` is provided, `ShopInfo.price` is the authoritative item price for that shop (e.g. SPCA VIP $199); delivery fee is added on top
+   - when no `shopCode`, uses the product tier `basePrice` as the item price
+   - computes `finalPrice = shopCodePrice + deliveryFee` (with shopCode) or `itemBasePrice + deliveryFee` (without) (floored at `0`)
    - performs money arithmetic in cents and normalizes to 2 decimal places
 2. creates an `Order` record with computed `price = finalPrice`
 3. classifies `isPTagAir` from `option`
@@ -325,7 +328,7 @@ If order-verification creation fails after the order is saved, the handler compe
 | 400 | `orders.errors.invalidOption` | Invalid `option` format |
 | 400 | `orders.errors.invalidTempId` | Invalid `tempId` format |
 | 400 | `orders.errors.invalidPhone` | Invalid `phoneNumber` |
-| 400 | `orders.errors.invalidProductSelection` | `option` / `type` does not map to a valid `ptagProduct` tier |
+| 400 | `orders.errors.invalidProductSelection` | `option` / `type` does not map to a valid `ptagProduct` tier, or `optionSize` / `optionColor` does not match the product's available options |
 | 400 | `orders.errors.invalidShopCode` | Unknown non-empty `shopCode` |
 | 400 | `orders.errors.invalidFileType` | Unsupported upload format |
 | 400 | `orders.errors.tooManyFiles` | More than one file supplied for `pet_img` or `discount_proof` |
@@ -466,7 +469,7 @@ Return minimal contact data for one order.
 
 ## Frontend Integration Guide
 
-1. `shopCode` is optional for checkout. If provided, backend resolves `shopCodeDiscount` from `ShopInfo.price`; if omitted/empty, discount is `0`. Checkout `price` is always computed server-side from `ptagProduct` + `shopCode` data and never accepted from the client.
+1. `shopCode` is optional for checkout. If provided, `ShopInfo.price` becomes the authoritative item price for that shop (e.g. SPCA VIP = $199) and delivery fee is added on top. If omitted, the product tier `basePrice` is used. Checkout `price` is always computed server-side and never accepted from the client.
 2. Submit checkout as `multipart/form-data`; do not send JSON to `POST /commerce/orders`.
 3. Read successful checkout output from `data.purchaseCode` and `data.id`.
 4. Treat `orders.errors.duplicateOrder` as a client retry case with a newly generated `tempId`.

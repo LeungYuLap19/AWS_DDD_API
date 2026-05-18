@@ -340,7 +340,7 @@ Each returned row is projected to:
 - `shopContactPerson`
 - `price`
 
-`price` is the storefront discount amount used by checkout when `shopCode` is provided (`shopCodeDiscount` in order pricing), not the final payable order total.
+`price` is the shop's authoritative item price used by checkout when `shopCode` is provided — `finalPrice = ShopInfo.price + deliveryFee`. It is not a discount off the base price.
 
 #### Storefront Success (200)
 

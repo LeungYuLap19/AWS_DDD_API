@@ -329,9 +329,15 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
     option: parsedOrder.option,
     type: parsedOrder.type,
     shopCode: parsedOrder.shopCode,
+    optionSize: parsedOrder.optionSize,
+    optionColor: parsedOrder.optionColor,
   });
   if (!pricing.ok) {
-    if (pricing.error === 'INVALID_PRODUCT_SELECTION') {
+    if (
+      pricing.error === 'INVALID_PRODUCT_SELECTION' ||
+      pricing.error === 'INVALID_OPTION_SIZE' ||
+      pricing.error === 'INVALID_OPTION_COLOUR'
+    ) {
       return response.errorResponse(400, 'orders.errors.invalidProductSelection', ctx.event);
     }
     return response.errorResponse(400, 'orders.errors.invalidShopCode', ctx.event);
