@@ -11,6 +11,7 @@ import { response } from '../utils/response';
 import { loadAuthorizedPet, requireAuthContext } from '../utils/auth';
 import { applyRateLimit } from '../utils/rateLimit';
 import { sanitizeRecord } from '../utils/sanitize';
+import { syncPetMedicalCounters } from '../utils/petCounters';
 import { isValidDateFormat, parseDDMMYYYY } from '../utils/date';
 import {
   createVaccineRecordSchema,
@@ -118,6 +119,7 @@ export async function handleCreateVaccineRecord(
     vaccinePosition: data.vaccinePosition,
     petId,
   });
+  await syncPetMedicalCounters({ petId, updateLatestVaccine: true });
 
   return response.successResponse(201, ctx.event, {
     message: 'success.created',
@@ -203,6 +205,7 @@ export async function handleUpdateVaccineRecord(
       ctx.event
     );
   }
+  await syncPetMedicalCounters({ petId, updateLatestVaccine: true });
 
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
@@ -262,6 +265,7 @@ export async function handleDeleteVaccineRecord(
       ctx.event
     );
   }
+  await syncPetMedicalCounters({ petId, updateLatestVaccine: true });
 
   return response.successResponse(200, ctx.event, {
     message: 'success.deleted',
