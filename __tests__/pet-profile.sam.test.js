@@ -359,6 +359,15 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
       expect(data.ngoId).toBeUndefined();
     });
 
+    test('GET /pet/profile/by-tag/{tagId} returns 404 when tag does not exist', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedFixtures();
+
+      const res = await req('GET', `/pet/profile/by-tag/${state.tagId}-missing`);
+      expect(res.status).toBe(404);
+      expect(res.body.errorKey).toBe('common.notFound');
+    });
+
     test('POST /pet/profile creates a pet via JSON body and DB has the persisted document', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();

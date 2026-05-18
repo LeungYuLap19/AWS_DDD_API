@@ -32,7 +32,7 @@ Pet profile creation, list/read, update, delete, and public tag lookup. The curr
 | Patch response | PATCH returns no `data`; refetch if the updated pet document is needed |
 | Empty PATCH | An empty multipart PATCH is accepted as a `200` no-op and still saves the authorized pet document |
 | Delete response | DELETE returns no `data` |
-| Public tag lookup | Tag lookup returns a fixed public field set inside `data`; when no pet matches, every documented field is `null` |
+| Public tag lookup | Tag lookup returns a fixed public field set inside `data`; when no pet matches, it returns `404 common.notFound` |
 | View selector | `GET /pet/profile/{petId}` supports `?view=basic`, `?view=detail`, or `?view=full` with `full` as the default |
 | Update transport | PATCH uses multipart parsing, including typed normalization and optional file uploads |
 | List mode switch | `GET /pet/profile/me` uses the NGO query/sort/search branch whenever the JWT includes `ngoId` |
@@ -261,8 +261,6 @@ The list summary intentionally does not include `id`, `userId`, contact fields, 
 - `info`
 - `status`
 - `receivedDate`
-
-When no pet matches, every field above is returned as `null`.
 
 ---
 
@@ -632,13 +630,12 @@ Public tag-based lookup.
 }
 ```
 
-When no pet matches, the same `data` object shape is returned with all values `null`.
-
 #### Tag Lookup Errors
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidPathParams` or shared path-validation key | Invalid `tagId` path value |
+| 404 | `common.notFound` | No non-deleted pet matches the supplied `tagId` |
 | 500 | `common.internalError` | Unexpected internal error |
 
 ---
