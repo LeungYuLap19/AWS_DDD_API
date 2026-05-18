@@ -61,13 +61,10 @@
   - never trust client price math (`price`, `discount`, `deliveryFee` from frontend payload)
   - endpoints to fix:
   - `POST /commerce/orders`
-  - `GET /commerce/catalog`
-  - `GET /commerce/storefront`
-  - `POST /commerce/storefront/shop-code-verifications`
 
 - [ ] product ednpoints
   - `GET /commerce/catalog/ptag-products`
-  - `GET /commerce/catalog/ptag-products/{productCode}`
+  - `GET /commerce/catalog/ptag-products/{productId}`
 
 - [ ] pet-biometric - delay
   - GET /pet/biometric/{petId}
