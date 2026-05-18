@@ -31,6 +31,7 @@ Authenticated order checkout and order retrieval. The current DDD implementation
 | Best-effort notifications | Confirmation email and WhatsApp send after persistence, but failures do not roll back a successful order |
 | List pagination | All list routes use shared pagination defaults: `page=1`, `limit=30`, max `limit=100` |
 | Operations filter | `GET /commerce/orders/operations` only returns records where `cancelled` field exists |
+| Operations query behavior | `GET /commerce/orders/operations` supports `search`, `sortBy`, and `sortOrder`; unsupported `sortBy` falls back to `updatedAt` |
 | Order lookup shape | `GET /commerce/orders/{tempId}` returns only `data.id` and `data.petContact` |
 
 ---
@@ -364,10 +365,15 @@ Return paginated operations view of order-verification records. Admin/developer 
 | --- | --- | --- | --- |
 | `page` | integer | No | Default `1` |
 | `limit` | integer | No | Default `30`, max `100` |
+| `search` | string | No | Trimmed before use; escaped and applied as case-insensitive regex across `tagId`, `contact`, `petName`, `masterEmail`, `orderId`, `location`, `petHuman`, `option`, `type`, `optionSize`, `optionColor` |
+| `sortBy` | string | No | Allowlist: `updatedAt`, `createdAt`, `tagId`, `staffVerification`, `cancelled`, `verifyDate`, `tagCreationDate`, `petName`, `masterEmail`, `orderId`, `location`, `petHuman`, `pendingStatus`, `option`, `type`, `optionSize`, `optionColor`, `price`; fallback `updatedAt` |
+| `sortOrder` | `asc` or `desc` | No | Defaults to `desc`; any non-`asc` value is treated as `desc` |
 
 #### Operations Filter
 
 This endpoint filters with `{ cancelled: { $exists: true } }`. It returns only records that already have a `cancelled` field in MongoDB.
+
+Sorting is deterministic with a tie-breaker on `_id` descending: `.sort({ [sortBy]: sortOrder, _id: -1 })`.
 
 #### Returned Operations Shape
 
