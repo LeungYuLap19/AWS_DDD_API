@@ -7,11 +7,11 @@
  * Routes under test:
  *   GET    /commerce/fulfillment                              — admin list (paginated)
  *   DELETE /commerce/fulfillment/{orderVerificationId}       — soft-cancel (admin only)
- *   GET    /commerce/fulfillment/tags/{tagId}                — get tag verification
- *   PATCH  /commerce/fulfillment/tags/{tagId}                — update tag verification
- *   GET    /commerce/fulfillment/suppliers/{orderId}         — get supplier verification
- *   PATCH  /commerce/fulfillment/suppliers/{orderId}         — update supplier verification
- *   GET    /commerce/fulfillment/share-links/whatsapp/{_id}  — get WhatsApp order link
+ *   GET    /commerce/fulfillment/tags/{tagId}                — get tag verification (authenticated)
+ *   PATCH  /commerce/fulfillment/tags/{tagId}                — update tag verification (admin only)
+ *   GET    /commerce/fulfillment/suppliers/{orderId}         — get supplier verification (admin only)
+ *   PATCH  /commerce/fulfillment/suppliers/{orderId}         — update supplier verification (admin only)
+ *   GET    /commerce/fulfillment/share-links/whatsapp/{_id}  — get WhatsApp order link (admin only)
  *   POST   /commerce/commands/ptag-detection-email           — send ptag detection email (admin only)
  *
  * Run:  npm test -- __tests__/commerce-fulfillment.test.js --runInBand
@@ -468,7 +468,7 @@ describe('GET /commerce/fulfillment — admin list', () => {
     expect(skipFn).toHaveBeenCalledWith(20);
   });
 
-  test('developer role can access the list', async () => {
+  test('rejects developer role with 403', async () => {
     const { handler } = loadHandlerWithMocks({
       ovFindListResult: [],
       ovCountResult: 0,
@@ -482,7 +482,7 @@ describe('GET /commerce/fulfillment — admin list', () => {
       }),
       createContext()
     );
-    expect(parseResponse(result).statusCode).toBe(200);
+    expect(parseResponse(result).statusCode).toBe(403);
   });
 
   test('rejects unauthenticated request with 401', async () => {
@@ -872,7 +872,7 @@ describe('PATCH /commerce/fulfillment/tags/{tagId}', () => {
     expect(parseResponse(result).statusCode).toBe(401);
   });
 
-  test('cyberattack — extra fields rejected by strict schema', async () => {
+  test('rejects non-admin role with 403', async () => {
     const { handler } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
@@ -880,14 +880,36 @@ describe('PATCH /commerce/fulfillment/tags/{tagId}', () => {
         path: `/commerce/fulfillment/tags/${TEST_TAG_ID}`,
         resource: '/commerce/fulfillment/tags/{tagId}',
         pathParameters: { tagId: TEST_TAG_ID },
-        // staffVerification is not in tagUpdateSchema (strict) — Zod should reject before any DB access
-        body: { petName: 'Max', staffVerification: true },
+        body: { petName: 'Max' },
+        authorizer: userAuth(),
+      }),
+      createContext()
+    );
+    expect(parseResponse(result).statusCode).toBe(403);
+  });
+
+  test('allows staffVerification update in PATCH payload', async () => {
+    const ov = makeSampleOV({ staffVerification: false });
+    const updatedOv = makeSampleOV({ staffVerification: true });
+    const { handler, mocks } = loadHandlerWithMocks({
+      ovFindOneSequence: [{ result: ov }, { result: updatedOv }],
+    });
+    const result = await handler(
+      createEvent({
+        method: 'PATCH',
+        path: `/commerce/fulfillment/tags/${TEST_TAG_ID}`,
+        resource: '/commerce/fulfillment/tags/{tagId}',
+        pathParameters: { tagId: TEST_TAG_ID },
+        body: { staffVerification: true },
         authorizer: adminAuth(),
       }),
       createContext()
     );
-    // Strict schema rejects unknown keys
-    expect(parseResponse(result).statusCode).toBe(400);
+    expect(parseResponse(result).statusCode).toBe(200);
+    expect(mocks.ovUpdateOneFn).toHaveBeenCalledWith(
+      { tagId: TEST_TAG_ID },
+      { $set: { staffVerification: true } }
+    );
   });
 });
 
@@ -916,13 +938,8 @@ describe('GET /commerce/fulfillment/suppliers/{orderId}', () => {
     expect(parsed.body.data.tagId).toBe(TEST_TAG_ID);
   });
 
-  test('happy path — owner user can access their own record', async () => {
-    const ov = makeSampleOV({ masterEmail: TEST_OWNER_EMAIL, orderId: TEST_ORDER_ID });
-    const order = makeSampleOrder({ email: TEST_OWNER_EMAIL });
-    const { handler } = loadHandlerWithMocks({
-      ovFindOneSequence: [{ result: ov }],
-      orderFindOneSequence: [{ result: order }],
-    });
+  test('rejects non-admin user with 403', async () => {
+    const { handler } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
         method: 'GET',
@@ -933,8 +950,7 @@ describe('GET /commerce/fulfillment/suppliers/{orderId}', () => {
       }),
       createContext()
     );
-    const parsed = parseResponse(result);
-    expect(parsed.statusCode).toBe(200);
+    expect(parseResponse(result).statusCode).toBe(403);
   });
 
   test('returns 404 when order verification not found', async () => {
@@ -954,21 +970,15 @@ describe('GET /commerce/fulfillment/suppliers/{orderId}', () => {
     expect(parseResponse(result).statusCode).toBe(404);
   });
 
-  test('returns 403 when non-owner user tries to access another record', async () => {
-    const ov = makeSampleOV({ masterEmail: 'someone-else@test.com', orderId: TEST_ORDER_ID });
-    // Order lookup → order belongs to someone else
-    const otherOrder = makeSampleOrder({ email: 'someone-else@test.com' });
-    const { handler } = loadHandlerWithMocks({
-      ovFindOneSequence: [{ result: ov }],
-      orderFindOneSequence: [{ result: otherOrder }],
-    });
+  test('returns 403 when developer role tries to access', async () => {
+    const { handler } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
         method: 'GET',
         path: `/commerce/fulfillment/suppliers/${TEST_ORDER_ID}`,
         resource: '/commerce/fulfillment/suppliers/{orderId}',
         pathParameters: { orderId: TEST_ORDER_ID },
-        authorizer: userAuth({ email: 'attacker@test.com' }),
+        authorizer: userAuth({ role: 'developer' }),
       }),
       createContext()
     );
@@ -1053,13 +1063,8 @@ describe('PATCH /commerce/fulfillment/suppliers/{orderId}', () => {
     expect(parseResponse(result).statusCode).toBe(400);
   });
 
-  test('returns 403 for non-owner user', async () => {
-    const ov = makeSampleOV({ masterEmail: 'real-owner@test.com', orderId: TEST_ORDER_ID });
-    const order = makeSampleOrder({ email: 'real-owner@test.com' });
-    const { handler } = loadHandlerWithMocks({
-      ovFindOneSequence: [{ result: ov }],
-      orderFindOneSequence: [{ result: order }],
-    });
+  test('returns 403 for non-admin user', async () => {
+    const { handler } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
         method: 'PATCH',
@@ -1117,13 +1122,8 @@ describe('GET /commerce/fulfillment/share-links/whatsapp/{_id}', () => {
     expect(parsed.body.data.tagId).toBe(TEST_TAG_ID);
   });
 
-  test('happy path — owner user (matched by order email) can access', async () => {
-    const ov = makeSampleOV({ orderId: TEST_ORDER_ID });
-    const order = makeSampleOrder({ email: TEST_OWNER_EMAIL });
-    const { handler } = loadHandlerWithMocks({
-      ovFindOneSequence: [{ result: ov }],
-      orderFindOneSequence: [{ result: order }],
-    });
+  test('rejects non-admin owner user with 403', async () => {
+    const { handler } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
         method: 'GET',
@@ -1134,7 +1134,7 @@ describe('GET /commerce/fulfillment/share-links/whatsapp/{_id}', () => {
       }),
       createContext()
     );
-    expect(parseResponse(result).statusCode).toBe(200);
+    expect(parseResponse(result).statusCode).toBe(403);
   });
 
   test('returns 400 for invalid ObjectId format', async () => {
@@ -1169,13 +1169,8 @@ describe('GET /commerce/fulfillment/share-links/whatsapp/{_id}', () => {
     expect(parseResponse(result).statusCode).toBe(404);
   });
 
-  test('returns 403 when non-owner tries to access', async () => {
-    const ov = makeSampleOV({ masterEmail: 'real-owner@test.com', orderId: TEST_ORDER_ID });
-    const order = makeSampleOrder({ email: 'real-owner@test.com' });
-    const { handler } = loadHandlerWithMocks({
-      ovFindOneSequence: [{ result: ov }],
-      orderFindOneSequence: [{ result: order }],
-    });
+  test('returns 403 when non-admin tries to access', async () => {
+    const { handler } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
         method: 'GET',
@@ -1204,19 +1199,11 @@ describe('GET /commerce/fulfillment/share-links/whatsapp/{_id}', () => {
     expect(parseResponse(result).statusCode).toBe(401);
   });
 
-  test('cyberattack — role escalation attempt returns 403', async () => {
+  test('admin role can access share-link route', async () => {
     const ov = makeSampleOV({ masterEmail: 'real-owner@test.com', orderId: TEST_ORDER_ID });
-    const order = makeSampleOrder({ email: 'real-owner@test.com' });
     const { handler } = loadHandlerWithMocks({
       ovFindOneSequence: [{ result: ov }],
-      orderFindOneSequence: [{ result: order }],
     });
-    // Attacker injects userRole=admin but authorizer is set by Lambda authorizer (not user)
-    // In Tier 2 tests we can inject the raw authorizer directly. The claim is checked by requireAuthContext.
-    // A role of 'admin' but email mismatch → ownership check via Order still enforced.
-    // Actually 'admin' role bypasses ownership — this tests that only legitimate admin tokens work.
-    // In a real deployment the Lambda authorizer controls what's in authorizer. Here we simulate
-    // a claim with admin role but a non-admin email to show ownership bypass would only work for real admins.
     const result = await handler(
       createEvent({
         method: 'GET',
@@ -1227,7 +1214,6 @@ describe('GET /commerce/fulfillment/share-links/whatsapp/{_id}', () => {
       }),
       createContext()
     );
-    // Admin role should bypass ownership — 200 for legitimate admin
     expect(parseResponse(result).statusCode).toBe(200);
   });
 });

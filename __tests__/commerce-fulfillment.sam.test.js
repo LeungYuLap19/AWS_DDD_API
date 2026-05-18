@@ -10,12 +10,12 @@
 // DB-dependent tests seed their own fixtures and clean up in afterAll.
 //
 // Routes under test:
-//   GET    /commerce/fulfillment                                — admin/developer
-//   DELETE /commerce/fulfillment/{orderVerificationId}         — admin/developer
-//   GET    /commerce/fulfillment/tags/{tagId}                   — admin/developer
-//   PATCH  /commerce/fulfillment/tags/{tagId}                   — admin/developer
-//   GET    /commerce/fulfillment/suppliers/{orderId}            — admin/developer
-//   PATCH  /commerce/fulfillment/suppliers/{orderId}            — admin/developer
+//   GET    /commerce/fulfillment                                — admin only
+//   DELETE /commerce/fulfillment/{orderVerificationId}         — admin only
+//   GET    /commerce/fulfillment/tags/{tagId}                  — authenticated
+//   PATCH  /commerce/fulfillment/tags/{tagId}                  — admin only
+//   GET    /commerce/fulfillment/suppliers/{orderId}           — admin only
+//   PATCH  /commerce/fulfillment/suppliers/{orderId}           — admin only
 
 const dns = require('dns');
 const jwt = require('jsonwebtoken');
@@ -531,6 +531,20 @@ describe('Tier 3 - /commerce/fulfillment via SAM local + UAT DB', () => {
       // Verify the document was NOT cancelled
       const persisted = await verificationsCol().findOne({ _id: state.verificationIdA });
       expect(persisted.cancelled).toBe(false);
+    });
+
+    test('PATCH /commerce/fulfillment/tags/{tagId} rejects when caller has user role', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedFixtures();
+
+      const res = await req(
+        'PATCH',
+        `/commerce/fulfillment/tags/${state.tagIdA}`,
+        { staffVerification: true },
+        authHeaders(state.regularToken)
+      );
+
+      expect(res.status).toBe(403);
     });
   });
 
