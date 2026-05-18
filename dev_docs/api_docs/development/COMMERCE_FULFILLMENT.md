@@ -21,7 +21,7 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 | GET | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read supplier-facing fulfillment view |
 | PATCH | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update supplier-editable fulfillment fields |
 | GET | `/commerce/fulfillment/share-links/whatsapp/{verificationId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read WhatsApp share-link payload for one verification |
-| POST | `/commerce/commands/ptag-detection-email` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Send PTag detection email |
+| POST | `/commerce/commands/ptag-detection-email` | `x-api-key` + Bearer JWT | `application/json` | Send PTag detection email |
 
 ### Integration-Critical Behavior
 
@@ -54,7 +54,7 @@ Gateway/API-key/JWT behavior for commerce-fulfillment routes is defined only in 
 | `GET /commerce/fulfillment/suppliers/{orderId}` | Admin only |
 | `PATCH /commerce/fulfillment/suppliers/{orderId}` | Admin only |
 | `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}` | Admin only |
-| `POST /commerce/commands/ptag-detection-email` | Admin only |
+| `POST /commerce/commands/ptag-detection-email` | Any authenticated caller |
 
 ### Request-Model Validation
 
@@ -538,7 +538,7 @@ Read one fulfillment record for the WhatsApp share-link flow.
 Send PTag detection email to one user. Admin only.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT with `admin` role  
+**Auth:** `x-api-key` + Bearer JWT 
 **Content-Type:** `application/json`
 
 #### Detection Email Request Body
