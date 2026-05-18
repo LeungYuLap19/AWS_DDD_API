@@ -5,6 +5,7 @@
       "invalidOption": "選項值無效。",
       "invalidTempId": "購買編號格式不正確。",
       "invalidPhone": "電話號碼格式不正確。",
+      "invalidProductSelection": "商品或款式選擇無效。",
       "invalidShopCode": "無效的商店代碼。",
       "duplicateOrder": "此購買編號的訂單已存在。",
       "invalidFileType": "不支援的檔案格式，只接受 JPEG、PNG、WebP 及 GIF。",

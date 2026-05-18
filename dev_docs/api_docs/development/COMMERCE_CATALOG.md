@@ -340,7 +340,7 @@ Each returned row is projected to:
 - `shopContactPerson`
 - `price`
 
-`price` is the canonical storefront price later used by order creation.
+`price` is the storefront discount amount used by checkout when `shopCode` is provided (`shopCodeDiscount` in order pricing), not the final payable order total.
 
 #### Storefront Success (200)
 

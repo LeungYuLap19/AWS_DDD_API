@@ -255,6 +255,23 @@ function loadHandlerWithMocks({
   // ShopInfo.findOne
   shopInfoResult = { price: 299 },
   shopInfoError = null,
+  // PtagProduct.find
+  ptagProductResult = [
+    {
+      name: 'PTag',
+      deliveryCharge: 50,
+      tiers: [
+        { type: 'normal', price: 259 },
+        { type: 'custom', price: 279 },
+      ],
+    },
+    {
+      name: 'ptag air',
+      deliveryCharge: 50,
+      tiers: [{ type: 'standard', price: 199 }],
+    },
+  ],
+  ptagProductError = null,
   // ImageCollection
   imageCollectionCreateResult = { _id: new mongoose.Types.ObjectId() },
   imageCollectionUpdateOneResult = {},
@@ -365,6 +382,14 @@ function loadHandlerWithMocks({
 
   const shopInfoModel = { findOne: shopInfoFindOneFn };
 
+  // ── PtagProduct model ──
+  const ptagProductFindFn = jest.fn().mockReturnValue({
+    lean: ptagProductError
+      ? jest.fn().mockRejectedValue(ptagProductError)
+      : jest.fn().mockResolvedValue(ptagProductResult),
+  });
+  const ptagProductModel = { find: ptagProductFindFn };
+
   // ── ImageCollection model ──
   const imageCollectionModel = {
     create: jest.fn().mockResolvedValue(imageCollectionCreateResult),
@@ -390,6 +415,7 @@ function loadHandlerWithMocks({
         if (name === 'Order') return MockOrderConstructor;
         if (name === 'OrderVerification') return MockOVConstructor;
         if (name === 'ShopInfo') return shopInfoModel;
+        if (name === 'PtagProduct') return ptagProductModel;
         if (name === 'ImageCollection') return imageCollectionModel;
         if (name === 'RateLimit') return rateLimitModel;
       throw new Error(`Unexpected model "${name}"`);
@@ -461,6 +487,7 @@ function loadHandlerWithMocks({
       ovFindOneFn,
       ovFindFn,
       shopInfoFindOneFn,
+      ptagProductFindFn,
       imageCollectionModel,
       mockSendMail,
       mockS3Send,
@@ -907,6 +934,23 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     const shopInfoResult = loaderOpts.shopInfoResult !== undefined
       ? loaderOpts.shopInfoResult
       : { price: 299 };
+    const ptagProductResult = loaderOpts.ptagProductResult !== undefined
+      ? loaderOpts.ptagProductResult
+      : [
+          {
+            name: 'PTag',
+            deliveryCharge: 50,
+            tiers: [
+              { type: 'normal', price: 259 },
+              { type: 'custom', price: 279 },
+            ],
+          },
+          {
+            name: 'ptag air',
+            deliveryCharge: 50,
+            tiers: [{ type: 'standard', price: 199 }],
+          },
+        ];
 
     const orderSaveError = loaderOpts.orderSaveError ?? null;
     const ovSaveError = loaderOpts.ovSaveError ?? null;
@@ -960,6 +1004,7 @@ describe('POST /commerce/orders — purchase confirmation', () => {
         if (name === 'Order') return MockOrderConstructor;
         if (name === 'OrderVerification') return MockOVConstructor;
         if (name === 'ShopInfo') return { findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(shopInfoResult) }) };
+        if (name === 'PtagProduct') return { find: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(ptagProductResult) }) };
         if (name === 'ImageCollection') return imageCollectionModel;
         if (name === 'RateLimit') return { findOneAndUpdate: jest.fn().mockResolvedValue({ count: 1 }) };
         throw new Error(`Unexpected model "${name}"`);
@@ -1092,17 +1137,54 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.data.price).toBe(0);
+    expect(parsed.body.data.price).toBe(309);
   });
 
-  test('uses server-authoritative price from ShopInfo', async () => {
+  test('uses backend-authoritative formula: itemBasePrice - shopDiscount + deliveryFee', async () => {
     const { handler } = loadWithMultipartMock(validFields(), { files: [] }, {
-      shopInfoResult: { price: 399 },
+      shopInfoResult: { price: 99 },
     });
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.data.price).toBe(399);
+    expect(parsed.body.data.price).toBe(210);
+  });
+
+  test('uses cent-based money math and avoids floating decimal precision artifacts', async () => {
+    const { handler } = loadWithMultipartMock(validFields(), { files: [] }, {
+      shopInfoResult: { price: 99.2 },
+      ptagProductResult: [
+        {
+          name: 'PTag',
+          deliveryCharge: 50.2,
+          tiers: [{ type: 'normal', price: 259.1 }],
+        },
+      ],
+    });
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.price).toBe(210.1);
+  });
+
+  test('uses PTagAir standard tier pricing when option is PTagAir', async () => {
+    const { handler } = loadWithMultipartMock(validFields({ option: 'PTagAir', type: '' }), { files: [] }, {
+      shopInfoResult: { price: 0 },
+    });
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data.price).toBe(249);
+  });
+
+  test('returns 400 when option cannot be mapped to a backend product', async () => {
+    const { handler } = loadWithMultipartMock(validFields({ option: 'UnknownProduct' }), { files: [] }, {
+      shopInfoResult: { price: 0 },
+    });
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('orders.errors.invalidProductSelection');
   });
 
   test('email is normalized to lowercase', async () => {
@@ -1160,6 +1242,22 @@ describe('POST /commerce/orders — purchase confirmation', () => {
         if (n === 'Order') return MockOrder;
         if (n === 'OrderVerification') return MockOV;
         if (n === 'ShopInfo') return { findOne: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ price: 299 }) }) };
+        if (n === 'PtagProduct') {
+          return {
+            find: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue([
+                {
+                  name: 'PTag',
+                  deliveryCharge: 50,
+                  tiers: [
+                    { type: 'normal', price: 259 },
+                    { type: 'custom', price: 279 },
+                  ],
+                },
+              ]),
+            }),
+          };
+        }
         if (n === 'ImageCollection') return { create: jest.fn().mockResolvedValue({ _id: new mongoose.Types.ObjectId() }), updateOne: jest.fn().mockResolvedValue({}) };
         if (n === 'RateLimit') return { findOneAndUpdate: jest.fn().mockResolvedValue({ count: 1 }) };
         throw new Error(`Unexpected model "${n}"`);

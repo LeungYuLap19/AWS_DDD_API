@@ -25,7 +25,8 @@ Authenticated order checkout and order retrieval. The current DDD implementation
 | --- | --- |
 | Auth delta | `POST /commerce/orders` is protected in DDD; legacy public checkout behavior is no longer valid |
 | Checkout response | Order creation returns `data: { id, purchaseCode, price }`, not top-level `purchase_code`, `price`, or `_id` |
-| Price source | `price` is resolved server-side. When `shopCode` is provided, backend uses `ShopInfo.price`; when `shopCode` is empty, backend falls back to `0`. Client price is not accepted |
+| Price source | `price` is resolved server-side from MongoDB only. Formula: `finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee` where `itemBasePrice` and `deliveryFee` come from `ptagProduct`, and `shopCodeDiscount` comes from `ShopInfo.price`. Client price fields are not accepted |
+| Money precision | Checkout price math is performed in cents and normalized to 2 decimal places to avoid floating-point precision artifacts |
 | Order side effects | Successful checkout creates both `Order` and `OrderVerification`, generates a tag id, and may generate QR and short URLs |
 | Best-effort notifications | Confirmation email and WhatsApp send after persistence, but failures do not roll back a successful order |
 | List pagination | All list routes use shared pagination defaults: `page=1`, `limit=30`, max `limit=100` |
@@ -281,13 +282,20 @@ For example, sending client-side `price` in checkout body is rejected with
 
 On success, the handler:
 
-1. creates an `Order` record using canonical server-side price resolution (`ShopInfo.price` by `shopCode`, or `0` when `shopCode` is empty)
-2. classifies `isPTagAir` from `option`
-3. uploads `pet_img` and `discount_proof` when present
-4. generates a unique `tagId`
-5. resolves a short URL for every order; non-`PTagAir` orders upload a QR image from that short URL, while `PTagAir` uses the landing URL plus the shared static QR asset
-6. creates an `OrderVerification` record linked by `orderId = tempId`
-7. sends confirmation email and WhatsApp order message in parallel on a best-effort basis
+1. resolves authoritative backend pricing from DB only:
+   - resolves product and tier from `option` / `type` against `ptagProduct`
+   - uses selected tier price as `itemBasePrice`
+   - uses `ptagProduct.deliveryCharge` as `deliveryFee`
+   - resolves `shopCodeDiscount` from `ShopInfo.price` when `shopCode` is provided (or `0` when empty)
+   - computes `finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee` (floored at `0`)
+   - performs money arithmetic in cents and normalizes to 2 decimal places
+2. creates an `Order` record with computed `price = finalPrice`
+3. classifies `isPTagAir` from `option`
+4. uploads `pet_img` and `discount_proof` when present
+5. generates a unique `tagId`
+6. resolves a short URL for every order; non-`PTagAir` orders upload a QR image from that short URL, while `PTagAir` uses the landing URL plus the shared static QR asset
+7. creates an `OrderVerification` record linked by `orderId = tempId`
+8. sends confirmation email and WhatsApp order message in parallel on a best-effort basis
 
 If order-verification creation fails after the order is saved, the handler compensates by deleting the just-created order so the same `tempId` can be retried.
 
@@ -317,6 +325,7 @@ If order-verification creation fails after the order is saved, the handler compe
 | 400 | `orders.errors.invalidOption` | Invalid `option` format |
 | 400 | `orders.errors.invalidTempId` | Invalid `tempId` format |
 | 400 | `orders.errors.invalidPhone` | Invalid `phoneNumber` |
+| 400 | `orders.errors.invalidProductSelection` | `option` / `type` does not map to a valid `ptagProduct` tier |
 | 400 | `orders.errors.invalidShopCode` | Unknown non-empty `shopCode` |
 | 400 | `orders.errors.invalidFileType` | Unsupported upload format |
 | 400 | `orders.errors.tooManyFiles` | More than one file supplied for `pet_img` or `discount_proof` |
@@ -457,7 +466,7 @@ Return minimal contact data for one order.
 
 ## Frontend Integration Guide
 
-1. `shopCode` is optional for checkout. If you send it, backend resolves canonical `ShopInfo.price`; if omitted/empty, backend uses `price = 0`. The checkout route does not accept a client-supplied `price` field.
+1. `shopCode` is optional for checkout. If provided, backend resolves `shopCodeDiscount` from `ShopInfo.price`; if omitted/empty, discount is `0`. Checkout `price` is always computed server-side from `ptagProduct` + `shopCode` data and never accepted from the client.
 2. Submit checkout as `multipart/form-data`; do not send JSON to `POST /commerce/orders`.
 3. Read successful checkout output from `data.purchaseCode` and `data.id`.
 4. Treat `orders.errors.duplicateOrder` as a client retry case with a newly generated `tempId`.
