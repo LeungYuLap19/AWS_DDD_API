@@ -114,6 +114,11 @@ function loadHandlerWithMocks({
   function makeRecordModel() {
     return {
       find: jest.fn(() => createLeanResult([])),
+      findOne: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(null),
+      })),
       findOneAndUpdate: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
       create: jest.fn().mockResolvedValue({ _id: new actualMongoose.Types.ObjectId() }),
       deleteOne: jest.fn().mockResolvedValue({ deletedCount: 0 }),
@@ -369,10 +374,10 @@ describe('pet-medical handler Tier 2 integration', () => {
       expect(parsed.body.pagination.total).toBe(0);
     });
 
-    test('POST create with valid date returns 201 without touching Pet summary counters', async () => {
+    test('POST create with valid date returns 201 and refreshes Pet summary counters', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const { petId, petDoc } = ownPet(authUserId);
-      const { handler, authorizer, medicalModel, petModel } = loadHandlerWithMocks({
+      const { handler, authorizer, medicalModel, medicationModel, dewormModel, vaccineModel, petModel } = loadHandlerWithMocks({
         authUserId,
         petDoc,
       });
@@ -401,9 +406,25 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
       expect(parsed.body.message).toBe('Created successfully');
-      // Summary counters are dropped from pet-medical; Pet.findOneAndUpdate is
-      // never called on POST.
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(medicalModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(medicationModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(vaccineModel.countDocuments).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: petId },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            medicalRecordsCount: expect.any(Number),
+            medicationRecordsCount: expect.any(Number),
+            dewormRecordsCount: expect.any(Number),
+            vaccineRecordsCount: expect.any(Number),
+          }),
+        }),
+        { strict: false }
+      );
     });
 
     test('POST create with invalid date returns 400', async () => {
@@ -700,11 +721,11 @@ describe('pet-medical handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(404);
     });
 
-    test('DELETE happy path returns 200 without writing summary counters', async () => {
+    test('DELETE happy path returns 200 and refreshes Pet summary counters', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const { petId, petDoc } = ownPet(authUserId);
       const medicalId = new mongoose.Types.ObjectId().toString();
-      const { handler, authorizer, medicalModel, petModel } = loadHandlerWithMocks({
+      const { handler, authorizer, medicalModel, medicationModel, dewormModel, vaccineModel, petModel } = loadHandlerWithMocks({
         authUserId,
         petDoc,
       });
@@ -721,16 +742,22 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(medicalModel.countDocuments).not.toHaveBeenCalled();
-      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(medicalModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(medicationModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(vaccineModel.countDocuments).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
   });
 
   describe('Medication records', () => {
-    test('POST create does not touch Pet summary counters', async () => {
+    test('POST create refreshes Pet summary counters', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, authorizer, medicationModel, petModel } = loadHandlerWithMocks({
+      const { handler, authorizer, medicalModel, medicationModel, dewormModel, vaccineModel, petModel } = loadHandlerWithMocks({
         authUserId,
         petDoc: { _id: petId, userId: authUserId, ngoId: null },
       });
@@ -751,12 +778,19 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(medicalModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(medicationModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(vaccineModel.countDocuments).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
   });
 
   describe('Deworm records', () => {
-    test('POST create does not touch Pet summary counters or latestDewormDate', async () => {
+    test('POST create refreshes Pet summary counters and latestDewormRecords', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const { handler, authorizer, dewormModel, petModel } = loadHandlerWithMocks({
@@ -780,15 +814,23 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(dewormModel.findOne).toHaveBeenCalledWith({ petId });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
+      const syncSet = petModel.findOneAndUpdate.mock.calls[0]?.[1]?.$set;
+      expect(syncSet).toEqual(
+        expect.objectContaining({
+          dewormRecordsCount: expect.any(Number),
+        })
+      );
+      expect(Object.prototype.hasOwnProperty.call(syncSet, 'latestDewormRecords')).toBe(true);
     });
   });
 
   describe('Blood-test records', () => {
-    test('POST create does not touch Pet summary counters or latestBloodTestDate', async () => {
+    test('POST create refreshes Pet summary counters', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, authorizer, bloodTestModel, petModel } = loadHandlerWithMocks({
+      const { handler, authorizer, medicalModel, medicationModel, dewormModel, bloodTestModel, vaccineModel, petModel } = loadHandlerWithMocks({
         authUserId,
         petDoc: { _id: petId, userId: authUserId, ngoId: null },
       });
@@ -809,7 +851,7 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
 
     test('GET list returns blood_test array on getSuccess message', async () => {
@@ -885,8 +927,8 @@ describe('pet-medical handler Tier 2 integration', () => {
     });
   });
 
-  describe('Summary fields are no longer maintained (no counter race possible)', () => {
-    test('PATCH on deworming does not touch Pet summary fields', async () => {
+  describe('Summary counters are rebuilt after write operations', () => {
+    test('PATCH on deworming refreshes summary counters and latestDewormRecords', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const dewormId = new mongoose.Types.ObjectId().toString();
@@ -911,12 +953,12 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(dewormModel.countDocuments).not.toHaveBeenCalled();
-      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.findOne).toHaveBeenCalledWith({ petId });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
 
-    test('DELETE on deworming does not touch Pet summary fields', async () => {
+    test('DELETE on deworming refreshes summary counters and latestDewormRecords', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const dewormId = new mongoose.Types.ObjectId().toString();
@@ -938,16 +980,16 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(dewormModel.countDocuments).not.toHaveBeenCalled();
-      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.findOne).toHaveBeenCalledWith({ petId });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
 
-    test('PATCH on blood-test does not touch Pet summary fields', async () => {
+    test('PATCH on blood-test refreshes summary counters', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const bloodTestId = new mongoose.Types.ObjectId().toString();
-      const { handler, authorizer, bloodTestModel, petModel } = loadHandlerWithMocks({
+      const { handler, authorizer, medicalModel, medicationModel, dewormModel, bloodTestModel, vaccineModel, petModel } = loadHandlerWithMocks({
         authUserId,
         petDoc: { _id: petId, userId: authUserId, ngoId: null },
       });
@@ -968,9 +1010,14 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(bloodTestModel.countDocuments).not.toHaveBeenCalled();
-      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(medicalModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(medicationModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(vaccineModel.countDocuments).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
   });
 
@@ -1092,10 +1139,10 @@ describe('pet-medical handler Tier 2 integration', () => {
       expect(parsed.body.pagination.total).toBe(0);
     });
 
-    test('POST create with valid date returns 201 and never touches Pet summary counters', async () => {
+    test('POST create with valid date returns 201 and refreshes Pet summary counters', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
-      const { handler, authorizer, vaccineModel, petModel } = loadHandlerWithMocks({
+      const { handler, authorizer, medicalModel, medicationModel, dewormModel, vaccineModel, petModel } = loadHandlerWithMocks({
         authUserId,
         petDoc: { _id: petId, userId: authUserId, ngoId: null },
       });
@@ -1123,8 +1170,18 @@ describe('pet-medical handler Tier 2 integration', () => {
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(201);
       expect(parsed.body.message).toBe('Created successfully');
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
-      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(medicalModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(medicationModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(vaccineModel.countDocuments).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(vaccineModel.findOne).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
 
     test('POST create with invalid date returns 400', async () => {
@@ -1388,11 +1445,11 @@ describe('pet-medical handler Tier 2 integration', () => {
       expect(parsed.body.errorKey).toBe('petMedical.errors.vaccineRecord.notFound');
     });
 
-    test('DELETE happy path returns 200 without writing summary counters', async () => {
+    test('DELETE happy path returns 200 and refreshes Pet summary counters', async () => {
       const authUserId = new mongoose.Types.ObjectId().toString();
       const petId = new mongoose.Types.ObjectId().toString();
       const vaccineId = new mongoose.Types.ObjectId().toString();
-      const { handler, authorizer, vaccineModel, petModel } = loadHandlerWithMocks({
+      const { handler, authorizer, medicalModel, medicationModel, dewormModel, vaccineModel, petModel } = loadHandlerWithMocks({
         authUserId,
         petDoc: { _id: petId, userId: authUserId, ngoId: null },
       });
@@ -1409,9 +1466,18 @@ describe('pet-medical handler Tier 2 integration', () => {
       );
       const parsed = parseResponse(result);
       expect(parsed.statusCode).toBe(200);
-      expect(vaccineModel.countDocuments).not.toHaveBeenCalled();
-      expect(petModel.findByIdAndUpdate).not.toHaveBeenCalled();
-      expect(petModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(medicalModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(medicationModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(dewormModel.countDocuments).toHaveBeenCalledWith({ petId });
+      expect(vaccineModel.countDocuments).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(vaccineModel.findOne).toHaveBeenCalledWith({
+        petId,
+        isDeleted: { $ne: true },
+      });
+      expect(petModel.findOneAndUpdate).toHaveBeenCalled();
     });
 
     test('GET returns 403 when caller does not own the pet', async () => {
