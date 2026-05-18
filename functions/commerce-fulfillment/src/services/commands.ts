@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import nodemailer from 'nodemailer';
-import { requireRole, parseBody } from '@aws-ddd-api/shared';
+import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from '../utils/response';
 import { ptagDetectionEmailSchema } from '../zodSchema/commandsSchema';
@@ -70,7 +70,7 @@ function renderPtagDetectionEmail(
  * Legacy: POST /purchase/send-ptag-detection-email (purchaseConfirmation)
  */
 export async function handleSendPtagDetectionEmail(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireRole(ctx.event, ['admin']);
+  requireAuthContext(ctx.event);
 
   const parsed = parseBody(ctx.body, ptagDetectionEmailSchema);
   if (!parsed.ok) {
