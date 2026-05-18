@@ -39,12 +39,14 @@ export const purchaseConfirmationSchema = z
       .string({ message: 'common.missingBodyParams' })
       .trim()
       .min(1, { message: 'common.missingBodyParams' })
-      .max(128),
+      .max(128)
+      .transform(sanitizeText),
     delivery: z
       .string({ message: 'common.missingBodyParams' })
       .trim()
       .min(1, { message: 'common.missingBodyParams' })
-      .max(128),
+      .max(128)
+      .transform(sanitizeText),
     petName: z
       .string({ message: 'common.missingBodyParams' })
       .trim()

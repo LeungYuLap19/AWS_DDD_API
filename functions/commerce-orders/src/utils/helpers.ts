@@ -41,6 +41,7 @@ type PtagProductDoc = {
   name?: unknown;
   deliveryCharge?: unknown;
   tiers?: unknown;
+  options?: { sizes?: unknown; colours?: unknown };
 };
 
 type ShopInfoDoc = {
@@ -56,12 +57,18 @@ export type AuthoritativePricingResult = {
   resolvedTierType: string;
 };
 
-export type AuthoritativePricingError = 'INVALID_PRODUCT_SELECTION' | 'INVALID_SHOP_CODE';
+export type AuthoritativePricingError =
+  | 'INVALID_PRODUCT_SELECTION'
+  | 'INVALID_SHOP_CODE'
+  | 'INVALID_OPTION_SIZE'
+  | 'INVALID_OPTION_COLOUR';
 
 type ResolveAuthoritativePricingInput = {
   option: string;
   type: string;
   shopCode: string;
+  optionSize: string;
+  optionColor: string;
 };
 
 const MONEY_FACTOR = 100;
@@ -158,12 +165,12 @@ function pickTier(
 export async function resolveAuthoritativePricing(
   input: ResolveAuthoritativePricingInput
 ): Promise<{ ok: true; data: AuthoritativePricingResult } | { ok: false; error: AuthoritativePricingError }> {
-  const { option, type, shopCode } = input;
+  const { option, type, shopCode, optionSize, optionColor } = input;
   const { productToken, tierToken } = parseOptionTokens(option);
   const requestedTier = resolveRequestedTier(type, tierToken);
 
   const PtagProduct = mongoose.model('PtagProduct');
-  const productRows = (await PtagProduct.find({}, { name: 1, deliveryCharge: 1, tiers: 1 }).lean()) as PtagProductDoc[];
+  const productRows = (await PtagProduct.find({}, { name: 1, deliveryCharge: 1, tiers: 1, options: 1 }).lean()) as PtagProductDoc[];
   const matchedProduct = productRows.find((row) => normalizeToken(String(row?.name ?? '')) === productToken) ?? null;
   if (!matchedProduct) return { ok: false, error: 'INVALID_PRODUCT_SELECTION' };
 
@@ -172,23 +179,47 @@ export async function resolveAuthoritativePricing(
   const tier = pickTier(tiers, requestedTier);
   if (!tier) return { ok: false, error: 'INVALID_PRODUCT_SELECTION' };
 
+  const sizes = Array.isArray(matchedProduct.options?.sizes)
+    ? (matchedProduct.options.sizes as unknown[]).map((s) => normalizeToken(String(s)))
+    : [];
+  const colours = Array.isArray(matchedProduct.options?.colours)
+    ? (matchedProduct.options.colours as unknown[]).map((c) => normalizeToken(String(c)))
+    : [];
+
+  if (sizes.length > 0) {
+    const normalizedSize = normalizeToken(optionSize);
+    if (!normalizedSize || !sizes.includes(normalizedSize)) {
+      return { ok: false, error: 'INVALID_OPTION_SIZE' };
+    }
+  }
+  if (colours.length > 0) {
+    const normalizedColour = normalizeToken(optionColor);
+    if (!normalizedColour || !colours.includes(normalizedColour)) {
+      return { ok: false, error: 'INVALID_OPTION_COLOUR' };
+    }
+  }
+
   const itemBasePriceCents = toMoneyCents(tier.basePrice);
   const deliveryFeeCents = toMoneyCents(matchedProduct.deliveryCharge);
 
-  let shopCodeDiscountCents = 0;
+  let shopCodePriceCents: number | null = null;
   if (shopCode) {
     const ShopInfo = mongoose.model('ShopInfo');
     const shop = (await ShopInfo.findOne({ shopCode }, { price: 1 }).lean()) as ShopInfoDoc | null;
     if (!shop) return { ok: false, error: 'INVALID_SHOP_CODE' };
-    shopCodeDiscountCents = toMoneyCents(shop.price);
+    shopCodePriceCents = toMoneyCents(shop.price);
   }
 
-  const finalPriceCents = Math.max(itemBasePriceCents - shopCodeDiscountCents + deliveryFeeCents, 0);
+  // When a shop code is provided, ShopInfo.price is the authoritative item price for that shop
+  // (e.g. SPCA VIP price $199). Delivery fee is always added on top.
+  // Without a shop code, fall back to the product tier base price.
+  const effectiveItemPriceCents = shopCodePriceCents !== null ? shopCodePriceCents : itemBasePriceCents;
+  const finalPriceCents = Math.max(effectiveItemPriceCents + deliveryFeeCents, 0);
   return {
     ok: true,
     data: {
       itemBasePrice: fromMoneyCents(itemBasePriceCents),
-      shopCodeDiscount: fromMoneyCents(shopCodeDiscountCents),
+      shopCodeDiscount: shopCodePriceCents !== null ? fromMoneyCents(itemBasePriceCents - shopCodePriceCents) : 0,
       deliveryFee: fromMoneyCents(deliveryFeeCents),
       finalPrice: fromMoneyCents(finalPriceCents),
       resolvedProductName: productName,

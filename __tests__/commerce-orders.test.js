@@ -1140,17 +1140,19 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     expect(parsed.body.data.price).toBe(309);
   });
 
-  test('uses backend-authoritative formula: itemBasePrice - shopDiscount + deliveryFee', async () => {
+  test('with shopCode: finalPrice = ShopInfo.price + deliveryFee (shop price is authoritative item price)', async () => {
+    // ShopInfo.price=99 is the shop-specific item price, deliveryFee=50 → 99+50=149
     const { handler } = loadWithMultipartMock(validFields(), { files: [] }, {
       shopInfoResult: { price: 99 },
     });
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.data.price).toBe(210);
+    expect(parsed.body.data.price).toBe(149);
   });
 
   test('uses cent-based money math and avoids floating decimal precision artifacts', async () => {
+    // ShopInfo.price=99.2, deliveryFee=50.2 → 99.2+50.2=149.4
     const { handler } = loadWithMultipartMock(validFields(), { files: [] }, {
       shopInfoResult: { price: 99.2 },
       ptagProductResult: [
@@ -1164,12 +1166,13 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(200);
-    expect(parsed.body.data.price).toBe(210.1);
+    expect(parsed.body.data.price).toBe(149.4);
   });
 
-  test('uses PTagAir standard tier pricing when option is PTagAir', async () => {
-    const { handler } = loadWithMultipartMock(validFields({ option: 'PTagAir', type: '' }), { files: [] }, {
-      shopInfoResult: { price: 0 },
+  test('uses PTagAir standard tier pricing when option is PTagAir (no shopCode)', async () => {
+    // No shopCode → itemBasePrice=199, deliveryFee=50 → 199+50=249
+    const { handler } = loadWithMultipartMock(validFields({ option: 'PTagAir', type: '', shopCode: undefined }), { files: [] }, {
+      shopInfoResult: null,
     });
     const result = await handler(postEvent(), createContext());
     const parsed = parseResponse(result);
@@ -1185,6 +1188,90 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     const parsed = parseResponse(result);
     expect(parsed.statusCode).toBe(400);
     expect(parsed.body.errorKey).toBe('orders.errors.invalidProductSelection');
+  });
+
+  test('returns 400 when optionSize is not in product options', async () => {
+    const { handler } = loadWithMultipartMock(
+      validFields({ option: 'PTagClassic', optionSize: '99mm', optionColor: 'gold' }),
+      { files: [] },
+      {
+        shopInfoResult: { price: 0 },
+        ptagProductResult: [
+          {
+            name: 'PTag',
+            deliveryCharge: 50,
+            options: { sizes: ['25mm', '30mm'], colours: ['gold', 'silver'] },
+            tiers: [{ type: 'normal', price: 259 }],
+          },
+        ],
+      }
+    );
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('orders.errors.invalidProductSelection');
+  });
+
+  test('returns 400 when optionColor is not in product options', async () => {
+    const { handler } = loadWithMultipartMock(
+      validFields({ option: 'PTagClassic', optionSize: '25mm', optionColor: 'pink' }),
+      { files: [] },
+      {
+        shopInfoResult: { price: 0 },
+        ptagProductResult: [
+          {
+            name: 'PTag',
+            deliveryCharge: 50,
+            options: { sizes: ['25mm', '30mm'], colours: ['gold', 'silver'] },
+            tiers: [{ type: 'normal', price: 259 }],
+          },
+        ],
+      }
+    );
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('orders.errors.invalidProductSelection');
+  });
+
+  test('accepts any optionSize/optionColor when product has empty options arrays', async () => {
+    const { handler } = loadWithMultipartMock(
+      validFields({ option: 'PTagAir', type: '', optionSize: '25', optionColor: '白色' }),
+      { files: [] },
+      {
+        shopInfoResult: { price: 0 },
+        ptagProductResult: [
+          {
+            name: 'ptag air',
+            deliveryCharge: 50,
+            options: { sizes: [], colours: [] },
+            tiers: [{ type: 'standard', price: 199 }],
+          },
+        ],
+      }
+    );
+    const result = await handler(postEvent(), createContext());
+    expect(parseResponse(result).statusCode).toBe(200);
+  });
+
+  test('accepts valid optionSize and optionColor matching product options', async () => {
+    const { handler } = loadWithMultipartMock(
+      validFields({ option: 'PTagClassic', optionSize: '25mm', optionColor: 'gold' }),
+      { files: [] },
+      {
+        shopInfoResult: { price: 0 },
+        ptagProductResult: [
+          {
+            name: 'PTag',
+            deliveryCharge: 50,
+            options: { sizes: ['25mm', '30mm'], colours: ['gold', 'silver'] },
+            tiers: [{ type: 'normal', price: 259 }],
+          },
+        ],
+      }
+    );
+    const result = await handler(postEvent(), createContext());
+    expect(parseResponse(result).statusCode).toBe(200);
   });
 
   test('email is normalized to lowercase', async () => {
