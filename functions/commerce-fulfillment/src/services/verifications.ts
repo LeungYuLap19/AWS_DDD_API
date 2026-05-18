@@ -30,11 +30,11 @@ const LIST_PROJECTION = {
 
 /**
  * GET /commerce/fulfillment
- * Admin/developer-only — returns paginated list of order verifications.
+ * Admin-only — returns paginated list of order verifications.
  * Legacy: GET /purchase/order-verification (purchaseConfirmation)
  */
 export async function handleGetVerificationList(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireRole(ctx.event, ['admin', 'developer']);
+  requireRole(ctx.event, ['admin']);
 
   const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
   if (!pagination.success) {

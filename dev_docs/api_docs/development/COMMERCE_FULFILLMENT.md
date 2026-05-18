@@ -14,14 +14,14 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 
 | Method | Path | Auth | Content-Type | Purpose |
 | --- | --- | --- | --- | --- |
-| GET | `/commerce/fulfillment` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Paginated fulfillment list |
-| DELETE | `/commerce/fulfillment/{orderVerificationId}` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Soft-cancel one order-verification record |
+| GET | `/commerce/fulfillment` | `x-api-key` + Bearer JWT with `admin` role | — | Paginated fulfillment list |
+| DELETE | `/commerce/fulfillment/{orderVerificationId}` | `x-api-key` + Bearer JWT with `admin` role | — | Soft-cancel one order-verification record |
 | GET | `/commerce/fulfillment/tags/{tagId}` | `x-api-key` + Bearer JWT | — | Read one tag-bound fulfillment record |
-| PATCH | `/commerce/fulfillment/tags/{tagId}` | `x-api-key` + Bearer JWT | `application/json` | Update allowed fields on one tag-bound record |
-| GET | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT | — | Read supplier-facing fulfillment view |
-| PATCH | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT | `application/json` | Update supplier-editable fulfillment fields |
-| GET | `/commerce/fulfillment/share-links/whatsapp/{verificationId}` | `x-api-key` + Bearer JWT | — | Read WhatsApp share-link payload for one verification |
-| POST | `/commerce/commands/ptag-detection-email` | `x-api-key` + Bearer JWT with `admin` or `developer` role | `application/json` | Send PTag detection email |
+| PATCH | `/commerce/fulfillment/tags/{tagId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update allowed fields on one tag-bound record |
+| GET | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read supplier-facing fulfillment view |
+| PATCH | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update supplier-editable fulfillment fields |
+| GET | `/commerce/fulfillment/share-links/whatsapp/{verificationId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read WhatsApp share-link payload for one verification |
+| POST | `/commerce/commands/ptag-detection-email` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Send PTag detection email |
 
 ### Integration-Critical Behavior
 
@@ -31,10 +31,10 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 | Cancel response | DELETE success returns only `{ success, message, requestId }`; there is no returned id payload |
 | Tag GET shape | `GET /commerce/fulfillment/tags/{tagId}` returns a flat object in `data`, not `form` |
 | Tag PATCH response | PATCH tag update returns no `data`; old `notificationDispatched` output is gone |
-| Supplier auth | Supplier routes enforce owner-or-admin/developer access using linked order email first, then `masterEmail` fallback |
+| Supplier auth | Supplier routes are `admin`-only |
 | Supplier lookup fallback | Supplier identifier is resolved in order: `orderId`, then `contact`, then `tagId` |
-| Share-link auth | WhatsApp share-link route uses `verificationId` ObjectId and owner checks against linked order email or `masterEmail` |
-| Tag-route openness | Tag GET and tag PATCH require authentication, but do not apply ownership checks |
+| Share-link auth | WhatsApp share-link route is `admin`-only and uses `verificationId` ObjectId |
+| Tag-route openness | Tag GET requires authentication; tag PATCH is `admin`-only |
 | Email command side effect | PTag detection email is sent to the provided user email with CC to `notification@ptag.com.hk` |
 
 ---
@@ -47,14 +47,14 @@ Gateway/API-key/JWT behavior for commerce-fulfillment routes is defined only in 
 
 | Route | Rule |
 | --- | --- |
-| `GET /commerce/fulfillment` | Admin or developer only |
-| `DELETE /commerce/fulfillment/{orderVerificationId}` | Admin or developer only |
+| `GET /commerce/fulfillment` | Admin only |
+| `DELETE /commerce/fulfillment/{orderVerificationId}` | Admin only |
 | `GET /commerce/fulfillment/tags/{tagId}` | Any authenticated caller |
-| `PATCH /commerce/fulfillment/tags/{tagId}` | Any authenticated caller |
-| `GET /commerce/fulfillment/suppliers/{orderId}` | Owner of linked order or admin/developer |
-| `PATCH /commerce/fulfillment/suppliers/{orderId}` | Owner of linked order or admin/developer |
-| `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}` | Owner of linked order or admin/developer |
-| `POST /commerce/commands/ptag-detection-email` | Admin or developer only |
+| `PATCH /commerce/fulfillment/tags/{tagId}` | Admin only |
+| `GET /commerce/fulfillment/suppliers/{orderId}` | Admin only |
+| `PATCH /commerce/fulfillment/suppliers/{orderId}` | Admin only |
+| `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}` | Admin only |
+| `POST /commerce/commands/ptag-detection-email` | Admin only |
 
 ### Request-Model Validation
 
@@ -136,10 +136,10 @@ Update / delete / command success:
 
 ### GET /commerce/fulfillment
 
-Return paginated fulfillment list. Admin/developer only.
+Return paginated fulfillment list. Admin only.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT with `admin` or `developer` role
+**Auth:** `x-api-key` + Bearer JWT with `admin` role
 
 #### Query Parameters
 
@@ -216,7 +216,7 @@ Each item in `data` is sanitized to:
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidQueryParams` | Invalid `page` or `limit` |
-| 403 | `common.forbidden` | Caller is not `admin` or `developer` |
+| 403 | `common.forbidden` | Caller is not `admin` |
 | 500 | `common.internalError` | Unexpected database or server error |
 
 ### DELETE /commerce/fulfillment/{orderVerificationId}
@@ -224,7 +224,7 @@ Each item in `data` is sanitized to:
 Soft-cancel one order-verification record by Mongo `_id`.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT with `admin` or `developer` role
+**Auth:** `x-api-key` + Bearer JWT with `admin` role
 
 #### Cancel Path Parameters
 
@@ -250,7 +250,7 @@ The handler sets `cancelled: true` and does not hard-delete the record.
 | --- | --- | --- |
 | 400 | `common.missingPathParams` | Missing `orderVerificationId` |
 | 400 | `common.invalidObjectId` | Invalid `orderVerificationId` |
-| 403 | `common.forbidden` | Caller is not `admin` or `developer` |
+| 403 | `common.forbidden` | Caller is not `admin` |
 | 404 | `fulfillment.errors.notFound` | Verification not found |
 | 409 | `fulfillment.errors.alreadyCancelled` | Verification already cancelled |
 | 500 | `common.internalError` | Unexpected database or server error |
@@ -311,10 +311,10 @@ Read one tag-bound fulfillment record plus linked SF waybill number.
 
 ### PATCH /commerce/fulfillment/tags/{tagId}
 
-Update allowed fields on one tag-bound record. Any authenticated caller can use this route.
+Update allowed fields on one tag-bound record. Admin only.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT required  
+**Auth:** `x-api-key` + Bearer JWT with `admin` role  
 **Content-Type:** `application/json`
 
 #### Tag PATCH Path Parameters
@@ -327,6 +327,7 @@ Update allowed fields on one tag-bound record. Any authenticated caller can use 
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `staffVerification` | boolean | No | Staff verification toggle |
 | `contact` | string | No | Trimmed, normalized phone |
 | `verifyDate` | string | No | Must parse through the fulfillment `DD/MM/YYYY` / date parser |
 | `petName` | string | No | Max 100 |
@@ -367,10 +368,10 @@ After a successful update, the handler attempts to send a WhatsApp tracking mess
 
 ### GET /commerce/fulfillment/suppliers/{orderId}
 
-Read supplier-facing fulfillment view with owner-or-admin authorization.
+Read supplier-facing fulfillment view. Admin only.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT required
+**Auth:** `x-api-key` + Bearer JWT with `admin` role
 
 #### Supplier Path Parameters
 
@@ -423,16 +424,16 @@ The handler resolves the supplied identifier in this order:
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidPathParams` | Missing or invalid `orderId` |
-| 403 | `common.forbidden` | Caller does not own the linked order and is not privileged |
+| 403 | `common.forbidden` | Caller is not `admin` |
 | 404 | `fulfillment.errors.notFound` | No matching verification found |
 | 500 | `common.internalError` | Unexpected database or server error |
 
 ### PATCH /commerce/fulfillment/suppliers/{orderId}
 
-Update supplier-editable fulfillment fields with owner-or-admin authorization.
+Update supplier-editable fulfillment fields. Admin only.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT required  
+**Auth:** `x-api-key` + Bearer JWT with `admin` role  
 **Content-Type:** `application/json`
 
 #### Supplier PATCH Request Body
@@ -471,7 +472,7 @@ The body schema is strict. Extra keys are rejected.
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
 | 400 | `common.noFieldsToUpdate` | Body parsed but no supported non-empty fields were supplied |
 | 400 | `fulfillment.errors.invalidPendingStatus` | `pendingStatus` is not boolean |
-| 403 | `common.forbidden` | Caller does not own the linked order and is not privileged |
+| 403 | `common.forbidden` | Caller is not `admin` |
 | 404 | `fulfillment.errors.notFound` | No matching verification found |
 | 500 | `common.internalError` | Unexpected database or server error |
 
@@ -480,7 +481,7 @@ The body schema is strict. Extra keys are rejected.
 Read one fulfillment record for the WhatsApp share-link flow.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT required
+**Auth:** `x-api-key` + Bearer JWT with `admin` role
 
 #### Share-Link Path Parameters
 
@@ -528,16 +529,16 @@ Read one fulfillment record for the WhatsApp share-link flow.
 | --- | --- | --- |
 | 400 | `common.missingPathParams` | Missing `verificationId` |
 | 400 | `common.invalidObjectId` | Invalid `verificationId` |
-| 403 | `common.forbidden` | Caller does not own the linked order and is not privileged |
+| 403 | `common.forbidden` | Caller is not `admin` |
 | 404 | `fulfillment.errors.notFound` | Verification not found |
 | 500 | `common.internalError` | Unexpected database or server error |
 
 ### POST /commerce/commands/ptag-detection-email
 
-Send PTag detection email to one user. Admin/developer only.
+Send PTag detection email to one user. Admin only.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT with `admin` or `developer` role  
+**Auth:** `x-api-key` + Bearer JWT with `admin` role  
 **Content-Type:** `application/json`
 
 #### Detection Email Request Body
@@ -586,7 +587,7 @@ On success, the Lambda sends the rendered HTML email to the provided `email` add
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
 | 400 | `fulfillment.errors.invalidLocationURL` | `locationURL` is not a valid `https://` URL |
 | 400 | `fulfillment.errors.invalidEmail` | Invalid email |
-| 403 | `common.forbidden` | Caller is not `admin` or `developer` |
+| 403 | `common.forbidden` | Caller is not `admin` |
 | 503 | `fulfillment.errors.emailServiceUnavailable` | SMTP send failed |
 | 500 | `common.internalError` | Unexpected server error |
 
@@ -597,8 +598,8 @@ On success, the Lambda sends the rendered HTML email to the provided `email` add
 1. Use `/commerce/orders/operations` for admin operations dashboards and `/commerce/fulfillment` for admin fulfillment dashboards; they are different list payloads from different Lambdas.
 2. Read all single-record fulfillment responses from `data`; the old `form` wrapper is gone.
 3. Do not expect any payload body from successful DELETE or PATCH fulfillment mutations beyond the shared success envelope.
-4. Use supplier routes when ownership checks matter. Use tag routes only when any authenticated user is allowed to access the verification record.
-5. For supplier lookup and update, remember the identifier fallback order: `orderId`, then `contact`, then `tagId`.
+4. Use `GET /commerce/fulfillment/tags/{tagId}` for authenticated tag reads. All other fulfillment endpoints in this Lambda are admin-only.
+5. For supplier lookup and update, identifier resolution still follows: `orderId`, then `contact`, then `tagId`.
 
 ---
 

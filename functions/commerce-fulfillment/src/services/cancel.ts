@@ -8,12 +8,12 @@ import { isValidObjectId } from '../utils/normalize';
 
 /**
  * DELETE /commerce/fulfillment/{orderVerificationId}
- * Admin/developer-only — soft-cancels one order verification by _id.
+ * Admin-only — soft-cancels one order verification by _id.
  * Sets cancelled=true; does not hard-delete the document.
  * Legacy: DELETE /purchase/order-verification/{orderVerificationId} (purchaseConfirmation)
  */
 export async function handleCancelOrderVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireRole(ctx.event, ['admin', 'developer']);
+  requireRole(ctx.event, ['admin']);
 
   const orderVerificationId = ctx.event.pathParameters?.orderVerificationId ?? '';
 

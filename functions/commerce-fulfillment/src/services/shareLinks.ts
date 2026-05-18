@@ -1,12 +1,11 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext } from '@aws-ddd-api/shared';
+import { requireRole } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
 import { sanitizeOrderVerification } from '../utils/sanitize';
-import { normalizeEmail, isValidObjectId } from '../utils/normalize';
-import { loadAuthorizedOrderByTempId } from '../utils/selfAccess';
+import { isValidObjectId } from '../utils/normalize';
 
 const ORDER_VERIFICATION_READ_PROJECTION = [
   '_id', 'tagId', 'staffVerification', 'contact', 'verifyDate', 'tagCreationDate',
@@ -17,17 +16,14 @@ const ORDER_VERIFICATION_READ_PROJECTION = [
 
 type RawDocument = Record<string, unknown>;
 
-const PRIVILEGED_ROLES = new Set(['admin', 'developer']);
-
 /**
  * GET /commerce/fulfillment/share-links/whatsapp/{_id}
- * Authenticated + ownership — returns order verification payload for the WhatsApp deep-link flow.
- * Admins see all records; non-admins must own the linked order or match by masterEmail.
+ * Admin-only — returns order verification payload for the WhatsApp deep-link flow.
  * Extracts verificationId from named path parameter.
  * Legacy: GET /v2/orderVerification/whatsapp-order-link/{_id} (OrderVerification)
  */
 export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const authContext = requireAuthContext(ctx.event);
+  requireRole(ctx.event, ['admin']);
 
   const verificationId = ctx.event.pathParameters?.verificationId ?? '';
 
@@ -41,7 +37,6 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
 
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification');
-  const Order = mongoose.model('Order') as mongoose.Model<RawDocument>;
 
   const orderVerify = await OrderVerification.findOne({ _id: verificationId })
     .select(ORDER_VERIFICATION_READ_PROJECTION)
@@ -49,31 +44,6 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
 
   if (!orderVerify) {
     return response.errorResponse(404, 'fulfillment.errors.notFound', ctx.event);
-  }
-
-  const userRole = authContext?.userRole;
-
-  if (!userRole || !PRIVILEGED_ROLES.has(userRole)) {
-    if (orderVerify.orderId) {
-      const { order } = await loadAuthorizedOrderByTempId(
-        ctx.event,
-        Order,
-        orderVerify.orderId as string
-      );
-      if (!order) {
-        const callerEmail = normalizeEmail(authContext?.userEmail);
-        const ownerEmail = normalizeEmail(orderVerify.masterEmail as string | undefined);
-        if (!callerEmail || !ownerEmail || callerEmail !== ownerEmail) {
-          return response.errorResponse(403, 'common.forbidden', ctx.event);
-        }
-      }
-    } else {
-      const callerEmail = normalizeEmail(authContext?.userEmail);
-      const ownerEmail = normalizeEmail(orderVerify.masterEmail as string | undefined);
-      if (!callerEmail || !ownerEmail || callerEmail !== ownerEmail) {
-        return response.errorResponse(403, 'common.forbidden', ctx.event);
-      }
-    }
   }
 
   const safeEntity = sanitizeOrderVerification(orderVerify) as RawDocument;

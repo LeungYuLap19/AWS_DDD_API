@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, parseBody, parsePathParam, tempIdString } from '@aws-ddd-api/shared';
+import { requireRole, parseBody, parsePathParam, tempIdString } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -22,13 +22,12 @@ type RawDocument = Record<string, unknown>;
 
 /**
  * GET /commerce/fulfillment/suppliers/{orderId}
- * Authenticated + ownership — returns supplier-facing verification/edit view.
- * Resolves by orderId with contact and tagId fallback matching.
+ * Admin-only — returns supplier-facing verification/edit view.
  * Extracts orderId from named path parameter.
  * Legacy: GET /v2/orderVerification/supplier/{orderId} (OrderVerification)
  */
 export async function handleGetSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  requireRole(ctx.event, ['admin']);
 
   const orderParam = parsePathParam(ctx.event.pathParameters?.orderId, tempIdString());
   if (!orderParam.ok) {
@@ -84,13 +83,13 @@ export async function handleGetSupplierVerification(ctx: RouteContext): Promise<
 
 /**
  * PATCH /commerce/fulfillment/suppliers/{orderId}
- * Authenticated + ownership — updates supplier-editable verification fields.
+ * Admin-only — updates supplier-editable verification fields.
  * Accepts JSON body only (legacy accepted multipart; DDD tightens to JSON).
  * Extracts orderId from named path parameter.
  * Legacy: PUT /v2/orderVerification/supplier/{orderId} (OrderVerification)
  */
 export async function handlePatchSupplierVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  requireRole(ctx.event, ['admin']);
 
   const orderParam = parsePathParam(ctx.event.pathParameters?.orderId, tempIdString());
   if (!orderParam.ok) {

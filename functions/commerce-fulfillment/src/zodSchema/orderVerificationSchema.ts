@@ -42,6 +42,9 @@ export const supplierUpdateSchema = z
 
 export const tagUpdateSchema = z
   .object({
+    staffVerification: z
+      .boolean({ message: 'fulfillment.errors.invalidField' })
+      .optional(),
     contact: nullableTextField(50),
     verifyDate: validDateField.optional(),
     petName: nullableTextField(100),

@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, parseBody, parsePathParam, tempIdString, HttpError, logWarn } from '@aws-ddd-api/shared';
+import { requireAuthContext, requireRole, parseBody, parsePathParam, tempIdString, HttpError, logWarn } from '@aws-ddd-api/shared';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';
@@ -201,13 +201,13 @@ export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGa
 
 /**
  * PATCH /commerce/fulfillment/tags/{tagId}
- * Authenticated — updates allowed fields on the tag-bound verification record.
+ * Admin-only — updates allowed fields on the tag-bound verification record.
  * Attempts WhatsApp tracking dispatch after a successful update.
  * Extracts tagId from named path parameter.
  * Legacy: PUT /v2/orderVerification/{tagId} (OrderVerification)
  */
 export async function handlePatchTagVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
+  requireRole(ctx.event, ['admin']);
 
   const tagParam = parsePathParam(ctx.event.pathParameters?.tagId, tempIdString());
   if (!tagParam.ok) {
@@ -244,6 +244,7 @@ export async function handlePatchTagVerification(ctx: RouteContext): Promise<API
   }
 
   const setFields: Record<string, unknown> = {};
+  if (payload.staffVerification !== undefined) setFields['staffVerification'] = payload.staffVerification;
   if (payload.contact) setFields['contact'] = normalizePhone(payload.contact);
   if (payload.verifyDate !== undefined) {
     const parsedVerifyDate = parseDDMMYYYY(payload.verifyDate as string);
