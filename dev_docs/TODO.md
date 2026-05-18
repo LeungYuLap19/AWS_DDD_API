@@ -56,7 +56,7 @@
 
 - [x] POST /commerce/storefront/shop-code-verifications
 
-- [ ] commerce pricing must be backend-authoritative (item price, discount, delivery fee)
+- [x] commerce pricing must be backend-authoritative (item price, discount, delivery fee)
   - target formula: `finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee`
   - never trust client price math (`price`, `discount`, `deliveryFee` from frontend payload)
   - endpoints to fix:

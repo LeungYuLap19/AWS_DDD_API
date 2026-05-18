@@ -4,6 +4,7 @@ import OrderSchema from '../models/Order';
 import OrderVerificationSchema from '../models/OrderVerification';
 import ShopInfoSchema from '../models/ShopInfo';
 import ImageCollectionSchema from '../models/ImageCollection';
+import PtagProductSchema from '../models/PtagProduct';
 
 let connectionPromise: Promise<typeof mongoose> | null = null;
 
@@ -14,6 +15,8 @@ function registerModels() {
   mongoose.models.ShopInfo || mongoose.model('ShopInfo', ShopInfoSchema, 'shopInfo');
   mongoose.models.ImageCollection ||
     mongoose.model('ImageCollection', ImageCollectionSchema, 'imageCollection');
+  mongoose.models.PtagProduct ||
+    mongoose.model('PtagProduct', PtagProductSchema, 'ptagProduct');
 }
 
 export async function connectToMongoDB() {

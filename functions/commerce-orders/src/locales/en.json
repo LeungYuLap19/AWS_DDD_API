@@ -5,6 +5,7 @@
       "invalidOption": "Invalid option value.",
       "invalidTempId": "Invalid purchase ID format.",
       "invalidPhone": "Invalid phone number format.",
+      "invalidProductSelection": "Invalid product or tier selection.",
       "invalidShopCode": "Invalid shop code.",
       "duplicateOrder": "An order with this purchase ID already exists.",
       "invalidFileType": "Unsupported file type. Only JPEG, PNG, WebP and GIF are allowed.",

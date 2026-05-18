@@ -44,6 +44,7 @@ let dbConnectError = null;
 
 // Seeded ShopInfo shopCode used by POST /commerce/orders tests
 const SEEDED_SHOP_CODE = `${RUN_ID}-shop`;
+const SEEDED_PRODUCT_NAMES = ['PTag', 'ptag air'];
 
 const state = {
   adminUserId: new mongoose.Types.ObjectId(),
@@ -180,6 +181,10 @@ function shopInfoCol() {
   return mongoose.connection.db.collection('shopInfo');
 }
 
+function ptagProductCol() {
+  return mongoose.connection.db.collection('ptagProduct');
+}
+
 async function ensureDbOrSkip() {
   try {
     await connectDB();
@@ -207,8 +212,32 @@ async function seedFixtures() {
   await shopInfoCol().insertOne({
     shopCode: SEEDED_SHOP_CODE,
     shopName: `${RUN_ID} Test Shop`,
-    price: 199,
+    price: 99,
   });
+
+  // Seed PTag product pricing documents for backend-authoritative checkout pricing
+  await ptagProductCol().deleteMany({ name: { $in: SEEDED_PRODUCT_NAMES } });
+  await ptagProductCol().insertMany([
+    {
+      name: 'PTag',
+      deliveryCharge: 50,
+      options: { sizes: ['25mm', '30mm'], colours: ['gold', 'silver'] },
+      tiers: [
+        { type: 'normal', price: 259 },
+        { type: 'custom', price: 279 },
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      name: 'ptag air',
+      deliveryCharge: 50,
+      options: { sizes: [], colours: [] },
+      tiers: [{ type: 'standard', price: 199 }],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ]);
 
   // Seed an existing Order so GET /commerce/orders/{tempId} has something to find
   await ordersCol().deleteOne({ tempId: state.seededOrderTempId });
@@ -224,7 +253,7 @@ async function seedFixtures() {
     option: 'PTag',
     petName: 'Seeded Pet',
     shopCode: SEEDED_SHOP_CODE,
-    price: 199,
+    price: 210,
     buyDate: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -252,6 +281,7 @@ async function ensureSamLocalReachable() {
 afterAll(async () => {
   if (dbReady && mongoose.connection.readyState !== 0) {
     await shopInfoCol().deleteOne({ shopCode: SEEDED_SHOP_CODE });
+    await ptagProductCol().deleteMany({ name: { $in: SEEDED_PRODUCT_NAMES } });
 
     if (state.seededOrderId) {
       await ordersCol().deleteOne({ _id: state.seededOrderId });

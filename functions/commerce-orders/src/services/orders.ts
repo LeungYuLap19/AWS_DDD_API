@@ -19,7 +19,7 @@ import { uploadQrCodeImage } from '../utils/s3';
 import {
   normalizeEmail,
   generateUniqueTagId,
-  resolveCanonicalPrice,
+  resolveAuthoritativePricing,
   resolveShortUrl,
 } from '../utils/helpers';
 import { sendOrderEmail } from '../utils/smtp';
@@ -30,6 +30,195 @@ import { response } from '../utils/response';
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 
 const PRIVILEGED_ROLES = new Set(['admin', 'developer']);
+const TAG_ID_MAX_RETRIES = 3;
+
+type ParsedMultipartOrder = {
+  lastName: string;
+  phoneNumber: string;
+  address: string;
+  email: string;
+  option: string;
+  type: string;
+  tempId: string;
+  paymentWay: string;
+  shopCode: string;
+  delivery: string;
+  promotionCode: string;
+  petContact: string;
+  petName: string;
+  optionSize: string;
+  optionColor: string;
+  lang: 'chn' | 'eng';
+};
+
+type UploadedOrderFiles = {
+  petImgUrl: string;
+  discountProofUrl: string;
+};
+
+type CheckoutFile = {
+  fieldname: string;
+  filename?: string;
+  content?: Buffer;
+};
+
+type CreatedOrderRecord = {
+  _id: unknown;
+  buyDate: unknown;
+};
+
+type CreatedOrderVerificationRecord = {
+  _id: unknown;
+};
+
+function isPTagAirOption(option: string): boolean {
+  return option === 'PTagAir' || option === 'PTagAir_member';
+}
+
+async function uploadOptionalOrderFiles(
+  ctx: RouteContext,
+  tempId: string,
+  files: CheckoutFile[]
+): Promise<UploadedOrderFiles | APIGatewayProxyResult> {
+  const petImgFiles = files.filter((f) => f.fieldname === 'pet_img');
+  const discountProofFiles = files.filter((f) => f.fieldname === 'discount_proof');
+
+  if (petImgFiles.length > 1) {
+    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
+  }
+  if (discountProofFiles.length > 1) {
+    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
+  }
+
+  const uploadSingleFile = async (
+    fieldFile: { filename?: string; content?: Buffer } | undefined,
+    keyPrefix: string
+  ): Promise<string | APIGatewayProxyResult> => {
+    if (!fieldFile?.content) return '';
+    try {
+      return await uploadImageFile(
+        { buffer: fieldFile.content, originalname: fieldFile.filename ?? '' },
+        keyPrefix,
+        'user'
+      );
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'orders.errors.invalidFileType', ctx.event);
+      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'orders.errors.fileTooLarge', ctx.event);
+      throw err;
+    }
+  };
+
+  const petImgUrl = await uploadSingleFile(petImgFiles[0], `user-uploads/orders/${tempId}`);
+  if (typeof petImgUrl !== 'string') return petImgUrl;
+
+  const discountProofUrl = await uploadSingleFile(
+    discountProofFiles[0],
+    `user-uploads/orders/${tempId}/discount-proofs`
+  );
+  if (typeof discountProofUrl !== 'string') return discountProofUrl;
+
+  return { petImgUrl, discountProofUrl };
+}
+
+async function createOrderDocument(
+  data: ParsedMultipartOrder & UploadedOrderFiles & { normalizedEmail: string; finalPrice: number; isPTagAir: boolean }
+): Promise<CreatedOrderRecord | 'DUPLICATE'> {
+  const Order = mongoose.model('Order');
+
+  try {
+    const OrderModel = Order as unknown as new (payload: Record<string, unknown>) => {
+      save(): Promise<unknown>;
+      _id: unknown;
+      buyDate: unknown;
+    };
+    const newOrder = new OrderModel({
+      lastName: data.lastName,
+      phoneNumber: data.phoneNumber,
+      address: data.address,
+      email: data.normalizedEmail,
+      option: data.option,
+      type: data.type,
+      tempId: data.tempId,
+      petImg: data.petImgUrl,
+      paymentWay: data.paymentWay,
+      shopCode: data.shopCode,
+      delivery: data.delivery,
+      price: data.finalPrice,
+      promotionCode: data.promotionCode,
+      petContact: data.petContact,
+      petName: data.petName,
+      buyDate: new Date(),
+      isPTagAir: data.isPTagAir,
+      sfWayBillNumber: null,
+      language: data.lang,
+    });
+    await newOrder.save();
+    return newOrder as unknown as CreatedOrderRecord;
+  } catch (saveErr) {
+    if ((saveErr as { code?: number })?.code === 11000) {
+      return 'DUPLICATE';
+    }
+    throw saveErr;
+  }
+}
+
+async function createOrderVerificationWithRetry(
+  order: CreatedOrderRecord,
+  data: ParsedMultipartOrder &
+    UploadedOrderFiles &
+    { normalizedEmail: string; finalPrice: number; isPTagAir: boolean }
+): Promise<CreatedOrderVerificationRecord> {
+  const OrderVerification = mongoose.model('OrderVerification');
+
+  let retries = 0;
+  while (true) {
+    const tagId = await generateUniqueTagId();
+    const shortUrl = await resolveShortUrl(data.isPTagAir, tagId);
+    const qrUrl = data.isPTagAir
+      ? `${env.AWS_BUCKET_BASE_URL}/pet-images/ptag+id.png`
+      : await uploadQrCodeImage(shortUrl);
+
+    try {
+      const OVModel = OrderVerification as unknown as new (payload: Record<string, unknown>) => {
+        save(): Promise<unknown>;
+        _id: unknown;
+      };
+
+      const ov = new OVModel({
+        tagId,
+        staffVerification: false,
+        contact: data.phoneNumber,
+        verifyDate: null,
+        tagCreationDate: order.buyDate,
+        petName: data.petName,
+        masterEmail: data.normalizedEmail,
+        shortUrl,
+        qrUrl,
+        petUrl: data.petImgUrl,
+        orderId: data.tempId,
+        location: data.address,
+        petHuman: data.lastName,
+        pendingStatus: false,
+        option: data.option,
+        type: data.type,
+        optionSize: data.optionSize,
+        optionColor: data.optionColor,
+        price: data.finalPrice,
+        discountProof: data.discountProofUrl,
+        cancelled: false,
+      });
+      await ov.save();
+      return ov as unknown as CreatedOrderVerificationRecord;
+    } catch (ovErr) {
+      if ((ovErr as { code?: number })?.code === 11000 && retries < TAG_ID_MAX_RETRIES - 1) {
+        retries += 1;
+        continue;
+      }
+      throw ovErr;
+    }
+  }
+}
 
 // ── GET /commerce/orders ─────────────────────────────────────────────────────
 
@@ -82,25 +271,7 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
 export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const auth = requireAuthContext(ctx.event);
 
-  // 2. Connect to DB first — rate limiter uses mongoose and needs an open connection
-  await connectToMongoDB();
-
-  // 1. Layered rate limit. The narrow ip+account lane preserves the legacy
-  //    10/hr behaviour. Wider ip lane bounds anonymous probing and per-account
-  //    lane bounds an attacker rotating IPs against one account.
-  const rateLimitResult = await applyRateLimit({
-    action: 'submit-order',
-    event: ctx.event,
-    identifier: auth.userId,
-    policies: [
-      { scope: 'ip', limit: 60, windowSeconds: 3600 },
-      { scope: 'identifier', limit: 20, windowSeconds: 3600 },
-      { scope: 'ip+identifier', limit: 10, windowSeconds: 3600 },
-    ],
-  });
-  if (rateLimitResult) return rateLimitResult;
-
-  // 3. Parse multipart form data + Zod validation
+  // 1. Parse multipart form data + Zod validation
   const multiResult = await parseMultipartBody(ctx.event, purchaseConfirmationSchema, {
     fallbackErrorKey: 'common.invalidBodyParams',
   });
@@ -115,137 +286,107 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   } = multiResult.data;
 
   const email = normalizeEmail(rawEmail);
+  const parsedOrder: ParsedMultipartOrder = {
+    lastName,
+    phoneNumber,
+    address,
+    email,
+    option,
+    type,
+    tempId,
+    paymentWay,
+    shopCode,
+    delivery,
+    promotionCode,
+    petContact,
+    petName,
+    optionSize,
+    optionColor,
+    lang,
+  };
 
-  // 5. Upload image files
-  const allFiles = multiResult.files;
-  const petImgFiles = allFiles.filter((f) => f.fieldname === 'pet_img');
-  const discountProofFiles = allFiles.filter((f) => f.fieldname === 'discount_proof');
+  // 2. Connect to DB first — rate limiter uses mongoose and needs an open connection.
+  await connectToMongoDB();
 
-  if (petImgFiles.length > 1) {
-    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
-  }
-  if (discountProofFiles.length > 1) {
-    return response.errorResponse(400, 'orders.errors.tooManyFiles', ctx.event);
-  }
+  // 3. Layered rate limit. The narrow ip+account lane preserves the legacy
+  //    10/hr behaviour. Wider ip lane bounds anonymous probing and per-account
+  //    lane bounds an attacker rotating IPs against one account.
+  const rateLimitResult = await applyRateLimit({
+    action: 'submit-order',
+    event: ctx.event,
+    identifier: auth.userId,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 3600 },
+      { scope: 'identifier', limit: 20, windowSeconds: 3600 },
+      { scope: 'ip+identifier', limit: 10, windowSeconds: 3600 },
+    ],
+  });
+  if (rateLimitResult) return rateLimitResult;
 
-  let petImgUrl = '';
-  if (petImgFiles.length > 0 && petImgFiles[0].content) {
-    try {
-      petImgUrl = await uploadImageFile(
-        { buffer: petImgFiles[0].content, originalname: petImgFiles[0].filename ?? '' },
-        `user-uploads/orders/${tempId}`,
-        'user'
-      );
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code;
-      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'orders.errors.invalidFileType', ctx.event);
-      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'orders.errors.fileTooLarge', ctx.event);
-      throw err;
+  // 4. Resolve backend-authoritative pricing from DB data only.
+  // Formula: finalPrice = itemBasePrice - shopCodeDiscount + deliveryFee
+  const pricing = await resolveAuthoritativePricing({
+    option: parsedOrder.option,
+    type: parsedOrder.type,
+    shopCode: parsedOrder.shopCode,
+  });
+  if (!pricing.ok) {
+    if (pricing.error === 'INVALID_PRODUCT_SELECTION') {
+      return response.errorResponse(400, 'orders.errors.invalidProductSelection', ctx.event);
     }
-  }
-
-  let discountProofUrl = '';
-  if (discountProofFiles.length > 0 && discountProofFiles[0].content) {
-    try {
-      discountProofUrl = await uploadImageFile(
-        { buffer: discountProofFiles[0].content, originalname: discountProofFiles[0].filename ?? '' },
-        `user-uploads/orders/${tempId}/discount-proofs`,
-        'user'
-      );
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code;
-      if (code === 'INVALID_FILE_TYPE') return response.errorResponse(400, 'orders.errors.invalidFileType', ctx.event);
-      if (code === 'FILE_TOO_LARGE') return response.errorResponse(413, 'orders.errors.fileTooLarge', ctx.event);
-      throw err;
-    }
-  }
-
-  // 6. Resolve server-authoritative price
-  const priceResult = await resolveCanonicalPrice(shopCode);
-  if (!priceResult) {
     return response.errorResponse(400, 'orders.errors.invalidShopCode', ctx.event);
   }
-  const { canonicalPrice } = priceResult;
+  const { finalPrice } = pricing.data;
 
-  // 7. Create Order
-  const Order = mongoose.model('Order');
-  const isPTagAir = option === 'PTagAir' || option === 'PTagAir_member';
+  // 5. Upload optional files after pricing is validated.
+  const normalizedFiles: CheckoutFile[] = multiResult.files
+    .filter((file): file is typeof file & { fieldname: string } => typeof file.fieldname === 'string')
+    .map((file) => ({
+      fieldname: file.fieldname,
+      filename: file.filename,
+      content: file.content,
+    }));
 
-  const existingOrder = await Order.findOne({ tempId }).select('_id').lean();
-  if (existingOrder) {
+  const fileUpload = await uploadOptionalOrderFiles(ctx, parsedOrder.tempId, normalizedFiles);
+  if ('statusCode' in fileUpload) {
+    return fileUpload;
+  }
+  const { petImgUrl, discountProofUrl } = fileUpload;
+
+  // 6. Persist order.
+  const isPTagAir = isPTagAirOption(parsedOrder.option);
+  const createOrderInput = {
+    ...parsedOrder,
+    normalizedEmail: email,
+    finalPrice,
+    isPTagAir,
+    petImgUrl,
+    discountProofUrl,
+  };
+  const order = await createOrderDocument(createOrderInput);
+  if (order === 'DUPLICATE') {
     return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
   }
 
-  let order: Record<string, unknown>;
-  try {
-    const OrderModel = Order as unknown as new (data: Record<string, unknown>) => {
-      save(): Promise<unknown>;
-      _id: unknown;
-      buyDate: unknown;
-    };
-    const newOrder = new OrderModel({
-      lastName, phoneNumber, address, email, option, type, tempId,
-      petImg: petImgUrl, paymentWay, shopCode, delivery, price: canonicalPrice,
-      promotionCode, petContact, petName, buyDate: new Date(), isPTagAir,
-      sfWayBillNumber: null, language: lang,
-    });
-    await newOrder.save();
-    order = newOrder as unknown as Record<string, unknown>;
-  } catch (saveErr) {
-    if ((saveErr as { code?: number })?.code === 11000) {
-      return response.errorResponse(409, 'orders.errors.duplicateOrder', ctx.event);
-    }
-    throw saveErr;
-  }
-
-  // 9–11. Generate tag, QR assets, and create OrderVerification.
-  //       On any post-order failure, compensate by removing the Order.
-  const OrderVerification = mongoose.model('OrderVerification');
-  let savedVerification: Record<string, unknown>;
-  const TAG_ID_MAX_RETRIES = 3;
+  // 7. Persist order verification; compensate order if this fails.
+  const Order = mongoose.model('Order');
+  let savedVerification: CreatedOrderVerificationRecord;
 
   try {
-    let tagIdAttempt = 0;
-    while (true) {
-      const tagId = await generateUniqueTagId();
-      const shortUrl = await resolveShortUrl(isPTagAir, tagId);
-      const qrUrl = isPTagAir
-        ? `${env.AWS_BUCKET_BASE_URL}/pet-images/ptag+id.png`
-        : await uploadQrCodeImage(shortUrl);
-
-      try {
-        const OVModel = OrderVerification as unknown as new (data: Record<string, unknown>) => {
-          save(): Promise<unknown>;
-          _id: unknown;
-        };
-        const ov = new OVModel({
-          tagId, staffVerification: false,
-          contact: phoneNumber,
-          verifyDate: null,
-          tagCreationDate: order['buyDate'],
-          petName, masterEmail: email, shortUrl, qrUrl,
-          petUrl: petImgUrl, orderId: tempId, location: address,
-          petHuman: lastName, pendingStatus: false, option, type,
-          optionSize, optionColor, price: canonicalPrice,
-          discountProof: discountProofUrl, cancelled: false,
-        });
-        await ov.save();
-        savedVerification = ov as unknown as Record<string, unknown>;
-        break;
-      } catch (ovErr) {
-        if ((ovErr as { code?: number })?.code === 11000 && ++tagIdAttempt < TAG_ID_MAX_RETRIES) {
-          continue; // tagId collision — retry
-        }
-        throw ovErr;
-      }
-    }
+    savedVerification = await createOrderVerificationWithRetry(order, createOrderInput);
   } catch (postOrderErr) {
     // Compensate: remove dangling Order so the user can retry with the same tempId
-    await Order.deleteOne({ _id: order['_id'] }).catch((error) => logWarn('Order compensation delete failed', { event: ctx.event, error, scope: 'commerce-orders.services.orders' }));
+    await Order.deleteOne({ _id: order._id }).catch((error) =>
+      logWarn('Order compensation delete failed', {
+        event: ctx.event,
+        error,
+        scope: 'commerce-orders.services.orders',
+      })
+    );
     throw postOrderErr;
   }
 
-  const newOrderVerificationId = savedVerification!['_id'];
+  const newOrderVerificationId = savedVerification._id;
 
   // 12 & 13. Send confirmation email + WhatsApp notification in parallel (both non-fatal).
   // Running sequentially risks cutt.ly(3s) + SMTP(4s) + WhatsApp(4s) = 11s > Lambda 10s limit.
@@ -255,7 +396,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
       `PTag 訂單資料：${tempId}`,
       {
         lastName, phoneNumber, address, email, option, type, tempId,
-        petImg: petImgUrl, paymentWay, shopCode, delivery, price: canonicalPrice,
+        petImg: petImgUrl, paymentWay, shopCode, delivery, price: finalPrice,
         promotionCode, petContact, petName, optionColor, optionSize, isPTagAir,
       },
       'support@ptag.com.hk',
@@ -269,7 +410,7 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
 
 return response.successResponse(200, ctx.event, {
   message: 'success.created',
-  data: { id: String(newOrderVerificationId), purchaseCode: tempId, price: canonicalPrice },
+  data: { id: String(newOrderVerificationId), purchaseCode: tempId, price: finalPrice },
 });
 }
 
