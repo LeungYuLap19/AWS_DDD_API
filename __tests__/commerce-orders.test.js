@@ -229,6 +229,7 @@ function createQueryMock(result, err = null) {
   return {
     lean: err ? jest.fn().mockRejectedValue(err) : jest.fn().mockResolvedValue(result),
     select: jest.fn().mockReturnThis(),
+    sort: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
   };
@@ -358,6 +359,7 @@ function loadHandlerWithMocks({
 
   const ovFindFn = jest.fn().mockReturnValue({
     select: jest.fn().mockReturnThis(),
+    sort: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     lean: ovFindListError
@@ -738,6 +740,91 @@ describe('GET /commerce/orders/operations — admin OV list', () => {
     expect(parsed.body.message).toBeDefined();
     expect(parsed.body.pagination.total).toBe(2);
     expect(parsed.body.pagination.page).toBe(1);
+  });
+
+  test('supports search + sort query params with escaped regex', async () => {
+    const rawSearch = 'buddy.*+?^${}()|[]\\';
+    const escapedSearch = rawSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const { handler, mocks } = loadHandlerWithMocks({ ovFindListResult: [], ovCountResult: 0 });
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: '/commerce/orders/operations',
+        resource: '/commerce/orders/operations',
+        queryStringParameters: {
+          page: '2',
+          limit: '5',
+          search: rawSearch,
+          sortBy: 'petName',
+          sortOrder: 'asc',
+        },
+        authorizer: adminAuth(),
+      }),
+      createContext()
+    );
+
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.pagination.page).toBe(2);
+    expect(parsed.body.pagination.limit).toBe(5);
+
+    const findFilter = mocks.ovFindFn.mock.calls[0][0];
+    expect(findFilter).toHaveProperty('cancelled');
+    expect(Array.isArray(findFilter.$or)).toBe(true);
+    expect(findFilter.$or).toEqual(
+      expect.arrayContaining([
+        { petName: { $regex: escapedSearch, $options: 'i' } },
+        { masterEmail: { $regex: escapedSearch, $options: 'i' } },
+      ])
+    );
+
+    const sortFn = mocks.ovFindFn.mock.results[0]?.value?.sort;
+    expect(sortFn).toBeDefined();
+    expect(sortFn).toHaveBeenCalledWith({ petName: 1, _id: -1 });
+
+    const skipFn = mocks.ovFindFn.mock.results[0]?.value?.skip;
+    expect(skipFn).toBeDefined();
+    expect(skipFn).toHaveBeenCalledWith(5);
+  });
+
+  test('falls back to updatedAt desc when sortBy is not allowlisted', async () => {
+    const { handler, mocks } = loadHandlerWithMocks({ ovFindListResult: [], ovCountResult: 0 });
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: '/commerce/orders/operations',
+        resource: '/commerce/orders/operations',
+        queryStringParameters: {
+          sortBy: 'not-a-real-field',
+        },
+        authorizer: adminAuth(),
+      }),
+      createContext()
+    );
+
+    expect(parseResponse(result).statusCode).toBe(200);
+    const sortFn = mocks.ovFindFn.mock.results[0]?.value?.sort;
+    expect(sortFn).toBeDefined();
+    expect(sortFn).toHaveBeenCalledWith({ updatedAt: -1, _id: -1 });
+  });
+
+  test('trims search and omits regex filters when search is blank', async () => {
+    const { handler, mocks } = loadHandlerWithMocks({ ovFindListResult: [], ovCountResult: 0 });
+    const result = await handler(
+      createEvent({
+        method: 'GET',
+        path: '/commerce/orders/operations',
+        resource: '/commerce/orders/operations',
+        queryStringParameters: {
+          search: '   ',
+        },
+        authorizer: adminAuth(),
+      }),
+      createContext()
+    );
+
+    expect(parseResponse(result).statusCode).toBe(200);
+    expect(mocks.ovFindFn.mock.calls[0][0]).toEqual({ cancelled: { $exists: true } });
   });
 
   test('returns 404 when no records exist', async () => {

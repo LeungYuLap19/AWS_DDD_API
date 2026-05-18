@@ -475,14 +475,56 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
   await connectToMongoDB();
   const OrderVerification = mongoose.model('OrderVerification');
 
-  const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  const queryParams = ctx.event.queryStringParameters ?? {};
+  const pagination = paginationQuerySchema().safeParse(queryParams);
   if (!pagination.success) {
     return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
   }
   const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
-  const filter = { cancelled: { $exists: true } };
+  const search = typeof queryParams.search === 'string' ? queryParams.search.trim() : '';
+  const sortByAllowlist = new Set([
+    'updatedAt',
+    'createdAt',
+    'tagId',
+    'staffVerification',
+    'cancelled',
+    'verifyDate',
+    'tagCreationDate',
+    'petName',
+    'masterEmail',
+    'orderId',
+    'location',
+    'petHuman',
+    'pendingStatus',
+    'option',
+    'type',
+    'optionSize',
+    'optionColor',
+    'price',
+  ]);
+  const sortBy = sortByAllowlist.has(String(queryParams.sortBy)) ? String(queryParams.sortBy) : 'updatedAt';
+  const sortOrder = String(queryParams.sortOrder || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+
+  const filter: Record<string, unknown> = { cancelled: { $exists: true } };
+  if (search) {
+    const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.$or = [
+      { tagId: { $regex: safeSearch, $options: 'i' } },
+      { contact: { $regex: safeSearch, $options: 'i' } },
+      { petName: { $regex: safeSearch, $options: 'i' } },
+      { masterEmail: { $regex: safeSearch, $options: 'i' } },
+      { orderId: { $regex: safeSearch, $options: 'i' } },
+      { location: { $regex: safeSearch, $options: 'i' } },
+      { petHuman: { $regex: safeSearch, $options: 'i' } },
+      { option: { $regex: safeSearch, $options: 'i' } },
+      { type: { $regex: safeSearch, $options: 'i' } },
+      { optionSize: { $regex: safeSearch, $options: 'i' } },
+      { optionColor: { $regex: safeSearch, $options: 'i' } },
+    ];
+  }
+
   const selectFields =
     '_id tagId staffVerification contact verifyDate tagCreationDate petName shortUrl ' +
     'masterEmail qrUrl petUrl orderId location petHuman createdAt updatedAt ' +
@@ -492,6 +534,7 @@ export async function handleGetOperations(ctx: RouteContext): Promise<APIGateway
     (OrderVerification
       .find(filter)
       .select(selectFields)
+      .sort({ [sortBy]: sortOrder, _id: -1 })
       .skip(skip)
       .limit(limit)
       .lean()) as Promise<Record<string, unknown>[]>,
