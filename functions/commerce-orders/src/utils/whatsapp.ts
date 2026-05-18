@@ -9,6 +9,12 @@ interface OrderWhatsAppParams {
   lang?: string;
 }
 
+function formatWhatsAppAuthorizationHeader(value: string | undefined): string {
+  const token = (value ?? '').trim();
+  if (!token) return '';
+  return /^Bearer\s+/i.test(token) ? token : `Bearer ${token}`;
+}
+
 /**
  * Sends a WhatsApp template message to the customer after order creation.
  * Non-fatal — caller wraps in try/catch.
@@ -20,7 +26,7 @@ export async function sendWhatsAppOrderMessage(
   const { phoneNumber, lastName, option, tempId, lang } = order;
   if (!phoneNumber) return;
 
-  const token = env.WHATSAPP_BEARER_TOKEN;
+  const token = formatWhatsAppAuthorizationHeader(env.WHATSAPP_BEARER_TOKEN);
   if (!token) return;
 
   const data = {
@@ -67,5 +73,3 @@ export async function sendWhatsAppOrderMessage(
     throw new HttpError('common.serviceUnavailable', 502);
   }
 }
-
-

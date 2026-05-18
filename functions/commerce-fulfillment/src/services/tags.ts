@@ -22,6 +22,12 @@ const ORDER_READ_PROJECTION = [
 
 type RawDocument = Record<string, unknown>;
 
+function formatWhatsAppAuthorizationHeader(value: string | undefined): string {
+  const token = (value ?? '').trim();
+  if (!token) return '';
+  return /^Bearer\s+/i.test(token) ? token : `Bearer ${token}`;
+}
+
 function buildDeliveryText(verifyDate: unknown, language: unknown): string {
   let estStart: Date;
   let estEnd: Date;
@@ -72,7 +78,7 @@ async function dispatchWhatsAppTrackingMessage(
   orderVerification: RawDocument | null | undefined,
   event: RouteContext['event']
 ): Promise<{ dispatched: boolean; reason?: string }> {
-  const token = process.env.WHATSAPP_BEARER_TOKEN;
+  const token = formatWhatsAppAuthorizationHeader(process.env.WHATSAPP_BEARER_TOKEN);
   if (!token) {
     return { dispatched: false, reason: 'missing-token' };
   }
