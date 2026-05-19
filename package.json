@@ -5,6 +5,7 @@
   "scripts": {
     "build": "npm run build:ts && npm_config_cache=.npm-cache sam build --template-file template.yaml",
     "build:ts": "node script/esbuild-functions.cjs && node script/prepare-dist.cjs",
+    "check:shared-imports": "node script/check-no-shared-barrel-imports.cjs",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "validate": "sam validate --template-file template.yaml",

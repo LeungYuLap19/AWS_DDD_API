@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sanitizeText } from '@aws-ddd-api/shared';
+import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
 import { isValidDateFormat } from '../utils/date';
 
 /** Default max lengths used across pet-profile schemas. */

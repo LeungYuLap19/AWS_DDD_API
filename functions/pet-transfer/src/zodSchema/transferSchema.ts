@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { sanitizeText } from '@aws-ddd-api/shared';
-
+import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
 const transferCommonFields = {
   regDate: z.string().trim().max(64, 'common.invalidBodyParams').optional(),
   regPlace: z.string().trim().max(200, 'common.invalidBodyParams').transform(sanitizeText).optional(),

@@ -290,7 +290,7 @@ Resources:
             Identity:
               Header: Authorization
               ValidationExpression: '^Bearer .+$'
-              ReauthorizeEvery: 0
+              ReauthorizeEvery: 60
 
   RestApiDefault4xxGatewayResponse:
     Type: AWS::ApiGateway::GatewayResponse
@@ -529,8 +529,6 @@ Resources:
       CodeUri: dist/functions/request-authorizer/
       Handler: index.handler
       Role: !GetAtt AuthorizerFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint

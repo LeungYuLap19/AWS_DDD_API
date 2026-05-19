@@ -1,5 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { paginationQuerySchema, parsePathParam, requireAuthContext, tempIdString } from '@aws-ddd-api/shared';
+import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { paginationQuerySchema, parsePathParam, tempIdString } from '@aws-ddd-api/shared/validation/common';
 import type { RouteContext } from '../../../../types/lambda';
 import mongoose from 'mongoose';
 import { connectToMongoDB } from '../config/db';

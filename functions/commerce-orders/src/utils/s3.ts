@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import axios from 'axios';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { logWarn } from '@aws-ddd-api/shared';
+import { logWarn } from '@aws-ddd-api/shared/logging/logger';
 import env from '../config/env';
 import s3Client from '../config/s3';
 

@@ -1,11 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import {
-  recordMongoRateLimitFailure,
-  requireMongoRateLimit,
-  requireMongoRateLimitNotInCooldown,
-} from '@aws-ddd-api/shared';
-import type { RateLimitPolicy, RateLimitScope } from '@aws-ddd-api/shared';
+import { recordMongoRateLimitFailure, requireMongoRateLimit, requireMongoRateLimitNotInCooldown, type RateLimitPolicy, type RateLimitScope } from '@aws-ddd-api/shared/rate-limit/mongo';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 

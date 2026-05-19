@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { getAuthContext, HttpError } from '@aws-ddd-api/shared';
+import { getAuthContext, HttpError } from '@aws-ddd-api/shared/auth/context';
 import { normalizeEmail } from './normalize';
 
 const PRIVILEGED_ROLES = new Set(['admin', 'developer']);

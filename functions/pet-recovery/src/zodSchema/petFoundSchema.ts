@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { sanitizeText } from '@aws-ddd-api/shared';
-
+import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
 export const createPetFoundSchema = z
   .object({
     animal: z

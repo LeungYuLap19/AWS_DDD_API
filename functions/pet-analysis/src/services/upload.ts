@@ -1,5 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { requireAuthContext, parseMultipartBody } from '@aws-ddd-api/shared';
+import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { parseMultipartBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { applyRateLimit } from '../utils/rateLimit';

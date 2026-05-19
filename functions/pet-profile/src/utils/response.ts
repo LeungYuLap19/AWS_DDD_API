@@ -1,4 +1,4 @@
-import { createResponse } from '@aws-ddd-api/shared';
+import { createResponse } from '@aws-ddd-api/shared/http/response';
 import en from '../locales/en.json';
 import zh from '../locales/zh.json';
 

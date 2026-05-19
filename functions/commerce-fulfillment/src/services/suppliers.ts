@@ -1,6 +1,8 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireRole, parseBody, parsePathParam, tempIdString } from '@aws-ddd-api/shared';
+import { requireRole } from '@aws-ddd-api/shared/auth/context';
+import { parsePathParam, tempIdString } from '@aws-ddd-api/shared/validation/common';
+import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { response } from '../utils/response';

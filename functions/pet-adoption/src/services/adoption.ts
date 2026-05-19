@@ -1,5 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { parseObjectIdParam, requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { parseObjectIdParam } from '@aws-ddd-api/shared/validation/common';
 import type { RouteContext } from '../../../../types/lambda';
 import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
