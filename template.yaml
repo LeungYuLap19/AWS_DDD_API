@@ -290,7 +290,7 @@ Resources:
             Identity:
               Header: Authorization
               ValidationExpression: '^Bearer .+$'
-              ReauthorizeEvery: 60
+              ReauthorizeEvery: 0
 
   RestApiDefault4xxGatewayResponse:
     Type: AWS::ApiGateway::GatewayResponse
