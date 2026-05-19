@@ -413,51 +413,11 @@ Resources:
         gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
 
-  SharedCoreLayer:
+  SharedRuntimeLayer: # the Lambda Layer resource you defined in the template
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: !Sub '${ProjectName}-${StageName}-shared-core'
-      ContentUri: dist/layers/shared-core/
-      CompatibleRuntimes:
-        - nodejs22.x
-      PublishLambdaVersion: true
-      RetentionPolicy: Retain
-
-  SharedMongoLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub '${ProjectName}-${StageName}-shared-mongo'
-      ContentUri: dist/layers/shared-mongo/
-      CompatibleRuntimes:
-        - nodejs22.x
-      PublishLambdaVersion: true
-      RetentionPolicy: Retain
-
-  SharedMultipartLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub '${ProjectName}-${StageName}-shared-multipart'
-      ContentUri: dist/layers/shared-multipart/
-      CompatibleRuntimes:
-        - nodejs22.x
-      PublishLambdaVersion: true
-      RetentionPolicy: Retain
-
-  SharedS3Layer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub '${ProjectName}-${StageName}-shared-s3'
-      ContentUri: dist/layers/shared-s3/
-      CompatibleRuntimes:
-        - nodejs22.x
-      PublishLambdaVersion: true
-      RetentionPolicy: Retain
-
-  SharedNetworkLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub '${ProjectName}-${StageName}-shared-network'
-      ContentUri: dist/layers/shared-network/
+      LayerName: !Sub '${ProjectName}-${StageName}-shared-runtime'
+      ContentUri: dist/layers/shared-runtime/
       CompatibleRuntimes:
         - nodejs22.x
       PublishLambdaVersion: true
@@ -683,7 +643,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -768,9 +728,7 @@ Resources:
       MemorySize: 512 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedNetworkLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -924,8 +882,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -974,8 +931,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1034,10 +990,7 @@ Resources:
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetProfileFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedMultipartLayer
-        - !Ref SharedS3Layer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1134,8 +1087,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1188,8 +1140,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1270,8 +1221,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1367,8 +1317,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1637,10 +1586,7 @@ Resources:
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetAnalysisFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedMultipartLayer
-        - !Ref SharedS3Layer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1765,8 +1711,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1818,10 +1763,7 @@ Resources:
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetRecoveryFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedMultipartLayer
-        - !Ref SharedS3Layer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1916,10 +1858,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedMultipartLayer
-        - !Ref SharedS3Layer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2033,8 +1972,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2101,9 +2039,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedMultipartLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2264,11 +2200,7 @@ Resources:
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt CommerceOrdersFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedMultipartLayer
-        - !Ref SharedS3Layer
-        - !Ref SharedNetworkLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2350,9 +2282,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedNetworkLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2389,8 +2319,6 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/fulfillment/tags/{tagId}
             Method: GET
-            Auth:
-              Authorizer: NONE
         CommerceFulfillmentTagsPATCH:
           Type: Api
           Properties:
@@ -2496,9 +2424,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
       Layers:
-        - !Ref SharedCoreLayer
-        - !Ref SharedMongoLayer
-        - !Ref SharedNetworkLayer
+        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2656,24 +2582,8 @@ Outputs: # expose useful values from the deployed stack after CloudFormation/SAM
     Value: !Ref RequestAuthorizerFunction
 
   SharedRuntimeLayerArn:
-    Description: Shared core layer version ARN (compatibility output name).
-    Value: !Ref SharedCoreLayer
-
-  SharedMongoLayerArn:
-    Description: Shared mongo layer version ARN.
-    Value: !Ref SharedMongoLayer
-
-  SharedMultipartLayerArn:
-    Description: Shared multipart layer version ARN.
-    Value: !Ref SharedMultipartLayer
-
-  SharedS3LayerArn:
-    Description: Shared S3 layer version ARN.
-    Value: !Ref SharedS3Layer
-
-  SharedNetworkLayerArn:
-    Description: Shared network layer version ARN.
-    Value: !Ref SharedNetworkLayer
+    Description: Shared runtime layer version ARN.
+    Value: !Ref SharedRuntimeLayer
 
   LambdaAliasNameOut:
     Description: Alias published for every function via AutoPublishAlias.

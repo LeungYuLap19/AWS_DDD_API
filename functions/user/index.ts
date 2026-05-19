@@ -1,3 +1,4 @@
+import './src/config/env';
 import { createApiGatewayHandler } from '@aws-ddd-api/shared/http/handler';
 import { routeRequest } from './src/router';
 import { response } from './src/utils/response';

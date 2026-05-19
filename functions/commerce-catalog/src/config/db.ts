@@ -1,7 +1,18 @@
 import mongoose from 'mongoose';
-import { getEnv } from './env';
+import env from './env';
+import { ProductListSchema } from '../models/ProductList';
+import { ProductLogSchema } from '../models/ProductLog';
+import { ShopInfoSchema } from '../models/ShopInfo';
+import { PtagProductSchema } from '../models/PtagProduct';
 
 let connectionPromise: Promise<typeof mongoose> | null = null;
+
+function registerModels() {
+  mongoose.models.ProductList || mongoose.model('ProductList', ProductListSchema, 'product');
+  mongoose.models.ProductLog || mongoose.model('ProductLog', ProductLogSchema, 'product_log');
+  mongoose.models.ShopInfo || mongoose.model('ShopInfo', ShopInfoSchema, 'shopInfo');
+  mongoose.models.PtagProduct || mongoose.model('PtagProduct', PtagProductSchema, 'ptagProduct');
+}
 
 /**
  * Reuses the warm-container Mongoose connection, registers this Lambda's model
@@ -10,17 +21,20 @@ let connectionPromise: Promise<typeof mongoose> | null = null;
  */
 export async function connectToMongoDB() {
   if (mongoose.connection.readyState === 1) {
+    registerModels();
     return mongoose;
   }
 
   if (!connectionPromise) {
-    const env = getEnv();
     connectionPromise = mongoose
       .connect(env.MONGODB_URI, {
         serverSelectionTimeoutMS: 5000,
         maxPoolSize: 1,
       })
-      .then((connection) => connection)
+      .then((connection) => {
+        registerModels();
+        return connection;
+      })
       .catch((error: unknown) => {
         connectionPromise = null;
         throw error;

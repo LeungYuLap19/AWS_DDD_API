@@ -298,6 +298,7 @@ function loadHandlerWithMocks({
     Types: actualMongoose.Types,
     isValidObjectId: actualMongoose.isValidObjectId,
   }));
+  jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
 
   const mockSendMail = sendMailError
     ? jest.fn().mockRejectedValue(sendMailError)
