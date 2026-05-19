@@ -71,15 +71,7 @@ export async function handler(event: APIGatewayTokenAuthorizerEvent) {
   const jwtSecret = process.env.JWT_SECRET || '';
 
   if (!token || !jwtSecret) {
-    return buildPolicy({
-      principalId: 'unauthorized',
-      effect: 'Deny',
-      resource: methodArn,
-      context: {
-        authMode: 'jwt',
-        reason: !token ? 'missing-token' : 'missing-jwt-secret',
-      },
-    });
+    throw new Error('Unauthorized');
   }
 
   try {
@@ -97,15 +89,7 @@ export async function handler(event: APIGatewayTokenAuthorizerEvent) {
     const userId = decoded.userId || decoded.sub;
 
     if (!userId) {
-      return buildPolicy({
-        principalId: 'unauthorized',
-        effect: 'Deny',
-        resource: methodArn,
-        context: {
-          authMode: 'jwt',
-          reason: 'missing-user-claim',
-        },
-      });
+      throw new Error('Unauthorized');
     }
 
     return buildPolicy({
@@ -123,14 +107,6 @@ export async function handler(event: APIGatewayTokenAuthorizerEvent) {
       },
     });
   } catch (_error) {
-    return buildPolicy({
-      principalId: 'unauthorized',
-      effect: 'Deny',
-      resource: methodArn,
-      context: {
-        authMode: 'jwt',
-        reason: 'jwt-verification-failed',
-      },
-    });
+    throw new Error('Unauthorized');
   }
 };
