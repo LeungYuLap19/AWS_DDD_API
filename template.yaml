@@ -2389,6 +2389,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/fulfillment/tags/{tagId}
             Method: GET
+            Auth:
+              Authorizer: NONE
         CommerceFulfillmentTagsPATCH:
           Type: Api
           Properties:

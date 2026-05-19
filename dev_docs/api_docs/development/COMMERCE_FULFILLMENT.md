@@ -16,7 +16,7 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 | --- | --- | --- | --- | --- |
 | GET | `/commerce/fulfillment` | `x-api-key` + Bearer JWT with `admin` role | — | Paginated fulfillment list |
 | DELETE | `/commerce/fulfillment/{orderVerificationId}` | `x-api-key` + Bearer JWT with `admin` role | — | Soft-cancel one order-verification record |
-| GET | `/commerce/fulfillment/tags/{tagId}` | `x-api-key` + Bearer JWT | — | Read one tag-bound fulfillment record |
+| GET | `/commerce/fulfillment/tags/{tagId}` | `x-api-key` only | — | Read one tag-bound fulfillment record |
 | PATCH | `/commerce/fulfillment/tags/{tagId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update allowed fields on one tag-bound record |
 | GET | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read supplier-facing fulfillment view |
 | PATCH | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update supplier-editable fulfillment fields |
@@ -34,7 +34,7 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 | Supplier auth | Supplier routes are `admin`-only |
 | Supplier lookup fallback | Supplier identifier is resolved in order: `orderId`, then `contact`, then `tagId` |
 | Share-link auth | WhatsApp share-link route is `admin`-only and uses `verificationId` ObjectId |
-| Tag-route openness | Tag GET requires authentication; tag PATCH is `admin`-only |
+| Tag-route openness | Tag GET is public behind API key only; tag PATCH is `admin`-only |
 | Email command side effect | PTag detection email is sent to the provided user email with CC to `notification@ptag.com.hk` |
 
 ---
@@ -49,7 +49,7 @@ Gateway/API-key/JWT behavior for commerce-fulfillment routes is defined only in 
 | --- | --- |
 | `GET /commerce/fulfillment` | Admin only |
 | `DELETE /commerce/fulfillment/{orderVerificationId}` | Admin only |
-| `GET /commerce/fulfillment/tags/{tagId}` | Any authenticated caller |
+| `GET /commerce/fulfillment/tags/{tagId}` | No Lambda auth check; API key only |
 | `PATCH /commerce/fulfillment/tags/{tagId}` | Admin only |
 | `GET /commerce/fulfillment/suppliers/{orderId}` | Admin only |
 | `PATCH /commerce/fulfillment/suppliers/{orderId}` | Admin only |
@@ -260,7 +260,7 @@ The handler sets `cancelled: true` and does not hard-delete the record.
 Read one tag-bound fulfillment record plus linked SF waybill number.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT required
+**Auth:** `x-api-key` only
 
 #### Tag Path Parameters
 
@@ -598,7 +598,7 @@ On success, the Lambda sends the rendered HTML email to the provided `email` add
 1. Use `/commerce/orders/operations` for admin operations dashboards and `/commerce/fulfillment` for admin fulfillment dashboards; they are different list payloads from different Lambdas.
 2. Read all single-record fulfillment responses from `data`; the old `form` wrapper is gone.
 3. Do not expect any payload body from successful DELETE or PATCH fulfillment mutations beyond the shared success envelope.
-4. Use `GET /commerce/fulfillment/tags/{tagId}` for authenticated tag reads. All other fulfillment endpoints in this Lambda are admin-only.
+4. Use `GET /commerce/fulfillment/tags/{tagId}` for API-key-only public tag reads. All other fulfillment endpoints in this Lambda are admin-only.
 5. For supplier lookup and update, identifier resolution still follows: `orderId`, then `contact`, then `tagId`.
 
 ---
