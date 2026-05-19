@@ -2,7 +2,9 @@
   "user": {
     "errors": {
       "emailExists": "Email already exists",
-      "phoneExists": "Phone number already exists"
+      "phoneExists": "Phone number already exists",
+      "contactRequired": "Either email or phone number is required",
+      "noContactToRemove": "No email or phone number found to remove"
     }
   }
 }

@@ -163,10 +163,28 @@ function loadHandlerWithMocks({
   }));
 
   jest.doMock('@aws-ddd-api/shared', () =>
-    require(path.resolve(
-      __dirname,
-      '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
-    )),
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js')),
+  { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/config/env', () =>
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/config/env.js')),
+  { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/http/response', () =>
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/http/response.js')),
+  { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/rate-limit/mongo', () =>
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/rate-limit/mongo.js')),
+  { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/auth/context', () =>
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/auth/context.js')),
+  { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/validation/zod', () =>
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/validation/zod.js')),
+  { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/http/handler', () =>
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/http/handler.js')),
+  { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/http/router', () =>
+    require(path.resolve(__dirname, '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/http/router.js')),
   { virtual: true });
 
   const { handler } = require(handlerModulePath);
@@ -477,6 +495,13 @@ describe('Tier 2 - user handler integration', () => {
 
   test('PATCH /user/me unsets phoneNumber when the payload explicitly clears it', async () => {
     const { handler, userModel } = loadHandlerWithMocks({
+      activeUser: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        email: 'tier2@test.com',
+        phoneNumber: '+85260000001',
+        role: 'user',
+        deleted: false,
+      },
       updatedUser: {
         _id: { toString: () => '507f1f77bcf86cd799439011' },
         email: 'tier2@test.com',
@@ -505,6 +530,100 @@ describe('Tier 2 - user handler integration', () => {
       { returnDocument: 'after', lean: true }
     );
     expect(JSON.parse(res.body).data.phoneNumber).toBeUndefined();
+  });
+
+  test('PATCH /user/me unsets email when the payload explicitly clears it', async () => {
+    const { handler, userModel } = loadHandlerWithMocks({
+      activeUser: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        email: 'tier2@test.com',
+        phoneNumber: '+85260000001',
+        role: 'user',
+        deleted: false,
+      },
+      updatedUser: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        phoneNumber: '+85260000001',
+        role: 'user',
+        deleted: false,
+      },
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'PATCH',
+        body: JSON.stringify({ email: '' }),
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'tier2@test.com',
+          userRole: 'user',
+        },
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: '507f1f77bcf86cd799439011', deleted: false },
+      { $set: {}, $unset: { email: 1 } },
+      { returnDocument: 'after', lean: true }
+    );
+    expect(JSON.parse(res.body).data.email).toBeUndefined();
+  });
+
+  test('PATCH /user/me rejects clearing the last remaining contact method', async () => {
+    const { handler, userModel } = loadHandlerWithMocks({
+      activeUser: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        email: 'tier2@test.com',
+        role: 'user',
+        deleted: false,
+      },
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'PATCH',
+        body: JSON.stringify({ email: '' }),
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'tier2@test.com',
+          userRole: 'user',
+        },
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).errorKey).toBe('user.errors.contactRequired');
+    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  test('PATCH /user/me rejects remove request when no email/phone exists in DB', async () => {
+    const { handler, userModel } = loadHandlerWithMocks({
+      activeUser: {
+        _id: { toString: () => '507f1f77bcf86cd799439011' },
+        role: 'user',
+        deleted: false,
+      },
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'PATCH',
+        body: JSON.stringify({ phoneNumber: '' }),
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'tier2@test.com',
+          userRole: 'user',
+        },
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).errorKey).toBe('user.errors.noContactToRemove');
+    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   test('missing authorizer context is normalized to a 401 common.unauthorized response', async () => {
@@ -637,6 +756,24 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(Object.prototype.hasOwnProperty.call(persisted, 'phoneNumber')).toBe(false);
     });
 
+    samTest('PATCH /user/me clears email from the stored user document', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const patchRes = await req(
+        'PATCH',
+        '/user/me',
+        { email: '' },
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 3}` })
+      );
+
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.data.email).toBeUndefined();
+
+      const persisted = await usersCol().findOne({ _id: state.primaryUserId });
+      expect(persisted.email).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(persisted, 'email')).toBe(false);
+    });
+
     samTest('repeated GET requests remain stable across warm invocations', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
@@ -764,6 +901,64 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(409);
       expect(res.body.errorKey).toBe('user.errors.phoneExists');
+    });
+
+    samTest('PATCH /user/me rejects clearing both email and phoneNumber together', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const res = await req(
+        'PATCH',
+        '/user/me',
+        { email: '', phoneNumber: '' },
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.116.${(TEST_TS % 200) + 2}` })
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.errorKey).toBe('user.errors.contactRequired');
+    });
+
+    samTest('PATCH /user/me rejects removing contact when no email/phone exists in DB', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const noContactUserId = new mongoose.Types.ObjectId();
+      const noContactToken = signUserToken({
+        userId: noContactUserId,
+        email: `${RUN_ID}-no-contact@test.com`,
+      });
+      const now = new Date();
+
+      await usersCol().insertOne({
+        _id: noContactUserId,
+        image: '',
+        firstName: 'No',
+        lastName: 'Contact',
+        role: 'user',
+        verified: true,
+        subscribe: false,
+        promotion: false,
+        district: null,
+        birthday: null,
+        deleted: false,
+        credit: 300,
+        vetCredit: 300,
+        eyeAnalysisCredit: 300,
+        bloodAnalysisCredit: 300,
+        gender: '',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const res = await req(
+        'PATCH',
+        '/user/me',
+        { email: '' },
+        authHeaders(noContactToken, { 'x-forwarded-for': `198.51.116.${(TEST_TS % 200) + 3}` })
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.errorKey).toBe('user.errors.noContactToRemove');
+
+      await usersCol().deleteOne({ _id: noContactUserId });
     });
 
     samTest('repeat delete returns not found on the second request', async () => {
