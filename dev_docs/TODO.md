@@ -97,12 +97,11 @@
   - migrate all call sites from `requireMongoRateLimit` / `requireMongoRateLimitNotInCooldown`
   - remove mandatory Mongo connect from public routes that only need rate limiting
 
-- [ ] authorizer cold-start optimization
+- [x] authorizer cold-start optimization
   - make `request-authorizer` self-contained (no `@aws-ddd-api/shared` import, no shared layer attachment)
   - bundle `jsonwebtoken` into authorizer artifact
-  - enable API Gateway authorizer cache (`ReauthorizeEvery`: start with `60`, tune to `300` if acceptable)
 
-- [ ] shared import/layer optimization across Lambdas
+- [x] shared import/layer optimization across Lambdas
   - replace root barrel imports (`@aws-ddd-api/shared`) with subpath imports
   - enforce no-barrel policy with CI check (`rg`/lint rule)
   - shrink shared layer to truly shared lightweight modules; bundle medium dependencies per-function where it improves cold start
