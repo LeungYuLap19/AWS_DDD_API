@@ -8,6 +8,14 @@ const sharedRuntimeModulePath = path.resolve(
   __dirname,
   '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
 );
+const sharedValidationZodModulePath = path.resolve(
+  __dirname,
+  '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/validation/zod.js'
+);
+const sharedRateLimitMongoModulePath = path.resolve(
+  __dirname,
+  '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/rate-limit/mongo.js'
+);
 
 const jpegBuffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
 
@@ -268,6 +276,12 @@ function loadHandlerWithMocks({
     return {
       ...realShared,
       requireMongoRateLimit: requireMongoRateLimitMock,
+    };
+  }, { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/validation/zod', () => {
+    const realSharedValidation = require(sharedValidationZodModulePath);
+    return {
+      ...realSharedValidation,
       parseMultipartBody: async (_event, schema, options = {}) => {
         const form = multipartPayload || {};
         const files = (Array.isArray(form.files) ? form.files : []).map((file) => ({
@@ -284,13 +298,20 @@ function loadHandlerWithMocks({
         const parsed = schema.safeParse(normalizedFields);
         if (!parsed.success) {
           const fallback = options.fallbackErrorKey || 'common.invalidBodyParams';
-          const message = realShared.getFirstZodIssueMessage(parsed.error, fallback);
+          const message = realSharedValidation.getFirstZodIssueMessage(parsed.error, fallback);
           const errorKey = message.includes('.') ? message : fallback;
           return { ok: false, statusCode: 400, errorKey };
         }
 
         return { ok: true, data: parsed.data, files };
       },
+    };
+  }, { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/rate-limit/mongo', () => {
+    const realSharedRateLimit = require(sharedRateLimitMongoModulePath);
+    return {
+      ...realSharedRateLimit,
+      requireMongoRateLimit: requireMongoRateLimitMock,
     };
   }, { virtual: true });
 
