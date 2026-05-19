@@ -18,7 +18,6 @@ import { connectToMongoDB } from '../config/db';
  * authenticated callers.
  */
 export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
   await connectToMongoDB();
 
   const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});

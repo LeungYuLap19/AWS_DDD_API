@@ -1,5 +1,4 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
 import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
@@ -22,8 +21,6 @@ export async function printCloudWaybill({
   event,
   body,
 }: RouteContext): Promise<APIGatewayProxyResult> {
-  const auth = requireAuthContext(event);
-
   const parsed = parseBody(body, printCloudWaybillSchema);
   if (!parsed.ok) return response.errorResponse(parsed.statusCode, parsed.errorKey, event);
 
@@ -34,11 +31,9 @@ export async function printCloudWaybill({
   const rateLimitResult = await applyRateLimit({
     action: 'logistics.printCloudWaybill',
     event,
-    identifier: auth?.userEmail ?? auth?.userId ?? null,
+    identifier: null,
     policies: [
       { scope: 'ip', limit: 60, windowSeconds: 300 },
-      { scope: 'identifier', limit: 30, windowSeconds: 300 },
-      { scope: 'ip+identifier', limit: 20, windowSeconds: 300 },
     ],
   });
   if (rateLimitResult) return rateLimitResult;

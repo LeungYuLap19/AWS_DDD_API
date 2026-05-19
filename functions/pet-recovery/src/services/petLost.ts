@@ -19,7 +19,6 @@ type PetOwnershipRecord = { _id: unknown; userId?: unknown; breedimage?: unknown
  * Returns the paginated public lost-pet report feed for authenticated callers.
  */
 export async function handleListPetLost(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
   await connectToMongoDB();
 
   const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
