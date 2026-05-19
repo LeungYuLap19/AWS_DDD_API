@@ -213,7 +213,7 @@ Globals: # shared default settings applied to all resources of a given type, unl
     Architectures:
       - arm64 # Graviton2: ~20% cheaper compute, faster cold start vs x86_64
     Timeout: 10
-    MemorySize: 256
+    MemorySize: 1024
     Environment:
       Variables:
         PROJECT_NAME: !Ref ProjectName
@@ -713,7 +713,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-auth'
       CodeUri: dist/functions/auth/
       Handler: index.handler
-      MemorySize: 512 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
+      MemorySize: 1024 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
       Role: !GetAtt SharedFunctionRole.Arn
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
@@ -969,7 +969,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
       CodeUri: dist/functions/pet-profile/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1024 # multipart parsing is CPU-bound
       Role: !GetAtt PetProfileFunctionRole.Arn
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
@@ -1555,7 +1555,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-analysis'
       CodeUri: dist/functions/pet-analysis/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1024 # multipart parsing is CPU-bound
       Role: !GetAtt PetAnalysisFunctionRole.Arn
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
@@ -1728,7 +1728,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-recovery'
       CodeUri: dist/functions/pet-recovery/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1024 # multipart parsing is CPU-bound
       Role: !GetAtt PetRecoveryFunctionRole.Arn
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
@@ -2157,7 +2157,7 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-commerce-orders'
       CodeUri: dist/functions/commerce-orders/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1024 # multipart parsing is CPU-bound
       Role: !GetAtt CommerceOrdersFunctionRole.Arn
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
