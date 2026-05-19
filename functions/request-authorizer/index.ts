@@ -1,16 +1,13 @@
 import type { APIGatewayTokenAuthorizerEvent } from 'aws-lambda';
 import jwt from 'jsonwebtoken';
 
-type PolicyEffect = 'Allow' | 'Deny';
-
 type PolicyInput = {
   principalId: string;
-  effect: PolicyEffect;
   resource: string;
   context?: Record<string, unknown>;
 };
 
-function buildPolicy({ principalId, effect, resource, context = {} }: PolicyInput) {
+function buildAllowPolicy({ principalId, resource, context = {} }: PolicyInput) {
   return {
     principalId,
     policyDocument: {
@@ -18,7 +15,7 @@ function buildPolicy({ principalId, effect, resource, context = {} }: PolicyInpu
       Statement: [
         {
           Action: 'execute-api:Invoke',
-          Effect: effect,
+          Effect: 'Allow',
           Resource: resource,
         },
       ],
@@ -53,9 +50,8 @@ export async function handler(event: APIGatewayTokenAuthorizerEvent) {
   const bypass = isTrue(process.env.AUTH_BYPASS, false);
 
   if (bypass) {
-    return buildPolicy({
+    return buildAllowPolicy({
       principalId: 'local-bypass',
-      effect: 'Allow',
       resource: methodArn,
       context: {
         authMode: 'bypass',
@@ -71,7 +67,10 @@ export async function handler(event: APIGatewayTokenAuthorizerEvent) {
   const jwtSecret = process.env.JWT_SECRET || '';
 
   if (!token || !jwtSecret) {
-    throw new Error('Unauthorized');
+    return buildAllowPolicy({
+      principalId: 'anonymous',
+      resource: methodArn,
+    });
   }
 
   try {
@@ -89,12 +88,14 @@ export async function handler(event: APIGatewayTokenAuthorizerEvent) {
     const userId = decoded.userId || decoded.sub;
 
     if (!userId) {
-      throw new Error('Unauthorized');
+      return buildAllowPolicy({
+        principalId: 'anonymous',
+        resource: methodArn,
+      });
     }
 
-    return buildPolicy({
+    return buildAllowPolicy({
       principalId: String(userId),
-      effect: 'Allow',
       resource: methodArn,
       context: {
         authMode: 'jwt',
@@ -107,6 +108,9 @@ export async function handler(event: APIGatewayTokenAuthorizerEvent) {
       },
     });
   } catch (_error) {
-    throw new Error('Unauthorized');
+    return buildAllowPolicy({
+      principalId: 'anonymous',
+      resource: methodArn,
+    });
   }
 };
