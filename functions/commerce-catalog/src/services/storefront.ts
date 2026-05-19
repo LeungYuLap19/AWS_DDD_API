@@ -1,5 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
+import { logWarn } from '@aws-ddd-api/shared/logging/logger';
 import { paginationQuerySchema } from '@aws-ddd-api/shared/validation/common';
 import { parseBody, parseMultipartBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
@@ -107,14 +108,73 @@ async function loadCanonicalShopCodeMap(): Promise<Map<string, CanonicalShop>> {
  * projection so callers only receive the data needed for checkout selection.
  */
 export async function handleGetStorefront(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  const scope = 'commerce-catalog.services.storefront.getStorefront';
+  const requestStartedAt = Date.now();
+
+  const parseStartedAt = Date.now();
   const pagination = paginationQuerySchema().safeParse(ctx.event.queryStringParameters ?? {});
+  logWarn('GET /commerce/storefront timing', {
+    scope,
+    event: ctx.event,
+    extra: {
+      phase: 'parseQuery',
+      durationMs: Date.now() - parseStartedAt,
+      ok: pagination.success,
+    },
+  });
   if (!pagination.success) {
+    logWarn('GET /commerce/storefront completed', {
+      scope,
+      event: ctx.event,
+      extra: {
+        outcome: 'invalidQueryParams',
+        totalDurationMs: Date.now() - requestStartedAt,
+      },
+    });
     return response.errorResponse(400, 'common.invalidQueryParams', ctx.event);
   }
   const { page, limit } = pagination.data;
 
+  const connectStartedAt = Date.now();
   await connectToMongoDB();
+  logWarn('GET /commerce/storefront timing', {
+    scope,
+    event: ctx.event,
+    extra: {
+      phase: 'connectToMongoDB',
+      durationMs: Date.now() - connectStartedAt,
+      page,
+      limit,
+    },
+  });
+
+  const listStartedAt = Date.now();
   const { shops, total } = await listStorefrontShops(page, limit);
+  logWarn('GET /commerce/storefront timing', {
+    scope,
+    event: ctx.event,
+    extra: {
+      phase: 'listStorefrontShops',
+      durationMs: Date.now() - listStartedAt,
+      rowCount: shops.length,
+      total,
+      page,
+      limit,
+    },
+  });
+
+  logWarn('GET /commerce/storefront completed', {
+    scope,
+    event: ctx.event,
+    extra: {
+      outcome: 'success',
+      totalDurationMs: Date.now() - requestStartedAt,
+      rowCount: shops.length,
+      total,
+      page,
+      limit,
+    },
+  });
 
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
