@@ -1,6 +1,8 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseMultipartBody, paginationQuerySchema, parseObjectIdParam, requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { paginationQuerySchema, parseObjectIdParam } from '@aws-ddd-api/shared/validation/common';
+import { parseMultipartBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';

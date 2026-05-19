@@ -1,4 +1,5 @@
-import { HttpError, logWarn } from '@aws-ddd-api/shared';
+import { HttpError } from '@aws-ddd-api/shared/auth/context';
+import { logWarn } from '@aws-ddd-api/shared/logging/logger';
 import env from '../config/env';
 
 interface OrderWhatsAppParams {

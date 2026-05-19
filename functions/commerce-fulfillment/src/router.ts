@@ -1,4 +1,4 @@
-import { createRouter } from '@aws-ddd-api/shared';
+import { createRouter } from '@aws-ddd-api/shared/http/router';
 import { response } from './utils/response';
 
 const routes = {

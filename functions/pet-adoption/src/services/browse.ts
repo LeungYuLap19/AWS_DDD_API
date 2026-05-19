@@ -1,5 +1,5 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { paginationQuerySchema } from '@aws-ddd-api/shared';
+import { paginationQuerySchema } from '@aws-ddd-api/shared/validation/common';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectBrowseDB } from '../config/db';
 import { response } from '../utils/response';

@@ -226,6 +226,7 @@ Delete success:
 
 `GET /pet/profile/me` returns an array of summary objects inside `data`. Each item may include:
 
+- `_id`
 - `name`
 - `breedimage`
 - `animal`
@@ -243,7 +244,7 @@ Delete success:
 - `location`
 - `position`
 
-The list summary intentionally does not include `id`, `userId`, contact fields, `tagId`, `info`, or `features`.
+The list summary intentionally does not include `userId`, contact fields, `tagId`, `info`, or `features`.
 
 #### Public Tag Lookup Fields
 

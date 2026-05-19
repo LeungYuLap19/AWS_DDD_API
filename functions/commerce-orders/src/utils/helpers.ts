@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import axios from 'axios';
-import { logWarn } from '@aws-ddd-api/shared';
+import { logWarn } from '@aws-ddd-api/shared/logging/logger';
 import env from '../config/env';
 // ── Email ─────────────────────────────────────────────────────────────────────
 

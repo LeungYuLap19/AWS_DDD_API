@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseMultipartBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { parseMultipartBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { parseFlexibleDate } from '../utils/date';

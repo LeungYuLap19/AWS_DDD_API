@@ -1,8 +1,7 @@
 import https from 'https';
 import querystring from 'querystring';
 import crypto from 'crypto';
-import { HttpError } from '@aws-ddd-api/shared';
-
+import { HttpError } from '@aws-ddd-api/shared/auth/context';
 const SF_OAUTH_URL = 'https://sfapi.sf-express.com/oauth2/accessToken';
 const SF_SERVICE_URL = 'https://sfapi.sf-express.com/std/service';
 export const SF_CLOUD_PRINT_URL = 'https://bspgw.sf-express.com/std/service';

@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
-import { requireAuthContext, HttpError } from '@aws-ddd-api/shared';
-
+import { requireAuthContext, HttpError } from '@aws-ddd-api/shared/auth/context';
 /** Minimal user record shape used by pet-profile ownership and existence checks. */
 export type UserDocument = {
   _id: { toString(): string } | string;

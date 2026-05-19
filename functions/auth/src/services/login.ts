@@ -1,7 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
-import { parseBody } from '@aws-ddd-api/shared';
+import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { ngoLoginBodySchema } from '../zodSchema/ngoLoginBodySchema';

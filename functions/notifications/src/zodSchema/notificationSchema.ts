@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { objectIdString } from '@aws-ddd-api/shared';
-
+import { objectIdString } from '@aws-ddd-api/shared/validation/common';
 const objectIdField = objectIdString();
 
 /**

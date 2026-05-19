@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { HttpError } from '@aws-ddd-api/shared';
+import { HttpError } from '@aws-ddd-api/shared/auth/context';
 import type { RouteContext } from '../../../../types/lambda';
 
 /** Minimal auth context required by NGO-only service helpers. */

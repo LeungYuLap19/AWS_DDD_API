@@ -1,5 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
-import { isTrue, logWarn, parseBody } from '@aws-ddd-api/shared';
+import { isTrue } from '@aws-ddd-api/shared/config/boolean';
+import { logWarn } from '@aws-ddd-api/shared/logging/logger';
+import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import type { RouteContext } from '../../../../types/lambda';

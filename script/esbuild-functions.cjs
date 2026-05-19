@@ -6,8 +6,11 @@
  * inlined. Packages already provided by the shared Lambda layer are marked
  * external so the runtime layer copy is used instead.
  *
- * Layer-provided packages (must stay external):
- *   @aws-ddd-api/shared, zod, jsonwebtoken, busboy
+ * Layer-provided packages for domain Lambdas (must stay external):
+ *   @aws-ddd-api/shared, zod, busboy, jsonwebtoken
+ *
+ * Exception:
+ *   request-authorizer bundles jsonwebtoken and does not use the shared layer.
  *
  * Run: node script/esbuild-functions.cjs
  */
@@ -20,8 +23,8 @@ const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..');
 
-// Packages provided by the shared Lambda layer — do not bundle these.
-const external = [
+// Packages provided by the shared Lambda layer for domain Lambdas.
+const domainExternal = [
   '@aws-ddd-api/shared',
   'zod',
   'jsonwebtoken',
@@ -65,8 +68,16 @@ const sharedOptions = {
   platform: 'node',
   target: 'node22',
   format: 'cjs',
-  external,
 };
+
+function externalForFunction(name) {
+  if (name === 'request-authorizer') {
+    // Keep the authorizer self-contained to minimize cold-start dependencies.
+    return domainExternal.filter((pkg) => pkg !== '@aws-ddd-api/shared' && pkg !== 'jsonwebtoken');
+  }
+
+  return domainExternal;
+}
 
 async function buildAll() {
   const start = Date.now();
@@ -88,6 +99,7 @@ async function buildAll() {
     functions.map((name) =>
       esbuild.build({
         ...sharedOptions,
+        external: externalForFunction(name),
         entryPoints: [path.join(repoRoot, 'functions', name, 'index.ts')],
         outfile: path.join(repoRoot, 'dist', 'functions', name, 'index.js'),
       })
