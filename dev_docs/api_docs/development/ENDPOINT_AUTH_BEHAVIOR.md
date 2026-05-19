@@ -184,23 +184,23 @@ Use this matrix for all Class A routes.
 | `x-api-key` missing, `Authorization` present but not `Bearer <token>` | API Gateway | `401 {"message":"Unauthorized"}` |
 | `x-api-key` present, `Authorization` missing | API Gateway | `401 {"message":"Unauthorized"}` |
 | `x-api-key` present, `Authorization` present but not `Bearer <token>` | API Gateway | `401 {"message":"Unauthorized"}` |
-| `x-api-key` present, `Authorization: Bearer <token>` present but token is not a JWT | API Gateway | `403 {"Message":"User is not authorized to access this resource with an explicit deny in an identity-based policy"}` |
-| `x-api-key` present, Bearer JWT has invalid signature | API Gateway | same `403 AccessDeniedException` body |
-| `x-api-key` present, Bearer JWT is expired | API Gateway | same `403 AccessDeniedException` body |
-| `x-api-key` present, Bearer JWT omits both `userId` and `sub` | API Gateway | same `403 AccessDeniedException` body |
+| `x-api-key` present, `Authorization: Bearer <token>` present but token is not a JWT | domain Lambda | `401 common.unauthorized` |
+| `x-api-key` present, Bearer JWT has invalid signature | domain Lambda | `401 common.unauthorized` |
+| `x-api-key` present, Bearer JWT is expired | domain Lambda | `401 common.unauthorized` |
+| `x-api-key` present, Bearer JWT omits both `userId` and `sub` | domain Lambda | `401 common.unauthorized` |
 | `x-api-key` present, lowercase `bearer` scheme | API Gateway | `401 {"message":"Unauthorized"}` |
 | `x-api-key` present, `Authorization: Bearer ` with no token | API Gateway | `401 {"message":"Unauthorized"}` |
-| `x-api-key` present, `alg:none` token | API Gateway | same `403 AccessDeniedException` body |
+| `x-api-key` present, `alg:none` token | domain Lambda | `401 common.unauthorized` |
 | valid Bearer JWT present, `x-api-key` missing | API Gateway | `403 {"message":"Forbidden"}` |
 | validly signed Bearer JWT with `userId` present | domain Lambda | request reaches the Lambda; final status becomes route-specific |
 | validly signed Bearer JWT with `sub` present and no `userId` | domain Lambda | treated the same as `userId`; request reaches the Lambda |
 
 **Notes**
 
-- Gateway-generated failures do not use the shared `{ success, errorKey, requestId }` envelope.
+- Gateway-generated failures (missing API key, missing/malformed `Authorization` header) do not use the shared `{ success, errorKey, requestId }` envelope.
 - If both the API key and `Authorization` are missing, the observed response still follows the missing-authorization `401` path.
-- An expired access JWT in this class does not produce `auth.expiredToken`; the observed result is the same generic gateway `403 AccessDeniedException` deny path as other JWT verification failures.
-- Once a JWT passes the gateway authorizer, the Lambda may still return route-level `403`, `404`, `409`, or success.
+- An expired or invalid JWT passes through the authorizer (Allow with empty context) and is rejected by the domain Lambda with `401 common.unauthorized` including CORS headers.
+- Once a JWT passes verification, the Lambda may still return route-level `403`, `404`, `409`, or success.
 - A valid JWT does not imply business authorization.
 
 ### Class B: `gateway-api-key-only`
@@ -265,14 +265,16 @@ When a Class A route reaches the request authorizer:
 - token is read from `Authorization`
 - JWT algorithm is HS256
 - accepted identity claim is `userId` or `sub`
-- authorizer context may include:
+- authorizer **always returns Allow** — invalid/expired tokens pass through with empty context
+- authorizer context on success includes:
   - `userId`
   - `userEmail`
   - `userRole`
   - `ngoId`
   - `ngoName`
+- authorizer context on failure (expired, invalid, missing claims): empty (no `userId`)
 
-If `userId` / `sub` is missing, the authorizer returns `Deny`.
+The domain Lambda calls `requireAuthContext(event)` which returns `401 common.unauthorized` with CORS headers when no `userId` is present in the authorizer context. This ensures auth failures always include `Access-Control-Allow-Origin` in the response.
 
 ## What Per-Lambda Docs Must Still Document
 

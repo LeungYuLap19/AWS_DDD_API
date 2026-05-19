@@ -17,7 +17,7 @@ Authenticated order checkout and order retrieval. The current DDD implementation
 | GET | `/commerce/orders` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Paginated list of all orders |
 | POST | `/commerce/orders` | `x-api-key` + Bearer JWT | `multipart/form-data` | Create one order and one order-verification record |
 | GET | `/commerce/orders/operations` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Paginated operations view of order verifications |
-| GET | `/commerce/orders/{tempId}` | `x-api-key` + Bearer JWT | — | Return minimal contact data for one order |
+| GET | `/commerce/orders/{tempId}` | `x-api-key` + Bearer JWT with `admin` role | — | Return minimal contact data for one order |
 
 ### Integration-Critical Behavior
 
@@ -55,7 +55,7 @@ Gateway/API-key/JWT behavior for commerce-orders routes is defined only in [ENDP
 | `GET /commerce/orders` | Admin or developer only |
 | `POST /commerce/orders` | Any authenticated caller |
 | `GET /commerce/orders/operations` | Admin or developer only |
-| `GET /commerce/orders/{tempId}` | Admin/developer can read any order; other callers must match `Order.email` using normalized email comparison |
+| `GET /commerce/orders/{tempId}` | Admin only |
 
 ### Rate Limits
 
@@ -451,7 +451,7 @@ Each item in `data` is sanitized to:
 Return minimal contact data for one order.
 
 **Lambda owner:** `commerce-orders`  
-**Auth:** `x-api-key` + Bearer JWT required
+**Auth:** `x-api-key` + Bearer JWT with `admin` role
 
 #### Path Parameters
 
