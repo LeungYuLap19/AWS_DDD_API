@@ -17,7 +17,7 @@ Transfer-history management for pets plus NGO-to-user reassignment. Transfer rec
 | POST | `/pet/transfer/{petId}` | `x-api-key` + Bearer JWT | Append a transfer-history row to the pet |
 | PATCH | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | Update one transfer-history row |
 | DELETE | `/pet/transfer/{petId}/{transferId}` | `x-api-key` + Bearer JWT | Remove one transfer-history row |
-| POST | `/pet/transfer/{petId}/ngo-reassignment` | `x-api-key` + Bearer JWT with NGO role | Reassign NGO-owned pet ownership to an existing user |
+| POST | `/pet/transfer/{petId}/ngo-reassignment` | `x-api-key` + Bearer JWT with `admin` role | Reassign NGO-owned pet ownership to an existing user |
 
 ### Integration-Critical Behavior
 
@@ -47,7 +47,7 @@ The Lambda authorizes access when either condition is true:
 
 If neither matches, the route returns `403 common.forbidden`.
 
-For `POST /pet/transfer/{petId}/ngo-reassignment`, the caller must additionally have NGO role. That role check runs before body validation and before reassignment logic.
+For `POST /pet/transfer/{petId}/ngo-reassignment`, the caller must have `admin` role. That role check runs before body validation and before reassignment logic.
 
 ### Rate Limits
 
@@ -251,7 +251,7 @@ None.
 Reassign NGO-owned pet ownership to an existing active user.
 
 **Lambda owner:** `pet-transfer`  
-**Auth:** `x-api-key` + Bearer JWT required with NGO role
+**Auth:** `x-api-key` + Bearer JWT required with `admin` role
 
 #### NGO Reassignment Request Body
 
@@ -302,7 +302,7 @@ When both `UserEmail` and `UserContact` are provided, both must resolve to the s
 | 400 | `petTransfer.errors.ngoTransfer.invalidDateFormat` | Invalid `regDate` |
 | 400 | `petTransfer.errors.ngoTransfer.userIdentityMismatch` | Email and phone resolve to different users |
 | 400 | `common.invalidObjectId` | Invalid `petId` |
-| 403 | `common.forbidden` | Caller is not NGO-scoped, does not own the pet, or lacks NGO role |
+| 403 | `common.forbidden` | Caller does not have `admin` role, does not own the pet |
 | 404 | `petTransfer.errors.ngoTransfer.targetUserNotFound` | No active user matches the supplied identifier(s) |
 | 404 | `petTransfer.errors.petNotFound` | Pet does not exist or is deleted |
 | 429 | `common.rateLimited` | NGO reassignment rate limit exceeded |

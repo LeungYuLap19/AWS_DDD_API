@@ -423,7 +423,7 @@ return response.successResponse(200, ctx.event, {
  * Admin/developer can access any order; regular users can only access their own (email match).
  */
 export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const authCtx = requireAuthContext(ctx.event);
+  const authContext = requireRole(ctx.event, ['admin']);
   const tempParam = parsePathParam(ctx.event.pathParameters?.['tempId'], tempIdString());
   if (!tempParam.ok) {
     return response.errorResponse(tempParam.statusCode, tempParam.errorKey, ctx.event);
@@ -440,15 +440,6 @@ export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGate
 
   if (!order) {
     return response.errorResponse(404, 'orders.errors.orderNotFound', ctx.event);
-  }
-
-  // Ownership check: admin/developer bypass, regular users must match email
-  if (!PRIVILEGED_ROLES.has(authCtx.userRole ?? '')) {
-    const callerEmail = normalizeEmail(authCtx.userEmail);
-    const ownerEmail = normalizeEmail(order['email'] as string);
-    if (!callerEmail || !ownerEmail || callerEmail !== ownerEmail) {
-      return response.errorResponse(403, 'common.forbidden', ctx.event);
-    }
   }
 
   const safeOrder = sanitizeOrder(order);

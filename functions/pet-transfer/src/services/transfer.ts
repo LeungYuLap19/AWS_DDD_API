@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { requireAuthContext, requireRole } from '@aws-ddd-api/shared/auth/context';
 import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
@@ -219,7 +219,7 @@ export async function handleDeleteTransfer(ctx: RouteContext): Promise<APIGatewa
  * ownership in the same update.
  */
 export async function handleNGOTransfer(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const authContext = requireAuthContext(ctx.event);
+  const authContext = requireRole(ctx.event, ['admin']);
 
   // NGO role check before any DB work
   // requireNGORole(authContext);
