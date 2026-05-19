@@ -67,7 +67,7 @@ function renderPtagDetectionEmail(
 
 /**
  * POST /commerce/commands/ptag-detection-email
- * Admin-only — sends a PTag detection location alert to the pet owner.
+ * Authenticated — sends a PTag detection location alert to the pet owner.
  * Legacy: POST /purchase/send-ptag-detection-email (purchaseConfirmation)
  */
 export async function handleSendPtagDetectionEmail(ctx: RouteContext): Promise<APIGatewayProxyResult> {

@@ -6,6 +6,10 @@ const sharedRuntimeModulePath = path.resolve(
   __dirname,
   '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/index.js'
 );
+const sharedValidationZodModulePath = path.resolve(
+  __dirname,
+  '../dist/layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared/validation/zod.js'
+);
 
 function createContext() {
   return {
@@ -190,10 +194,11 @@ function loadHandlerWithMocks({
   };
 
   jest.doMock('mongoose', () => ({ __esModule: true, default: mongooseMock }));
-  jest.doMock('@aws-ddd-api/shared', () => {
-    const realShared = require(sharedRuntimeModulePath);
+  jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
+  jest.doMock('@aws-ddd-api/shared/validation/zod', () => {
+    const realSharedValidation = require(sharedValidationZodModulePath);
     return {
-      ...realShared,
+      ...realSharedValidation,
       parseMultipartBody: async (event, schema, options = {}) => {
         const form = multipartPayload || {};
         const files = (Array.isArray(form.files) ? form.files : []).map((file) => ({
@@ -214,7 +219,7 @@ function loadHandlerWithMocks({
         const parsed = schema.safeParse(normalizedFields);
         if (!parsed.success) {
           const fallback = options.fallbackErrorKey || 'common.invalidBodyParams';
-          const message = realShared.getFirstZodIssueMessage(parsed.error, fallback);
+          const message = realSharedValidation.getFirstZodIssueMessage(parsed.error, fallback);
           const errorKey = message.includes('.') ? message : fallback;
           return { ok: false, statusCode: 400, errorKey };
         }
