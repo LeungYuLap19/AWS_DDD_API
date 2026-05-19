@@ -413,16 +413,6 @@ Resources:
         gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
 
-  SharedRuntimeLayer: # the Lambda Layer resource you defined in the template
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub '${ProjectName}-${StageName}-shared-runtime'
-      ContentUri: dist/layers/shared-runtime/
-      CompatibleRuntimes:
-        - nodejs22.x
-      PublishLambdaVersion: true
-      RetentionPolicy: Retain
-
   RestApiUsagePlan:
     Type: AWS::ApiGateway::UsagePlan
     DependsOn:
@@ -642,8 +632,6 @@ Resources:
       CodeUri: dist/functions/pipeline-smoke/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -727,8 +715,6 @@ Resources:
       Handler: index.handler
       MemorySize: 512 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -881,8 +867,6 @@ Resources:
       CodeUri: dist/functions/user/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -930,8 +914,6 @@ Resources:
       CodeUri: dist/functions/ngo/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -989,8 +971,6 @@ Resources:
       Handler: index.handler
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetProfileFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1086,8 +1066,6 @@ Resources:
       CodeUri: dist/functions/pet-source/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1139,8 +1117,6 @@ Resources:
       CodeUri: dist/functions/pet-transfer/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1220,8 +1196,6 @@ Resources:
       CodeUri: dist/functions/pet-adoption/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1316,8 +1290,6 @@ Resources:
       CodeUri: dist/functions/pet-medical/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1585,8 +1557,6 @@ Resources:
       Handler: index.handler
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetAnalysisFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1710,8 +1680,6 @@ Resources:
       CodeUri: dist/functions/pet-reference/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1762,8 +1730,6 @@ Resources:
       Handler: index.handler
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt PetRecoveryFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1857,8 +1823,6 @@ Resources:
       CodeUri: dist/functions/pet-biometric/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1971,8 +1935,6 @@ Resources:
       CodeUri: dist/functions/notifications/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2038,8 +2000,6 @@ Resources:
       CodeUri: dist/functions/commerce-catalog/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2199,8 +2159,6 @@ Resources:
       Handler: index.handler
       MemorySize: 512 # multipart parsing is CPU-bound
       Role: !GetAtt CommerceOrdersFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2281,8 +2239,6 @@ Resources:
       CodeUri: dist/functions/commerce-fulfillment/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2423,8 +2379,6 @@ Resources:
       CodeUri: dist/functions/logistics/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2580,10 +2534,6 @@ Outputs: # expose useful values from the deployed stack after CloudFormation/SAM
   AuthorizerFunctionName:
     Description: Lambda authorizer function name.
     Value: !Ref RequestAuthorizerFunction
-
-  SharedRuntimeLayerArn:
-    Description: Shared runtime layer version ARN.
-    Value: !Ref SharedRuntimeLayer
 
   LambdaAliasNameOut:
     Description: Alias published for every function via AutoPublishAlias.
