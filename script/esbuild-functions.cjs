@@ -1,13 +1,9 @@
 /**
  * esbuild bundler for all Lambda functions.
  *
- * Replaces the tsc emit step for functions. Each function is bundled into a
- * single dist/functions/{name}/index.js with all non-layer dependencies
- * inlined. Packages already provided by the shared Lambda layer are marked
- * external so the runtime layer copy is used instead.
- *
- * Layer-provided packages (must stay external):
- *   @aws-ddd-api/shared, zod, jsonwebtoken, busboy
+ * Bundles each function into a single dist/functions/{name}/index.js with all
+ * dependencies inlined for minimal cold-start latency. Only AWS SDK packages
+ * remain external (provided by the Lambda Node.js runtime).
  *
  * Run: node script/esbuild-functions.cjs
  */
@@ -20,19 +16,30 @@ const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..');
 
-// Packages provided by the shared Lambda layer — do not bundle these.
-const external = [
-  '@aws-ddd-api/shared',
-  'zod',
-  'jsonwebtoken',
-  'busboy',
-  // Runtime dependencies kept external so jest module mocks can intercept them
-  // and so the shared layer provides them to all Lambda functions.
-  'mongoose',
-  '@aws-sdk/client-s3',
-  'axios',
-  'bcryptjs',
-  'nodemailer',
+const sharedPkgDir = path.join(
+  repoRoot,
+  'layers/shared-runtime/nodejs/node_modules/@aws-ddd-api/shared'
+);
+
+const resolveSharedPlugin = {
+  name: 'resolve-shared-ts',
+  setup(build) {
+    build.onResolve({ filter: /^@aws-ddd-api\/shared/ }, (args) => {
+      const subpath = args.path.replace('@aws-ddd-api/shared', '');
+      if (!subpath || subpath === '/') {
+        return { path: path.join(sharedPkgDir, 'index.ts') };
+      }
+      const directFile = path.join(sharedPkgDir, subpath + '.ts');
+      if (fs.existsSync(directFile)) {
+        return { path: directFile };
+      }
+      return { path: path.join(sharedPkgDir, subpath, 'index.ts') };
+    });
+  },
+};
+
+const domainExternal = [
+  '@aws-sdk/*',
 ];
 
 // All functions with an index.ts entry point.
@@ -65,8 +72,11 @@ const sharedOptions = {
   platform: 'node',
   target: 'node22',
   format: 'cjs',
-  external,
 };
+
+function externalForFunction(_name) {
+  return domainExternal;
+}
 
 async function buildAll() {
   const start = Date.now();
@@ -88,6 +98,8 @@ async function buildAll() {
     functions.map((name) =>
       esbuild.build({
         ...sharedOptions,
+        external: externalForFunction(name),
+        plugins: [resolveSharedPlugin],
         entryPoints: [path.join(repoRoot, 'functions', name, 'index.ts')],
         outfile: path.join(repoRoot, 'dist', 'functions', name, 'index.js'),
       })

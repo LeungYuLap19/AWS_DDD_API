@@ -7,12 +7,12 @@
  * Routes under test:
  *   GET    /commerce/fulfillment                              — admin list (paginated)
  *   DELETE /commerce/fulfillment/{orderVerificationId}       — soft-cancel (admin only)
- *   GET    /commerce/fulfillment/tags/{tagId}                — get tag verification (authenticated)
+ *   GET    /commerce/fulfillment/tags/{tagId}                — get tag verification (API key only)
  *   PATCH  /commerce/fulfillment/tags/{tagId}                — update tag verification (admin only)
  *   GET    /commerce/fulfillment/suppliers/{orderId}         — get supplier verification (admin only)
  *   PATCH  /commerce/fulfillment/suppliers/{orderId}         — update supplier verification (admin only)
  *   GET    /commerce/fulfillment/share-links/whatsapp/{_id}  — get WhatsApp order link (admin only)
- *   POST   /commerce/commands/ptag-detection-email           — send ptag detection email (admin only)
+ *   POST   /commerce/commands/ptag-detection-email           — send ptag detection email (authenticated)
  *
  * Run:  npm test -- __tests__/commerce-fulfillment.test.js --runInBand
  * Pre-req: npm run build:ts
@@ -298,7 +298,6 @@ function loadHandlerWithMocks({
     Types: actualMongoose.Types,
     isValidObjectId: actualMongoose.isValidObjectId,
   }));
-
   jest.doMock('@aws-ddd-api/shared', () => require(sharedRuntimeModulePath), { virtual: true });
 
   const mockSendMail = sendMailError
@@ -643,7 +642,7 @@ describe('DELETE /commerce/fulfillment/{orderVerificationId} — soft-cancel', (
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('GET /commerce/fulfillment/tags/{tagId}', () => {
-  test('happy path — returns tag verification with sf waybill', async () => {
+  test('happy path — returns tag verification with sf waybill without authorizer context', async () => {
     const ov = makeSampleOV();
     const order = makeSampleOrder();
     const { handler } = loadHandlerWithMocks({
@@ -656,7 +655,7 @@ describe('GET /commerce/fulfillment/tags/{tagId}', () => {
         path: `/commerce/fulfillment/tags/${TEST_TAG_ID}`,
         resource: '/commerce/fulfillment/tags/{tagId}',
         pathParameters: { tagId: TEST_TAG_ID },
-        authorizer: adminAuth(),
+        authorizer: undefined,
       }),
       createContext()
     );
@@ -683,8 +682,10 @@ describe('GET /commerce/fulfillment/tags/{tagId}', () => {
     expect(parseResponse(result).statusCode).toBe(404);
   });
 
-  test('rejects unauthenticated request with 401', async () => {
-    const { handler } = loadHandlerWithMocks();
+  test('no authorizer context still returns 404 for unknown tagId', async () => {
+    const { handler } = loadHandlerWithMocks({
+      ovFindOneSequence: [{ result: null }],
+    });
     const result = await handler(
       createEvent({
         method: 'GET',
@@ -695,7 +696,7 @@ describe('GET /commerce/fulfillment/tags/{tagId}', () => {
       }),
       createContext()
     );
-    expect(parseResponse(result).statusCode).toBe(401);
+    expect(parseResponse(result).statusCode).toBe(404);
   });
 
   test('sf is undefined when no linked order exists', async () => {
@@ -1336,8 +1337,8 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
     expect(parseResponse(result).statusCode).toBe(503);
   });
 
-  test('rejects non-admin role with 403', async () => {
-    const { handler } = loadHandlerWithMocks();
+  test('allows authenticated non-admin role', async () => {
+    const { handler, mocks } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
         method: 'POST',
@@ -1349,7 +1350,8 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
       }),
       createContext()
     );
-    expect(parseResponse(result).statusCode).toBe(403);
+    expect(parseResponse(result).statusCode).toBe(200);
+    expect(mocks.mockSendMail).toHaveBeenCalledTimes(1);
   });
 
   test('rejects unauthenticated request with 401', async () => {

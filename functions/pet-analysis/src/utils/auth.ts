@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { requireAuthContext, HttpError } from '@aws-ddd-api/shared';
+import { requireAuthContext, HttpError } from '@aws-ddd-api/shared/auth/context';
 import type { RouteContext } from '../../../../types/lambda';
 
 export { requireAuthContext };

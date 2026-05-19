@@ -213,7 +213,7 @@ Globals: # shared default settings applied to all resources of a given type, unl
     Architectures:
       - arm64 # Graviton2: ~20% cheaper compute, faster cold start vs x86_64
     Timeout: 10
-    MemorySize: 256
+    MemorySize: 1769
     Environment:
       Variables:
         PROJECT_NAME: !Ref ProjectName
@@ -298,7 +298,106 @@ Resources:
       RestApiId: !Ref RestApi
       ResponseType: DEFAULT_4XX
       ResponseParameters:
-        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.Origin
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiUnauthorizedGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: UNAUTHORIZED
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiAccessDeniedGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: ACCESS_DENIED
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiInvalidApiKeyGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: INVALID_API_KEY
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiExpiredTokenGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: EXPIRED_TOKEN
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiMissingAuthTokenGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: MISSING_AUTHENTICATION_TOKEN
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiAuthorizerFailureGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: AUTHORIZER_FAILURE
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiAuthorizerConfigErrorGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: AUTHORIZER_CONFIGURATION_ERROR
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiThrottledGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: THROTTLED
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
+
+  RestApiQuotaExceededGatewayResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: QUOTA_EXCEEDED
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
         gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
@@ -309,20 +408,10 @@ Resources:
       RestApiId: !Ref RestApi
       ResponseType: DEFAULT_5XX
       ResponseParameters:
-        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.Origin
+        gatewayresponse.header.Access-Control-Allow-Origin: method.request.header.origin
         gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
         gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Request-Id,x-api-key'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT,PATCH,DELETE'"
-
-  SharedRuntimeLayer: # the Lambda Layer resource you defined in the template
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: !Sub '${ProjectName}-${StageName}-shared-runtime'
-      ContentUri: dist/layers/shared-runtime/
-      CompatibleRuntimes:
-        - nodejs22.x
-      PublishLambdaVersion: true
-      RetentionPolicy: Retain
 
   RestApiUsagePlan:
     Type: AWS::ApiGateway::UsagePlan
@@ -529,8 +618,6 @@ Resources:
       CodeUri: dist/functions/request-authorizer/
       Handler: index.handler
       Role: !GetAtt AuthorizerFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -545,8 +632,6 @@ Resources:
       CodeUri: dist/functions/pipeline-smoke/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -628,10 +713,8 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-auth'
       CodeUri: dist/functions/auth/
       Handler: index.handler
-      MemorySize: 512 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
+      MemorySize: 1769 # bcrypt + nodemailer are CPU-bound; 512 MB halves duration at same GB-s cost
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -784,8 +867,6 @@ Resources:
       CodeUri: dist/functions/user/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -833,8 +914,6 @@ Resources:
       CodeUri: dist/functions/ngo/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -890,10 +969,8 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-profile'
       CodeUri: dist/functions/pet-profile/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1769 # multipart parsing is CPU-bound
       Role: !GetAtt PetProfileFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -989,8 +1066,6 @@ Resources:
       CodeUri: dist/functions/pet-source/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1042,8 +1117,6 @@ Resources:
       CodeUri: dist/functions/pet-transfer/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1123,8 +1196,6 @@ Resources:
       CodeUri: dist/functions/pet-adoption/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1219,8 +1290,6 @@ Resources:
       CodeUri: dist/functions/pet-medical/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1486,10 +1555,8 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-analysis'
       CodeUri: dist/functions/pet-analysis/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1769 # multipart parsing is CPU-bound
       Role: !GetAtt PetAnalysisFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1613,8 +1680,6 @@ Resources:
       CodeUri: dist/functions/pet-reference/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1663,10 +1728,8 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-pet-recovery'
       CodeUri: dist/functions/pet-recovery/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1769 # multipart parsing is CPU-bound
       Role: !GetAtt PetRecoveryFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1760,8 +1823,6 @@ Resources:
       CodeUri: dist/functions/pet-biometric/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1845,7 +1906,7 @@ Resources:
         ImageUri: !Ref MlInferenceImageUri
       Role: !GetAtt SharedFunctionRole.Arn
       Timeout: 25
-      MemorySize: 1024
+      MemorySize: 1769
       Architectures:
         - arm64
       VpcConfig:
@@ -1874,8 +1935,6 @@ Resources:
       CodeUri: dist/functions/notifications/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -1941,8 +2000,6 @@ Resources:
       CodeUri: dist/functions/commerce-catalog/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2100,10 +2157,8 @@ Resources:
       FunctionName: !Sub '${ProjectName}-${StageName}-commerce-orders'
       CodeUri: dist/functions/commerce-orders/
       Handler: index.handler
-      MemorySize: 512 # multipart parsing is CPU-bound
+      MemorySize: 1769 # multipart parsing is CPU-bound
       Role: !GetAtt CommerceOrdersFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2184,8 +2239,6 @@ Resources:
       CodeUri: dist/functions/commerce-fulfillment/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2326,8 +2379,6 @@ Resources:
       CodeUri: dist/functions/logistics/
       Handler: index.handler
       Role: !GetAtt SharedFunctionRole.Arn
-      Layers:
-        - !Ref SharedRuntimeLayer
       AutoPublishAlias: !Ref LambdaAliasName
       AutoPublishAliasAllProperties: true
       AutoPublishCodeSha256: !Ref DeploymentFingerprint
@@ -2483,10 +2534,6 @@ Outputs: # expose useful values from the deployed stack after CloudFormation/SAM
   AuthorizerFunctionName:
     Description: Lambda authorizer function name.
     Value: !Ref RequestAuthorizerFunction
-
-  SharedRuntimeLayerArn:
-    Description: Shared runtime layer version ARN.
-    Value: !Ref SharedRuntimeLayer
 
   LambdaAliasNameOut:
     Description: Alias published for every function via AutoPublishAlias.

@@ -1,5 +1,5 @@
 import { parseFlexibleDate } from '../utils/date';
-import { HttpError } from '@aws-ddd-api/shared';
+import { HttpError } from '@aws-ddd-api/shared/auth/context';
 import { patchPetBodySchema } from '../zodSchema/patchPetProfileSchemas';
 
 /**

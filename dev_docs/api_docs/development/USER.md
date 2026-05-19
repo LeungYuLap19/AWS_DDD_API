@@ -205,10 +205,16 @@ Partially update the current user profile.
 | `firstName` | string | No | |
 | `lastName` | string | No | |
 | `birthday` | string | No | Stored as a `Date` when provided; `null` clears it when supported by payload generation |
-| `email` | string | No | Normalized before duplicate checks and storage |
+| `email` | string | No | Normalized before duplicate checks and storage. `""` / `null` clears email |
 | `district` | string | No | |
 | `image` | string | No | Public `http`/`https` URL |
-| `phoneNumber` | string | No | Normalized before duplicate checks and storage |
+| `phoneNumber` | string | No | Normalized before duplicate checks and storage. `""` / `null` clears phone |
+
+#### Contact Removal Rules
+
+- Clearing `email` or `phoneNumber` is allowed.
+- The user must still have at least one contact method after update (`email` or `phoneNumber`).
+- If the user document already has neither `email` nor `phoneNumber`, removal requests are rejected.
 
 #### Patch Example Request
 
@@ -241,6 +247,8 @@ Partially update the current user profile.
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
 | 400 | `common.invalidBodyParams` | Malformed JSON, invalid email, invalid phone, invalid birthday, invalid image URL, invalid field shape, or unknown top-level PATCH field |
+| 400 | `user.errors.contactRequired` | Request would remove the last remaining contact method |
+| 400 | `user.errors.noContactToRemove` | Removal requested but user currently has no email and no phone number |
 | 404 | `common.notFound` | User no longer exists or is deleted |
 | 409 | `user.errors.emailExists` | Another active user already owns the email |
 | 409 | `user.errors.phoneExists` | Another active user already owns the phone number |

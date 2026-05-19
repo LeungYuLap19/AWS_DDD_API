@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { userPatchBodySchema } from '../zodSchema/userPatchBodySchema';
@@ -83,6 +84,28 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   const normalizedEmail = email === undefined ? undefined : normalizeEmail(email);
   const normalizedPhoneNumber = phoneNumber === undefined ? undefined : normalizePhone(phoneNumber);
+  const emailClearRequested = email !== undefined && !normalizedEmail;
+  const phoneClearRequested = phoneNumber !== undefined && !normalizedPhoneNumber;
+
+  const currentUser = await findActiveUserById(authContext.userId);
+  if (!currentUser) {
+    return response.errorResponse(404, 'common.notFound', ctx.event);
+  }
+
+  const currentEmail = normalizeEmail(currentUser.email);
+  const currentPhoneNumber = normalizePhone(currentUser.phoneNumber);
+
+  if (emailClearRequested || phoneClearRequested) {
+    if (!currentEmail && !currentPhoneNumber) {
+      return response.errorResponse(400, 'user.errors.noContactToRemove', ctx.event);
+    }
+
+    const nextEmail = email === undefined ? currentEmail : normalizedEmail;
+    const nextPhoneNumber = phoneNumber === undefined ? currentPhoneNumber : normalizedPhoneNumber;
+    if (!nextEmail && !nextPhoneNumber) {
+      return response.errorResponse(400, 'user.errors.contactRequired', ctx.event);
+    }
+  }
 
   if (normalizedEmail || normalizedPhoneNumber) {
     const conflict = (await User.findOne({
@@ -110,7 +133,10 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   if (lastName !== undefined) updateFields.lastName = lastName;
   if (district !== undefined) updateFields.district = district;
   if (image !== undefined) updateFields.image = image;
-  if (email !== undefined) updateFields.email = normalizedEmail;
+  if (email !== undefined) {
+    if (normalizedEmail) updateFields.email = normalizedEmail;
+    else unsetFields.email = 1;
+  }
   if (phoneNumber !== undefined) {
     if (normalizedPhoneNumber) updateFields.phoneNumber = normalizedPhoneNumber;
     else unsetFields.phoneNumber = 1;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sanitizeText } from '@aws-ddd-api/shared';
+import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
 import {
   TEXT_MAX,
   optionalDateString,

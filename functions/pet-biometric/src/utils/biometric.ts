@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { logWarn, parseObjectIdParam } from '@aws-ddd-api/shared';
+import { logWarn } from '@aws-ddd-api/shared/logging/logger';
+import { parseObjectIdParam } from '@aws-ddd-api/shared/validation/common';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 import { deleteImageFile, uploadImageFile } from './upload';

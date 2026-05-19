@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { sanitizeText } from '@aws-ddd-api/shared';
-
+import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
 /**
  * Zod v4 schema for POST /commerce/orders (purchase confirmation).
  * All fields arrive as strings from lambda-multipart-parser.

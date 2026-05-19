@@ -1,5 +1,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import * as shared from '@aws-ddd-api/shared';
+import { handleOptions } from '@aws-ddd-api/shared/http/cors';
+import { createResponse } from '@aws-ddd-api/shared/http/response';
+import { translate } from '@aws-ddd-api/shared/i18n';
 
 type RuntimeEnv = Record<string, string | undefined>;
 type RequestEvent = APIGatewayProxyEvent & { awsRequestId?: string };
@@ -21,7 +23,7 @@ const smokeTranslations = {
   },
 };
 
-const response = shared.createResponse({
+const response = createResponse({
   domainTranslations: smokeTranslations,
   scope: 'pipeline-smoke.response',
 });
@@ -56,7 +58,7 @@ function isDevelopmentCorsConfigured(): boolean {
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const requestEvent = event as RequestEvent;
-  const optionsResponse = shared.handleOptions(requestEvent, response);
+  const optionsResponse = handleOptions(requestEvent, response);
 
   if (optionsResponse) {
     return optionsResponse;
@@ -96,8 +98,8 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     timestamp: new Date().toISOString(),
     sharedLayer: {
       importOk: true,
-      domainLocaleOk: shared.translate('pipelineSmoke.ok', 'en', undefined, smokeTranslations),
-      exportedKeys: Object.keys(shared).sort(),
+      domainLocaleOk: translate('pipelineSmoke.ok', 'en', undefined, smokeTranslations),
+      exportedKeys: ['createResponse', 'handleOptions', 'translate'],
     },
   });
 }

@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { sanitizeText } from '@aws-ddd-api/shared';
-
+import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
 const petPlacementOptionSchema = z
   .object({
     name: z.string().trim().max(100, 'common.invalidBodyParams').transform(sanitizeText),

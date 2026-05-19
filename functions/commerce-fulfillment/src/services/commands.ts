@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import nodemailer from 'nodemailer';
-import { parseBody, requireAuthContext } from '@aws-ddd-api/shared';
+import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from '../utils/response';
 import { ptagDetectionEmailSchema } from '../zodSchema/commandsSchema';
@@ -66,7 +67,7 @@ function renderPtagDetectionEmail(
 
 /**
  * POST /commerce/commands/ptag-detection-email
- * Admin-only — sends a PTag detection location alert to the pet owner.
+ * Authenticated — sends a PTag detection location alert to the pet owner.
  * Legacy: POST /purchase/send-ptag-detection-email (purchaseConfirmation)
  */
 export async function handleSendPtagDetectionEmail(ctx: RouteContext): Promise<APIGatewayProxyResult> {

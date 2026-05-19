@@ -67,7 +67,7 @@ Legend
       /{transferId}
         PATCH [x-api-key, owner]
         DELETE [x-api-key, owner]
-      /ngo-reassignment
+      /ngo-reassignment 
         POST [x-api-key, owner, hybrid]
 
   /adoption

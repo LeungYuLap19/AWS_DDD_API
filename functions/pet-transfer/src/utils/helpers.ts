@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { type AuthContext, HttpError } from '@aws-ddd-api/shared';
+import { type AuthContext, HttpError } from '@aws-ddd-api/shared/auth/context';
 import type { RouteContext } from '../../../../types/lambda';
 import { response } from './response';
 

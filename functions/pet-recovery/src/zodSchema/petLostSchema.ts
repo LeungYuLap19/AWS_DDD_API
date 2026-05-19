@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { objectIdString, sanitizeText } from '@aws-ddd-api/shared';
-
+import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
+import { objectIdString } from '@aws-ddd-api/shared/validation/common';
 export const createPetLostSchema = z
   .object({
     petId: objectIdString().optional(),

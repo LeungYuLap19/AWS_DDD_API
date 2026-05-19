@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { HttpError, requireAuthContext } from '@aws-ddd-api/shared';
+import { HttpError, requireAuthContext } from '@aws-ddd-api/shared/auth/context';
 import type { RouteContext } from '../../../../types/lambda';
 
 type PetDocument = {
