@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, requireRole } from '@aws-ddd-api/shared/auth/context';
+import { requireRole } from '@aws-ddd-api/shared/auth/context';
 import { logWarn } from '@aws-ddd-api/shared/logging/logger';
 import { paginationQuerySchema, parsePathParam, tempIdString } from '@aws-ddd-api/shared/validation/common';
 import { parseMultipartBody } from '@aws-ddd-api/shared/validation/zod';
@@ -264,8 +264,6 @@ export async function handleGetOrders(ctx: RouteContext): Promise<APIGatewayProx
  * it protected. This is an auth-strengthening delta.
  */
 export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const auth = requireAuthContext(ctx.event);
-
   // 1. Parse multipart form data + Zod validation
   const multiResult = await parseMultipartBody(ctx.event, purchaseConfirmationSchema, {
     fallbackErrorKey: 'common.invalidBodyParams',
@@ -309,11 +307,9 @@ export async function handleCreateOrder(ctx: RouteContext): Promise<APIGatewayPr
   const rateLimitResult = await applyRateLimit({
     action: 'submit-order',
     event: ctx.event,
-    identifier: auth.userId,
+    identifier: null,
     policies: [
       { scope: 'ip', limit: 60, windowSeconds: 3600 },
-      { scope: 'identifier', limit: 20, windowSeconds: 3600 },
-      { scope: 'ip+identifier', limit: 10, windowSeconds: 3600 },
     ],
   });
   if (rateLimitResult) return rateLimitResult;
@@ -423,7 +419,7 @@ return response.successResponse(200, ctx.event, {
  * Admin/developer can access any order; regular users can only access their own (email match).
  */
 export async function handleGetOrderByTempId(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const authContext = requireRole(ctx.event, ['admin']);
+  requireRole(ctx.event, ['admin']);
   const tempParam = parsePathParam(ctx.event.pathParameters?.['tempId'], tempIdString());
   if (!tempParam.ok) {
     return response.errorResponse(tempParam.statusCode, tempParam.errorKey, ctx.event);

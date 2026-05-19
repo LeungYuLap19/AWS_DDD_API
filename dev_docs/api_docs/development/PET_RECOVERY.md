@@ -14,10 +14,10 @@ Lost and found recovery listings and submissions. All routes are authenticated. 
 
 | Method | Path | Auth | Content-Type | Purpose |
 | --- | --- | --- | --- | --- |
-| GET | `/pet/recovery/lost` | `x-api-key` + Bearer JWT | — | List lost-pet reports |
+| GET | `/pet/recovery/lost` | `x-api-key` only | — | List lost-pet reports |
 | POST | `/pet/recovery/lost` | `x-api-key` + Bearer JWT | `multipart/form-data` | Create a lost-pet report |
 | DELETE | `/pet/recovery/lost/{petLostID}` | `x-api-key` + Bearer JWT | — | Delete caller-owned lost-pet report |
-| GET | `/pet/recovery/found` | `x-api-key` + Bearer JWT | — | List found-pet reports |
+| GET | `/pet/recovery/found` | `x-api-key` only | — | List found-pet reports |
 | POST | `/pet/recovery/found` | `x-api-key` + Bearer JWT | `multipart/form-data` | Create a found-pet report |
 | DELETE | `/pet/recovery/found/{petFoundID}` | `x-api-key` + Bearer JWT | — | Delete caller-owned found-pet report |
 
@@ -207,7 +207,7 @@ Returned fields vary by lost vs found record, but commonly include:
 List lost-pet reports sorted by `lostDate` descending.
 
 **Lambda owner:** `pet-recovery`  
-**Auth:** `x-api-key` + Bearer JWT required
+**Auth:** `x-api-key` only
 
 #### Query Parameters
 
@@ -368,7 +368,7 @@ Delete a caller-owned lost-pet report.
 List found-pet reports sorted by `foundDate` descending.
 
 **Lambda owner:** `pet-recovery`  
-**Auth:** `x-api-key` + Bearer JWT required
+**Auth:** `x-api-key` only
 
 #### Found List Success (200)
 

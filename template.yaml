@@ -1749,6 +1749,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/recovery/lost
             Method: GET
+            Auth:
+              Authorizer: NONE
         PetRecoveryLostCreatePOST:
           Type: Api
           Properties:
@@ -1785,6 +1787,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/recovery/found
             Method: GET
+            Auth:
+              Authorizer: NONE
         PetRecoveryFoundCreatePOST:
           Type: Api
           Properties:
@@ -2192,6 +2196,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/orders
             Method: POST
+            Auth:
+              Authorizer: NONE
         CommerceOrdersOperationsGET:
           Type: Api
           Properties:
@@ -2507,6 +2513,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /logistics/cloud-waybill
             Method: POST
+            Auth:
+              Authorizer: NONE
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false

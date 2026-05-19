@@ -19,7 +19,7 @@ SF Express integration for public metadata lookups, shipment creation, and cloud
 | POST | `/logistics/lookups/net-codes` | `x-api-key` only | Get net-code list for area + type |
 | POST | `/logistics/lookups/pickup-locations` | `x-api-key` only | Get pickup locations for net codes |
 | POST | `/logistics/shipments` | `x-api-key` + Bearer JWT | Create shipment and write waybill number onto matched orders |
-| POST | `/logistics/cloud-waybill` | `x-api-key` + Bearer JWT | Generate and email cloud-print waybill PDF |
+| POST | `/logistics/cloud-waybill` | `x-api-key` only | Generate and email cloud-print waybill PDF |
 
 ### Integration-Critical Behavior
 
@@ -310,7 +310,7 @@ Create a shipment and write the returned waybill number onto matched orders.
 Generate a cloud-print PDF for a waybill and email it internally.
 
 **Lambda owner:** `logistics`  
-**Auth:** `x-api-key` + Bearer JWT required  
+**Auth:** `x-api-key` only  
 **Content-Type:** `application/json`
 
 #### Cloud-Waybill Request Body

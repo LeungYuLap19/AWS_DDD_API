@@ -15,7 +15,7 @@ Authenticated order checkout and order retrieval. The current DDD implementation
 | Method | Path | Auth | Content-Type | Purpose |
 | --- | --- | --- | --- | --- |
 | GET | `/commerce/orders` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Paginated list of all orders |
-| POST | `/commerce/orders` | `x-api-key` + Bearer JWT | `multipart/form-data` | Create one order and one order-verification record |
+| POST | `/commerce/orders` | `x-api-key` only | `multipart/form-data` | Create one order and one order-verification record |
 | GET | `/commerce/orders/operations` | `x-api-key` + Bearer JWT with `admin` or `developer` role | — | Paginated operations view of order verifications |
 | GET | `/commerce/orders/{tempId}` | `x-api-key` + Bearer JWT with `admin` role | — | Return minimal contact data for one order |
 
@@ -53,7 +53,7 @@ Gateway/API-key/JWT behavior for commerce-orders routes is defined only in [ENDP
 | Route | Rule |
 | --- | --- |
 | `GET /commerce/orders` | Admin or developer only |
-| `POST /commerce/orders` | Any authenticated caller |
+| `POST /commerce/orders` | Public (API key only) |
 | `GET /commerce/orders/operations` | Admin or developer only |
 | `GET /commerce/orders/{tempId}` | Admin only |
 
@@ -241,7 +241,7 @@ Each item in `data` is sanitized to:
 Create one order and its linked order-verification record.
 
 **Lambda owner:** `commerce-orders`  
-**Auth:** `x-api-key` + Bearer JWT required  
+**Auth:** `x-api-key` only  
 **Content-Type:** `multipart/form-data`
 
 #### Multipart File Rules

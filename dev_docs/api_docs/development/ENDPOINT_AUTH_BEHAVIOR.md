@@ -100,10 +100,8 @@ Every documented route belongs to exactly one auth class.
 - `POST /pet/analysis/breed`
 - `POST /pet/analysis/uploads/image`
 - `POST /pet/analysis/uploads/breed-image`
-- `GET /pet/recovery/lost`
 - `POST /pet/recovery/lost`
 - `DELETE /pet/recovery/lost/{petLostID}`
-- `GET /pet/recovery/found`
 - `POST /pet/recovery/found`
 - `DELETE /pet/recovery/found/{petFoundID}`
 - `GET /pet/biometric/{petId}`
@@ -114,7 +112,6 @@ Every documented route belongs to exactly one auth class.
 - `PATCH /notifications/me/{notificationId}`
 - `POST /notifications/dispatch`
 - `GET /commerce/orders`
-- `POST /commerce/orders`
 - `GET /commerce/orders/operations`
 - `GET /commerce/orders/{tempId}`
 - `GET /commerce/fulfillment`
@@ -125,7 +122,6 @@ Every documented route belongs to exactly one auth class.
 - `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}`
 - `POST /commerce/commands/ptag-detection-email`
 - `POST /logistics/shipments`
-- `POST /logistics/cloud-waybill`
 
 ### Class B: `gateway-api-key-only`
 
@@ -143,13 +139,17 @@ Every documented route belongs to exactly one auth class.
 - `GET /pet/reference/breed/{animalType}`
 - `GET /pet/reference/deworm`
 - `GET /commerce/catalog`
+- `POST /commerce/orders`
 - `POST /commerce/catalog/events`
 - `GET /commerce/catalog/ptag-products`
 - `GET /commerce/catalog/ptag-products/{productId}`
 - `GET /commerce/storefront`
 - `POST /commerce/storefront/shop-code-verifications`
+- `GET /pet/recovery/lost`
+- `GET /pet/recovery/found`
 - `GET /commerce/fulfillment/tags/{tagId}`
 - `POST /logistics/token`
+- `POST /logistics/cloud-waybill`
 - `POST /logistics/lookups/areas`
 - `POST /logistics/lookups/net-codes`
 - `POST /logistics/lookups/pickup-locations`
