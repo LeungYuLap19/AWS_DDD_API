@@ -1,6 +1,7 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
 import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { logWarn } from '@aws-ddd-api/shared/logging/logger';
 import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
@@ -52,14 +53,49 @@ export async function handleGetMe(ctx: RouteContext): Promise<APIGatewayProxyRes
  * email/phone conflict handling and returning the sanitized post-update view.
  */
 export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyResult> {
+  const scope = 'user.services.user.patchMe';
+  const requestStartedAt = Date.now();
   const authContext = requireAuthContext(ctx.event);
+
+  const parseStartedAt = Date.now();
   const parsed = parseBody(ctx.body, userPatchBodySchema);
+  logWarn('PATCH /user/me timing', {
+    scope,
+    event: ctx.event,
+    extra: {
+      phase: 'parseBody',
+      durationMs: Date.now() - parseStartedAt,
+      ok: parsed.ok,
+      userId: authContext.userId,
+    },
+  });
   if (!parsed.ok) {
+    logWarn('PATCH /user/me completed', {
+      scope,
+      event: ctx.event,
+      extra: {
+        outcome: 'invalidBody',
+        totalDurationMs: Date.now() - requestStartedAt,
+        errorKey: parsed.errorKey,
+        userId: authContext.userId,
+      },
+    });
     return response.errorResponse(parsed.statusCode, parsed.errorKey, ctx.event);
   }
 
+  const connectStartedAt = Date.now();
   await connectToMongoDB();
+  logWarn('PATCH /user/me timing', {
+    scope,
+    event: ctx.event,
+    extra: {
+      phase: 'connectToMongoDB',
+      durationMs: Date.now() - connectStartedAt,
+      userId: authContext.userId,
+    },
+  });
 
+  const rateLimitStartedAt = Date.now();
   const rateLimitResponse = await applyRateLimit({
     action: 'user.patchMe',
     event: ctx.event,
@@ -69,7 +105,28 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
       { scope: 'identifier', limit: 30, windowSeconds: 5 * 60 },
     ],
   });
-  if (rateLimitResponse) return rateLimitResponse;
+  logWarn('PATCH /user/me timing', {
+    scope,
+    event: ctx.event,
+    extra: {
+      phase: 'applyRateLimit',
+      durationMs: Date.now() - rateLimitStartedAt,
+      rateLimited: Boolean(rateLimitResponse),
+      userId: authContext.userId,
+    },
+  });
+  if (rateLimitResponse) {
+    logWarn('PATCH /user/me completed', {
+      scope,
+      event: ctx.event,
+      extra: {
+        outcome: 'rateLimited',
+        totalDurationMs: Date.now() - requestStartedAt,
+        userId: authContext.userId,
+      },
+    });
+    return rateLimitResponse;
+  }
 
   const User = mongoose.model('User');
   const {
@@ -87,8 +144,27 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   const emailClearRequested = email !== undefined && !normalizedEmail;
   const phoneClearRequested = phoneNumber !== undefined && !normalizedPhoneNumber;
 
+  const currentUserQueryStartedAt = Date.now();
   const currentUser = await findActiveUserById(authContext.userId);
+  logWarn('PATCH /user/me timing', {
+    scope,
+    event: ctx.event,
+    extra: {
+      phase: 'findCurrentUser',
+      durationMs: Date.now() - currentUserQueryStartedAt,
+      userId: authContext.userId,
+    },
+  });
   if (!currentUser) {
+    logWarn('PATCH /user/me completed', {
+      scope,
+      event: ctx.event,
+      extra: {
+        outcome: 'notFound',
+        totalDurationMs: Date.now() - requestStartedAt,
+        userId: authContext.userId,
+      },
+    });
     return response.errorResponse(404, 'common.notFound', ctx.event);
   }
 
@@ -97,17 +173,36 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   if (emailClearRequested || phoneClearRequested) {
     if (!currentEmail && !currentPhoneNumber) {
+      logWarn('PATCH /user/me completed', {
+        scope,
+        event: ctx.event,
+        extra: {
+          outcome: 'noContactToRemove',
+          totalDurationMs: Date.now() - requestStartedAt,
+          userId: authContext.userId,
+        },
+      });
       return response.errorResponse(400, 'user.errors.noContactToRemove', ctx.event);
     }
 
     const nextEmail = email === undefined ? currentEmail : normalizedEmail;
     const nextPhoneNumber = phoneNumber === undefined ? currentPhoneNumber : normalizedPhoneNumber;
     if (!nextEmail && !nextPhoneNumber) {
+      logWarn('PATCH /user/me completed', {
+        scope,
+        event: ctx.event,
+        extra: {
+          outcome: 'contactRequired',
+          totalDurationMs: Date.now() - requestStartedAt,
+          userId: authContext.userId,
+        },
+      });
       return response.errorResponse(400, 'user.errors.contactRequired', ctx.event);
     }
   }
 
   if (normalizedEmail || normalizedPhoneNumber) {
+    const conflictQueryStartedAt = Date.now();
     const conflict = (await User.findOne({
       $or: [
         ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
@@ -116,6 +211,16 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
       _id: { $ne: authContext.userId },
       deleted: false,
     }).lean()) as UserDocument | null;
+    logWarn('PATCH /user/me timing', {
+      scope,
+      event: ctx.event,
+      extra: {
+        phase: 'findConflict',
+        durationMs: Date.now() - conflictQueryStartedAt,
+        hadConflict: Boolean(conflict),
+        userId: authContext.userId,
+      },
+    });
 
     if (conflict) {
       const errorKey =
@@ -123,6 +228,16 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
           ? 'user.errors.emailExists'
           : 'user.errors.phoneExists';
 
+      logWarn('PATCH /user/me completed', {
+        scope,
+        event: ctx.event,
+        extra: {
+          outcome: 'conflict',
+          conflictErrorKey: errorKey,
+          totalDurationMs: Date.now() - requestStartedAt,
+          userId: authContext.userId,
+        },
+      });
       return response.errorResponse(409, errorKey, ctx.event);
     }
   }
@@ -153,11 +268,22 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   let updatedUser: UserDocument | null;
   try {
+    const updateStartedAt = Date.now();
     updatedUser = (await User.findOneAndUpdate(
       { _id: authContext.userId, deleted: false },
       updateOperation,
       { returnDocument: 'after', lean: true }
     )) as UserDocument | null;
+    logWarn('PATCH /user/me timing', {
+      scope,
+      event: ctx.event,
+      extra: {
+        phase: 'findOneAndUpdate',
+        durationMs: Date.now() - updateStartedAt,
+        foundUpdatedUser: Boolean(updatedUser),
+        userId: authContext.userId,
+      },
+    });
   } catch (error) {
     const mongoError = error as {
       code?: number;
@@ -174,16 +300,57 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
           ? 'user.errors.phoneExists'
           : 'user.errors.emailExists';
 
+      logWarn('PATCH /user/me completed', {
+        scope,
+        event: ctx.event,
+        extra: {
+          outcome: 'duplicateKey',
+          duplicateField,
+          duplicateErrorKey: errorKey,
+          totalDurationMs: Date.now() - requestStartedAt,
+          userId: authContext.userId,
+        },
+      });
       return response.errorResponse(409, errorKey, ctx.event);
     }
 
+    logWarn('PATCH /user/me failed unexpectedly', {
+      scope,
+      event: ctx.event,
+      error,
+      extra: {
+        outcome: 'exception',
+        totalDurationMs: Date.now() - requestStartedAt,
+        userId: authContext.userId,
+      },
+    });
     throw error;
   }
 
   if (!updatedUser) {
+    logWarn('PATCH /user/me completed', {
+      scope,
+      event: ctx.event,
+      extra: {
+        outcome: 'notFoundAfterUpdate',
+        totalDurationMs: Date.now() - requestStartedAt,
+        userId: authContext.userId,
+      },
+    });
     return response.errorResponse(404, 'common.notFound', ctx.event);
   }
 
+  logWarn('PATCH /user/me completed', {
+    scope,
+    event: ctx.event,
+    extra: {
+      outcome: 'success',
+      totalDurationMs: Date.now() - requestStartedAt,
+      hasEmailInPayload: email !== undefined,
+      hasPhoneInPayload: phoneNumber !== undefined,
+      userId: authContext.userId,
+    },
+  });
   return response.successResponse(200, ctx.event, {
     message: 'success.updated',
     data: sanitizeUser(updatedUser),
