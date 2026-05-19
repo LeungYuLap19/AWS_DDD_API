@@ -4,6 +4,7 @@ import { paginationQuerySchema } from '@aws-ddd-api/shared/validation/common';
 import { parseBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
+import { ensureProductListModel, ensureProductLogModel } from '../config/models';
 import { catalogEventBodySchema } from '../zodSchema/catalogEventBodySchema';
 import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
@@ -22,7 +23,7 @@ export async function handleGetCatalog(ctx: RouteContext): Promise<APIGatewayPro
   const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
 
-  const ProductList = mongoose.model('ProductList');
+  const ProductList = ensureProductListModel();
   const [items, total] = await Promise.all([
     ProductList.find({}).skip(skip).limit(limit).lean(),
     ProductList.countDocuments({}),
@@ -62,7 +63,7 @@ export async function handleCreateCatalogEvent(ctx: RouteContext): Promise<APIGa
   });
   if (rateLimitResponse) return rateLimitResponse;
 
-  const ProductLog = mongoose.model('ProductLog');
+  const ProductLog = ensureProductLogModel();
   const { petId, userId, userEmail, productUrl, accessAt } = parsed.data;
 
   const log = await ProductLog.create({

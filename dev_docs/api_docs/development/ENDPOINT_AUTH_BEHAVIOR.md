@@ -119,7 +119,6 @@ Every documented route belongs to exactly one auth class.
 - `GET /commerce/orders/{tempId}`
 - `GET /commerce/fulfillment`
 - `DELETE /commerce/fulfillment/{orderVerificationId}`
-- `GET /commerce/fulfillment/tags/{tagId}`
 - `PATCH /commerce/fulfillment/tags/{tagId}`
 - `GET /commerce/fulfillment/suppliers/{orderId}`
 - `PATCH /commerce/fulfillment/suppliers/{orderId}`
@@ -149,6 +148,7 @@ Every documented route belongs to exactly one auth class.
 - `GET /commerce/catalog/ptag-products/{productId}`
 - `GET /commerce/storefront`
 - `POST /commerce/storefront/shop-code-verifications`
+- `GET /commerce/fulfillment/tags/{tagId}`
 - `POST /logistics/token`
 - `POST /logistics/lookups/areas`
 - `POST /logistics/lookups/net-codes`

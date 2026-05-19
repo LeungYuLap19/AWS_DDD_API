@@ -1,6 +1,12 @@
 import { validateEnv } from '@aws-ddd-api/shared/config/env';
-import { envSchema } from '../zodSchema/envSchema';
+import { envSchema, type Env } from '../zodSchema/envSchema';
 
-const env = validateEnv(envSchema);
+let cachedEnv: Env | null = null;
 
-export default env;
+export function getEnv(): Env {
+  if (!cachedEnv) {
+    cachedEnv = validateEnv(envSchema);
+  }
+
+  return cachedEnv;
+}

@@ -12,7 +12,7 @@
 // Routes under test:
 //   GET    /commerce/fulfillment                                — admin only
 //   DELETE /commerce/fulfillment/{orderVerificationId}         — admin only
-//   GET    /commerce/fulfillment/tags/{tagId}                  — authenticated
+//   GET    /commerce/fulfillment/tags/{tagId}                  — API key only
 //   PATCH  /commerce/fulfillment/tags/{tagId}                  — admin only
 //   GET    /commerce/fulfillment/suppliers/{orderId}           — admin only
 //   PATCH  /commerce/fulfillment/suppliers/{orderId}           — admin only
@@ -271,16 +271,11 @@ describe('Tier 3 - /commerce/fulfillment via SAM local + UAT DB', () => {
       expect(res.headers['access-control-allow-origin']).toBe('*');
     });
 
-    test('GET /commerce/fulfillment/tags/{tagId} returns the seeded verification for admin', async () => {
+    test('GET /commerce/fulfillment/tags/{tagId} returns the seeded verification with API key only', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedFixtures();
 
-      const res = await req(
-        'GET',
-        `/commerce/fulfillment/tags/${state.tagIdA}`,
-        undefined,
-        authHeaders(state.adminToken)
-      );
+      const res = await req('GET', `/commerce/fulfillment/tags/${state.tagIdA}`);
       const data = responseData(res.body);
 
       expect(res.status).toBe(200);

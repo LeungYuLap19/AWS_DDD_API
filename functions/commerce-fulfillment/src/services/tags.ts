@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext, requireRole, HttpError } from '@aws-ddd-api/shared/auth/context';
+import { requireRole, HttpError } from '@aws-ddd-api/shared/auth/context';
 import { logWarn } from '@aws-ddd-api/shared/logging/logger';
 import { parsePathParam, tempIdString } from '@aws-ddd-api/shared/validation/common';
 import { parseBody } from '@aws-ddd-api/shared/validation/zod';
@@ -152,13 +152,11 @@ async function dispatchWhatsAppTrackingMessage(
 
 /**
  * GET /commerce/fulfillment/tags/{tagId}
- * Authenticated — returns tag-bound verification record + linked SF waybill.
+ * API-key only — returns tag-bound verification record + linked SF waybill.
  * Extracts tagId from named path parameter.
  * Legacy: GET /v2/orderVerification/{tagId} (OrderVerification)
  */
 export async function handleGetTagVerification(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireAuthContext(ctx.event);
-
   const tagParam = parsePathParam(ctx.event.pathParameters?.tagId, tempIdString());
   if (!tagParam.ok) {
     return response.errorResponse(tagParam.statusCode, tagParam.errorKey, ctx.event);

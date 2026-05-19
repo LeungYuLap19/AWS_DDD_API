@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { parseObjectIdParam } from '@aws-ddd-api/shared/validation/common';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
+import { ensurePtagProductModel } from '../config/models';
 import { response } from '../utils/response';
 
 type PtagProductOptionSet = {
@@ -106,7 +107,7 @@ function sanitizePtagProduct(doc: PtagProductDocument): PtagProductResponse {
 export async function handleGetPtagProducts(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
 
-  const PtagProduct = mongoose.model('PtagProduct');
+  const PtagProduct = ensurePtagProductModel();
   const rows = (await PtagProduct.find({}, PTAG_PRODUCTS_LIST_PROJECTION)
     .sort({ createdAt: -1, _id: -1 })
     .lean()) as PtagProductDocument[];
@@ -129,7 +130,7 @@ export async function handleGetPtagProductById(ctx: RouteContext): Promise<APIGa
 
   await connectToMongoDB();
 
-  const PtagProduct = mongoose.model('PtagProduct');
+  const PtagProduct = ensurePtagProductModel();
   const row = (await PtagProduct.findById(productIdParam.data, PTAG_PRODUCTS_LIST_PROJECTION).lean()) as PtagProductDocument | null;
   if (!row) {
     return response.errorResponse(404, 'common.notFound', ctx.event);
