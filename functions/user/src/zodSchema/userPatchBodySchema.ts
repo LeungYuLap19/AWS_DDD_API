@@ -13,11 +13,10 @@ export const userPatchBodySchema = z
       .max(32, 'common.invalidBodyParams')
       .refine((value) => !Number.isNaN(new Date(value).getTime()), { message: 'common.invalidBodyParams' })
       .optional(),
-    email: z
-      .string()
-      .max(254, 'common.invalidBodyParams')
-      .refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()), { message: 'common.invalidBodyParams' })
-      .optional(),
+    email: optionalNullableString(254).refine(
+      (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+      { message: 'common.invalidBodyParams' }
+    ),
     district: z.string().trim().max(100, 'common.invalidBodyParams').optional(),
     image: z
       .string()

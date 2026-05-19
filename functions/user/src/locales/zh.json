@@ -2,7 +2,9 @@
   "user": {
     "errors": {
       "emailExists": "電子郵件已存在",
-      "phoneExists": "電話號碼已存在"
+      "phoneExists": "電話號碼已存在",
+      "contactRequired": "必須保留電子郵件或電話號碼其中一項",
+      "noContactToRemove": "沒有可移除的電子郵件或電話號碼"
     }
   }
 }
