@@ -118,7 +118,6 @@ Every documented route belongs to exactly one auth class.
 - `PATCH /commerce/fulfillment/tags/{tagId}`
 - `GET /commerce/fulfillment/suppliers/{orderId}`
 - `PATCH /commerce/fulfillment/suppliers/{orderId}`
-- `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}`
 - `POST /logistics/shipments`
 
 ### Class B: `gateway-api-key-only`
@@ -147,6 +146,7 @@ Every documented route belongs to exactly one auth class.
 - `GET /pet/recovery/found`
 - `POST /pet/recovery/found`
 - `GET /commerce/fulfillment/tags/{tagId}`
+- `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}`
 - `POST /commerce/commands/ptag-detection-email`
 - `POST /logistics/token`
 - `POST /logistics/cloud-waybill`
