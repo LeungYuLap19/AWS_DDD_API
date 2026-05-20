@@ -5,7 +5,7 @@ import { parseMultipartBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
 import { loadAuthorizedPet } from '../utils/auth';
-import { normalizeMultipartBody } from '../utils/multipart';
+import { normalizePatchMultipartBody } from '../utils/multipart';
 import { response } from '../utils/response';
 import { applyRateLimit } from '../utils/rateLimit';
 import { uploadImageFile } from '../utils/upload';
@@ -32,7 +32,7 @@ export async function handlePatchPetProfile(ctx: RouteContext): Promise<APIGatew
   }
 
   const multiResult = await parseMultipartBody(ctx.event, patchPetBodySchema, {
-    normalize: (rawFields) => normalizeMultipartBody(rawFields),
+    normalize: (rawFields) => normalizePatchMultipartBody(rawFields),
   });
   if (!multiResult.ok) {
     return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);

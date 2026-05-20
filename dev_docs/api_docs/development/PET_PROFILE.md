@@ -81,6 +81,11 @@ Current multipart normalization includes:
 - `weight`, `ownerContact1`, and `ownerContact2` string values to numbers
 - `sterilization`, `contact1Show`, and `contact2Show` string values to booleans
 - single-string `breedimage` fallback values to a one-item array
+- PATCH-only reset normalization for selected fields:
+  - `weight`: multipart text `null` (or empty string) maps to `null`
+  - `ownerContact2`: multipart text `null` maps to `null`
+  - `motherDOB` / `fatherDOB`: empty string or multipart text `null` maps to `null`
+  - `motherParity`: multipart text `null` maps to `null`
 
 Current validation behavior:
 
@@ -487,7 +492,7 @@ Any subset of these fields may be supplied:
 | `name` | string | No | |
 | `animal` | string | No | |
 | `birthday` | string | No | Flexible date string |
-| `weight` | number | No | Multipart numeric normalization applies |
+| `weight` | number or `null` | No | Multipart numeric normalization applies; patch reset accepts empty string or text `null` |
 | `sex` | string | No | |
 | `sterilization` | boolean | No | Multipart boolean normalization applies |
 | `sterilizationDate` | string | No | Flexible date string |
@@ -500,7 +505,7 @@ Any subset of these fields may be supplied:
 | `owner` | string | No | |
 | `tagId` | string | No | Unique among non-deleted pets |
 | `ownerContact1` | number | No | Multipart numeric normalization applies |
-| `ownerContact2` | number | No | Multipart numeric normalization applies |
+| `ownerContact2` | number or `null` | No | Multipart numeric normalization applies; patch reset accepts text `null` |
 | `contact1Show` | boolean | No | Multipart boolean normalization applies |
 | `contact2Show` | boolean | No | Multipart boolean normalization applies |
 | `receivedDate` | string | No | Flexible date string |
@@ -512,16 +517,43 @@ Any subset of these fields may be supplied:
 | `placeOfBirth` | string | No | |
 | `motherName` | string | No | |
 | `motherBreed` | string | No | |
-| `motherDOB` | string | No | Flexible date string |
+| `motherDOB` | string or `null` | No | Flexible date string; patch reset accepts empty string or text `null` |
 | `motherChip` | string | No | |
 | `motherPlaceOfBirth` | string | No | |
-| `motherParity` | number | No | Coerced numeric input |
+| `motherParity` | number or `null` | No | Coerced numeric input; patch reset accepts text `null` |
 | `fatherName` | string | No | |
 | `fatherBreed` | string | No | |
-| `fatherDOB` | string | No | Flexible date string |
+| `fatherDOB` | string or `null` | No | Flexible date string; patch reset accepts empty string or text `null` |
 | `fatherChip` | string | No | |
 | `fatherPlaceOfBirth` | string | No | |
 | file parts | file | No | Additional uploaded images |
+
+#### Patch Reset Payloads
+
+For the following resettable fields, use these multipart field values:
+
+| Field | Reset payload |
+| --- | --- |
+| `weight` | `null` |
+| `features` | `""` |
+| `info` | `""` |
+| `tagId` | `""` |
+| `ownerContact2` | `null` |
+| `chipId` | `""` |
+| `placeOfBirth` | `""` |
+| `motherName` | `""` |
+| `motherBreed` | `""` |
+| `motherDOB` | `null` |
+| `motherChip` | `""` |
+| `motherPlaceOfBirth` | `""` |
+| `motherParity` | `null` |
+| `fatherName` | `""` |
+| `fatherBreed` | `""` |
+| `fatherDOB` | `null` |
+| `fatherChip` | `""` |
+| `fatherPlaceOfBirth` | `""` |
+
+`null` above means multipart text value `null` (for example via `formData.append('motherDOB', 'null')`).
 
 #### Patch Example Request
 

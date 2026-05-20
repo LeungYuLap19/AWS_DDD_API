@@ -149,7 +149,7 @@ export async function handleUpdateTransfer(ctx: RouteContext): Promise<APIGatewa
   // Build positional update
   const updateFields: Record<string, unknown> = {};
   if (data.regDate !== undefined)
-    updateFields['transfer.$.regDate'] = parseDateFlexible(data.regDate);
+    updateFields['transfer.$.regDate'] = data.regDate ? parseDateFlexible(data.regDate) : null;
   if (data.regPlace !== undefined) updateFields['transfer.$.regPlace'] = data.regPlace;
   if (data.transferOwner !== undefined)
     updateFields['transfer.$.transferOwner'] = data.transferOwner;

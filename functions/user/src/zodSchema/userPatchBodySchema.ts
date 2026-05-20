@@ -1,22 +1,21 @@
 import { z } from 'zod';
 
-const optionalNullableString = (max: number) =>
-  z.string().trim().max(max, { message: 'common.invalidBodyParams' }).optional().nullable().or(z.literal(''));
-
 export const userPatchBodySchema = z
   .object({
     firstName: z.string().trim().max(100, 'common.invalidBodyParams').optional(),
     lastName: z.string().trim().max(100, 'common.invalidBodyParams').optional(),
-    birthday: z
-      .string()
-      .trim()
-      .max(32, 'common.invalidBodyParams')
-      .refine((value) => !Number.isNaN(new Date(value).getTime()), { message: 'common.invalidBodyParams' })
-      .optional(),
-    email: optionalNullableString(254).refine(
-      (value) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+    birthday: z.union([
+      z
+        .string()
+        .trim()
+        .max(32, 'common.invalidBodyParams')
+        .refine((value) => !Number.isNaN(new Date(value).getTime()), { message: 'common.invalidBodyParams' }),
+      z.null(),
+    ]).optional(),
+    email: z.string().trim().max(254, 'common.invalidBodyParams').refine(
+      (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
       { message: 'common.invalidBodyParams' }
-    ),
+    ).optional(),
     district: z.string().trim().max(100, 'common.invalidBodyParams').optional(),
     image: z
       .string()
@@ -30,10 +29,10 @@ export const userPatchBodySchema = z
         }
       }, { message: 'common.invalidBodyParams' })
       .optional(),
-    phoneNumber: optionalNullableString(20).refine(
-      (value) => !value || /^\+[1-9]\d{1,14}$/.test(value),
+    phoneNumber: z.string().trim().max(20, 'common.invalidBodyParams').refine(
+      (value) => /^\+[1-9]\d{1,14}$/.test(value),
       { message: 'common.invalidBodyParams' }
-    ),
+    ).optional(),
   })
   .strict();
 

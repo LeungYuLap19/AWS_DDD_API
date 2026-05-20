@@ -84,28 +84,6 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
 
   const normalizedEmail = email === undefined ? undefined : normalizeEmail(email);
   const normalizedPhoneNumber = phoneNumber === undefined ? undefined : normalizePhone(phoneNumber);
-  const emailClearRequested = email !== undefined && !normalizedEmail;
-  const phoneClearRequested = phoneNumber !== undefined && !normalizedPhoneNumber;
-
-  const currentUser = await findActiveUserById(authContext.userId);
-  if (!currentUser) {
-    return response.errorResponse(404, 'common.notFound', ctx.event);
-  }
-
-  const currentEmail = normalizeEmail(currentUser.email);
-  const currentPhoneNumber = normalizePhone(currentUser.phoneNumber);
-
-  if (emailClearRequested || phoneClearRequested) {
-    if (!currentEmail && !currentPhoneNumber) {
-      return response.errorResponse(400, 'user.errors.noContactToRemove', ctx.event);
-    }
-
-    const nextEmail = email === undefined ? currentEmail : normalizedEmail;
-    const nextPhoneNumber = phoneNumber === undefined ? currentPhoneNumber : normalizedPhoneNumber;
-    if (!nextEmail && !nextPhoneNumber) {
-      return response.errorResponse(400, 'user.errors.contactRequired', ctx.event);
-    }
-  }
 
   if (normalizedEmail || normalizedPhoneNumber) {
     const conflict = (await User.findOne({
@@ -128,28 +106,15 @@ export async function handlePatchMe(ctx: RouteContext): Promise<APIGatewayProxyR
   }
 
   const updateFields: Record<string, unknown> = {};
-  const unsetFields: Record<string, 1> = {};
   if (firstName !== undefined) updateFields.firstName = firstName;
   if (lastName !== undefined) updateFields.lastName = lastName;
   if (district !== undefined) updateFields.district = district;
   if (image !== undefined) updateFields.image = image;
-  if (email !== undefined) {
-    if (normalizedEmail) updateFields.email = normalizedEmail;
-    else unsetFields.email = 1;
-  }
-  if (phoneNumber !== undefined) {
-    if (normalizedPhoneNumber) updateFields.phoneNumber = normalizedPhoneNumber;
-    else unsetFields.phoneNumber = 1;
-  }
+  if (email !== undefined) updateFields.email = normalizedEmail;
+  if (phoneNumber !== undefined) updateFields.phoneNumber = normalizedPhoneNumber;
   if (birthday !== undefined) updateFields.birthday = birthday ? new Date(birthday) : null;
 
-  const updateOperation: {
-    $set: Record<string, unknown>;
-    $unset?: Record<string, 1>;
-  } = { $set: updateFields };
-  if (Object.keys(unsetFields).length > 0) {
-    updateOperation.$unset = unsetFields;
-  }
+  const updateOperation = { $set: updateFields };
 
   let updatedUser: UserDocument | null;
   try {

@@ -149,11 +149,23 @@ Append a transfer-history row to the pet.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `regDate` | string | No | Flexible date string |
+| `regDate` | string or `null` | No | Flexible date string; `null` resets stored date |
 | `regPlace` | string | No | Max 200 chars |
 | `transferOwner` | string | No | Max 200 chars |
 | `transferContact` | string | No | Max 50 chars |
 | `transferRemark` | string | No | Max 2000 chars |
+
+#### Update Reset Payloads
+
+Use these payloads to reset fields:
+
+| Field | Reset payload |
+| --- | --- |
+| `regDate` | `null` |
+| `transferContact` | `""` |
+| `regPlace` | `""` |
+| `transferRemark` | `""` |
+| `transferOwner` | `""` |
 
 **Important:** the schema is strict. Unknown fields are rejected.
 
@@ -195,11 +207,23 @@ Any subset of the same fields accepted by create may be supplied.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `regDate` | string | No | Flexible date string |
+| `regDate` | string or `null` | No | Flexible date string; `null` resets stored date |
 | `regPlace` | string | No | Max 200 chars |
 | `transferOwner` | string | No | Max 200 chars |
 | `transferContact` | string | No | Max 50 chars |
 | `transferRemark` | string | No | Max 2000 chars |
+
+#### Update Reset Payloads
+
+Use these payloads to reset fields:
+
+| Field | Reset payload |
+| --- | --- |
+| `regDate` | `null` |
+| `transferContact` | `""` |
+| `regPlace` | `""` |
+| `transferRemark` | `""` |
+| `transferOwner` | `""` |
 
 #### Update Example Request
 

@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { TEXT_MAX, optionalDateString, optionalTrimmedString } from './shared';
+import {
+  TEXT_MAX,
+  optionalDateString,
+  optionalNullableDateString,
+  optionalTrimmedString,
+} from './shared';
 
 export const patchPetBodySchema = z
   .object({
@@ -10,6 +15,7 @@ export const patchPetBodySchema = z
     weight: z
       .number({ error: 'petProfile.errors.invalidWeightType' })
       .finite({ message: 'petProfile.errors.invalidWeightType' })
+      .nullable()
       .optional(),
     sex: optionalTrimmedString(20),
     sterilization: z.boolean().optional(),
@@ -23,7 +29,7 @@ export const patchPetBodySchema = z
     owner: optionalTrimmedString(TEXT_MAX.medium),
     tagId: optionalTrimmedString(64),
     ownerContact1: z.number().optional(),
-    ownerContact2: z.number().optional(),
+    ownerContact2: z.number().nullable().optional(),
     contact1Show: z.boolean().optional(),
     contact2Show: z.boolean().optional(),
     receivedDate: optionalDateString('petProfile.errors.invalidReceivedDateFormat'),
@@ -35,13 +41,13 @@ export const patchPetBodySchema = z
     placeOfBirth: optionalTrimmedString(TEXT_MAX.medium),
     motherName: optionalTrimmedString(TEXT_MAX.short),
     motherBreed: optionalTrimmedString(TEXT_MAX.short),
-    motherDOB: optionalDateString('petProfile.errors.invalidParentDateFormat'),
+    motherDOB: optionalNullableDateString('petProfile.errors.invalidParentDateFormat'),
     motherChip: optionalTrimmedString(50),
     motherPlaceOfBirth: optionalTrimmedString(TEXT_MAX.medium),
-    motherParity: z.coerce.number({ error: 'petProfile.errors.invalidMotherParity' }).optional(),
+    motherParity: z.coerce.number({ error: 'petProfile.errors.invalidMotherParity' }).nullable().optional(),
     fatherName: optionalTrimmedString(TEXT_MAX.short),
     fatherBreed: optionalTrimmedString(TEXT_MAX.short),
-    fatherDOB: optionalDateString('petProfile.errors.invalidParentDateFormat'),
+    fatherDOB: optionalNullableDateString('petProfile.errors.invalidParentDateFormat'),
     fatherChip: optionalTrimmedString(50),
     fatherPlaceOfBirth: optionalTrimmedString(TEXT_MAX.medium),
   })
