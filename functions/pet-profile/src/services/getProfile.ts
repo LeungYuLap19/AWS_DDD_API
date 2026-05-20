@@ -11,6 +11,39 @@ import { PUBLIC_TAG_PROJECTION } from './profileHelpers';
 
 const PET_VIEWS = new Set(['basic', 'detail', 'full']);
 
+type PublicOwnerContact = {
+  ownerEmail: string | null;
+  ownerPhoneNumber: string | null;
+};
+
+function toTrimmedStringOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function loadPublicOwnerContact(userId: unknown): Promise<PublicOwnerContact> {
+  if (!userId) {
+    return { ownerEmail: null, ownerPhoneNumber: null };
+  }
+
+  const User = mongoose.model('User');
+  const user = await User.findOne({
+    _id: userId,
+    deleted: { $ne: true },
+  })
+    .select({ email: 1, phoneNumber: 1, _id: 0 })
+    .lean() as { email?: unknown; phoneNumber?: unknown } | null;
+
+  return {
+    ownerEmail: toTrimmedStringOrNull(user?.email),
+    ownerPhoneNumber: toTrimmedStringOrNull(user?.phoneNumber),
+  };
+}
+
 async function loadLatestPetLostId(petId: string): Promise<string | null> {
   const PetLost = mongoose.model('PetLost');
   const record = await PetLost.findOne({ petId })
@@ -54,7 +87,8 @@ export async function handleGetPetProfile(ctx: RouteContext): Promise<APIGateway
 
 /**
  * Resolves a public pet lookup by tag id using the restricted
- * `PUBLIC_TAG_PROJECTION`, intentionally bypassing private ownership fields.
+ * `PUBLIC_TAG_PROJECTION`, then enriches the response with owner contact
+ * fields (`ownerEmail`, `ownerPhoneNumber`) from the pet's linked `userId`.
  */
 export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   await connectToMongoDB();
@@ -78,9 +112,11 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
     return response.errorResponse(404, 'common.notFound', ctx.event);
   }
 
+  const ownerContact = await loadPublicOwnerContact((pet as { userId?: unknown }).userId);
+
   return response.successResponse(200, ctx.event, {
     message: 'success.retrieved',
-    data: sanitizePublicTagLookupPet(pet),
+    data: sanitizePublicTagLookupPet(pet, ownerContact),
   });
 }
 

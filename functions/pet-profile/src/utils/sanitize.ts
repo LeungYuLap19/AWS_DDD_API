@@ -82,6 +82,11 @@ const PUBLIC_TAG_LOOKUP_FIELDS = [
   'receivedDate',
 ];
 
+type PublicOwnerContact = {
+  ownerEmail?: string | null;
+  ownerPhoneNumber?: string | null;
+};
+
 function asPlainRecord(value: unknown): AnyRecord | null {
   if (!value) {
     return null;
@@ -169,14 +174,17 @@ export function sanitizePetListSummary(pets: unknown[]): AnyRecord[] {
   return summaries;
 }
 
-/** Returns the public tag-lookup projection with missing fields normalized to `null`. */
-export function sanitizePublicTagLookupPet(pet: unknown): AnyRecord {
+/** Returns the public tag-lookup projection plus owner contact fields, with missing values normalized to `null`. */
+export function sanitizePublicTagLookupPet(pet: unknown, ownerContact: PublicOwnerContact = {}): AnyRecord {
   const raw = asPlainRecord(pet);
   const sanitized: AnyRecord = {};
 
   for (const field of PUBLIC_TAG_LOOKUP_FIELDS) {
     sanitized[field] = raw?.[field] ?? null;
   }
+
+  sanitized.ownerEmail = ownerContact.ownerEmail ?? null;
+  sanitized.ownerPhoneNumber = ownerContact.ownerPhoneNumber ?? null;
 
   return sanitized;
 }
