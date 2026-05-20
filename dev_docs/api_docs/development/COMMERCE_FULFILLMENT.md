@@ -20,7 +20,7 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 | PATCH | `/commerce/fulfillment/tags/{tagId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update allowed fields on one tag-bound record |
 | GET | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read supplier-facing fulfillment view |
 | PATCH | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update supplier-editable fulfillment fields |
-| GET | `/commerce/fulfillment/share-links/whatsapp/{verificationId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read WhatsApp share-link payload for one verification |
+| GET | `/commerce/fulfillment/share-links/whatsapp/{verificationId}` | `x-api-key` only | — | Read WhatsApp share-link payload for one verification |
 | POST | `/commerce/commands/ptag-detection-email` | `x-api-key` only | `application/json` | Send PTag detection email |
 
 ### Integration-Critical Behavior
@@ -33,7 +33,7 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 | Tag PATCH response | PATCH tag update returns no `data`; old `notificationDispatched` output is gone |
 | Supplier auth | Supplier routes are `admin`-only |
 | Supplier lookup fallback | Supplier identifier is resolved in order: `orderId`, then `contact`, then `tagId` |
-| Share-link auth | WhatsApp share-link route is `admin`-only and uses `verificationId` ObjectId |
+| Share-link auth | WhatsApp share-link route is API-key-only and uses `verificationId` ObjectId |
 | Tag-route openness | Tag GET is public behind API key only; tag PATCH is `admin`-only |
 | Email command side effect | PTag detection email is sent to the provided user email with CC to `notification@ptag.com.hk` |
 
@@ -53,7 +53,7 @@ Gateway/API-key/JWT behavior for commerce-fulfillment routes is defined only in 
 | `PATCH /commerce/fulfillment/tags/{tagId}` | Admin only |
 | `GET /commerce/fulfillment/suppliers/{orderId}` | Admin only |
 | `PATCH /commerce/fulfillment/suppliers/{orderId}` | Admin only |
-| `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}` | Admin only |
+| `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}` | No Lambda auth check; API key only |
 | `POST /commerce/commands/ptag-detection-email` | No Lambda auth check; API key only |
 
 ### Request-Model Validation
@@ -67,6 +67,10 @@ These routes use the `GenericJsonObjectRequest` API Gateway model:
 Malformed non-object JSON can be rejected before Lambda runs. Lambda-level body validation still enforces strict field schemas.
 
 ### Rate Limits
+
+`GET /commerce/fulfillment/share-links/whatsapp/{verificationId}` uses an IP-only Mongo-backed rate limit:
+
+- IP lane: `60` requests per `300` seconds
 
 `POST /commerce/commands/ptag-detection-email` uses layered Mongo-backed rate limits:
 
@@ -486,7 +490,7 @@ The body schema is strict. Extra keys are rejected.
 Read one fulfillment record for the WhatsApp share-link flow.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT with `admin` role
+**Auth:** `x-api-key` only
 
 #### Share-Link Path Parameters
 
@@ -534,8 +538,8 @@ Read one fulfillment record for the WhatsApp share-link flow.
 | --- | --- | --- |
 | 400 | `common.missingPathParams` | Missing `verificationId` |
 | 400 | `common.invalidObjectId` | Invalid `verificationId` |
-| 403 | `common.forbidden` | Caller is not `admin` |
 | 404 | `fulfillment.errors.notFound` | Verification not found |
+| 429 | `common.rateLimited` | Share-link rate limit exceeded |
 | 500 | `common.internalError` | Unexpected database or server error |
 
 ### POST /commerce/commands/ptag-detection-email
@@ -603,7 +607,7 @@ On success, the Lambda sends the rendered HTML email to the provided `email` add
 1. Use `/commerce/orders/operations` for admin operations dashboards and `/commerce/fulfillment` for admin fulfillment dashboards; they are different list payloads from different Lambdas.
 2. Read all single-record fulfillment responses from `data`; the old `form` wrapper is gone.
 3. Do not expect any payload body from successful DELETE or PATCH fulfillment mutations beyond the shared success envelope.
-4. Use `GET /commerce/fulfillment/tags/{tagId}` and `POST /commerce/commands/ptag-detection-email` as API-key-only routes. Fulfillment list, delete, supplier routes, share-link, and tag PATCH remain admin-only.
+4. Use `GET /commerce/fulfillment/tags/{tagId}`, `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}`, and `POST /commerce/commands/ptag-detection-email` as API-key-only routes. Fulfillment list, delete, supplier routes, and tag PATCH remain admin-only.
 5. For supplier lookup and update, identifier resolution still follows: `orderId`, then `contact`, then `tagId`.
 
 ---

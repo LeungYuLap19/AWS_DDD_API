@@ -1,8 +1,8 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireRole } from '@aws-ddd-api/shared/auth/context';
 import type { RouteContext } from '../../../../types/lambda';
 import { connectToMongoDB } from '../config/db';
+import { applyRateLimit } from '../utils/rateLimit';
 import { response } from '../utils/response';
 import { sanitizeOrderVerification } from '../utils/sanitize';
 import { isValidObjectId } from '../utils/normalize';
@@ -23,8 +23,6 @@ type RawDocument = Record<string, unknown>;
  * Legacy: GET /v2/orderVerification/whatsapp-order-link/{_id} (OrderVerification)
  */
 export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  requireRole(ctx.event, ['admin']);
-
   const verificationId = ctx.event.pathParameters?.verificationId ?? '';
 
   if (!verificationId) {
@@ -36,6 +34,18 @@ export async function handleGetWhatsAppOrderLink(ctx: RouteContext): Promise<API
   }
 
   await connectToMongoDB();
+
+  const rateLimitResponse = await applyRateLimit({
+    action: 'commerce.fulfillment.shareLinks.whatsapp',
+    event: ctx.event,
+    policies: [
+      { scope: 'ip', limit: 60, windowSeconds: 300 },
+    ],
+  });
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const OrderVerification = mongoose.model('OrderVerification');
 
   const orderVerify = await OrderVerification.findOne({ _id: verificationId })

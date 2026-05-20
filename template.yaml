@@ -2317,6 +2317,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/fulfillment/share-links/whatsapp/{verificationId}
             Method: GET
+            Auth:
+              Authorizer: NONE
         CommerceCommandsPtagEmailPOST:
           Type: Api
           Properties:
