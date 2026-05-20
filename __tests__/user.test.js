@@ -493,21 +493,9 @@ describe('Tier 2 - user handler integration', () => {
     expect(JSON.parse(res.body).success).toBe(false);
   });
 
-  test('PATCH /user/me unsets phoneNumber when the payload explicitly clears it', async () => {
+  test('PATCH /user/me rejects phoneNumber reset payloads', async () => {
     const { handler, userModel } = loadHandlerWithMocks({
-      activeUser: {
-        _id: { toString: () => '507f1f77bcf86cd799439011' },
-        email: 'tier2@test.com',
-        phoneNumber: '+85260000001',
-        role: 'user',
-        deleted: false,
-      },
-      updatedUser: {
-        _id: { toString: () => '507f1f77bcf86cd799439011' },
-        email: 'tier2@test.com',
-        role: 'user',
-        deleted: false,
-      },
+      activeUser: null,
     });
 
     const res = await handler(
@@ -523,27 +511,41 @@ describe('Tier 2 - user handler integration', () => {
       createContext()
     );
 
-    expect(res.statusCode).toBe(200);
-    expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: '507f1f77bcf86cd799439011', deleted: false },
-      { $set: {}, $unset: { phoneNumber: 1 } },
-      { returnDocument: 'after', lean: true }
-    );
-    expect(JSON.parse(res.body).data.phoneNumber).toBeUndefined();
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).errorKey).toBe('common.invalidBodyParams');
+    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
-  test('PATCH /user/me unsets email when the payload explicitly clears it', async () => {
+  test('PATCH /user/me rejects email reset payloads', async () => {
     const { handler, userModel } = loadHandlerWithMocks({
-      activeUser: {
-        _id: { toString: () => '507f1f77bcf86cd799439011' },
-        email: 'tier2@test.com',
-        phoneNumber: '+85260000001',
-        role: 'user',
-        deleted: false,
-      },
+      activeUser: null,
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'PATCH',
+        body: JSON.stringify({ email: '' }),
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'tier2@test.com',
+          userRole: 'user',
+        },
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).errorKey).toBe('common.invalidBodyParams');
+    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  test('PATCH /user/me allows resetting birthday to null', async () => {
+    const { handler, userModel } = loadHandlerWithMocks({
       updatedUser: {
         _id: { toString: () => '507f1f77bcf86cd799439011' },
+        email: 'tier2@test.com',
         phoneNumber: '+85260000001',
+        birthday: null,
         role: 'user',
         deleted: false,
       },
@@ -552,7 +554,7 @@ describe('Tier 2 - user handler integration', () => {
     const res = await handler(
       createEvent({
         method: 'PATCH',
-        body: JSON.stringify({ email: '' }),
+        body: JSON.stringify({ birthday: null }),
         authorizer: {
           userId: '507f1f77bcf86cd799439011',
           userEmail: 'tier2@test.com',
@@ -565,17 +567,18 @@ describe('Tier 2 - user handler integration', () => {
     expect(res.statusCode).toBe(200);
     expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: '507f1f77bcf86cd799439011', deleted: false },
-      { $set: {}, $unset: { email: 1 } },
+      { $set: { birthday: null } },
       { returnDocument: 'after', lean: true }
     );
-    expect(JSON.parse(res.body).data.email).toBeUndefined();
+    expect(JSON.parse(res.body).data.birthday).toBeNull();
   });
 
-  test('PATCH /user/me rejects clearing the last remaining contact method', async () => {
+  test('PATCH /user/me allows resetting district to empty string', async () => {
     const { handler, userModel } = loadHandlerWithMocks({
-      activeUser: {
+      updatedUser: {
         _id: { toString: () => '507f1f77bcf86cd799439011' },
         email: 'tier2@test.com',
+        district: '',
         role: 'user',
         deleted: false,
       },
@@ -584,7 +587,7 @@ describe('Tier 2 - user handler integration', () => {
     const res = await handler(
       createEvent({
         method: 'PATCH',
-        body: JSON.stringify({ email: '' }),
+        body: JSON.stringify({ district: '' }),
         authorizer: {
           userId: '507f1f77bcf86cd799439011',
           userEmail: 'tier2@test.com',
@@ -594,36 +597,13 @@ describe('Tier 2 - user handler integration', () => {
       createContext()
     );
 
-    expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).errorKey).toBe('user.errors.contactRequired');
-    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
-  });
-
-  test('PATCH /user/me rejects remove request when no email/phone exists in DB', async () => {
-    const { handler, userModel } = loadHandlerWithMocks({
-      activeUser: {
-        _id: { toString: () => '507f1f77bcf86cd799439011' },
-        role: 'user',
-        deleted: false,
-      },
-    });
-
-    const res = await handler(
-      createEvent({
-        method: 'PATCH',
-        body: JSON.stringify({ phoneNumber: '' }),
-        authorizer: {
-          userId: '507f1f77bcf86cd799439011',
-          userEmail: 'tier2@test.com',
-          userRole: 'user',
-        },
-      }),
-      createContext()
+    expect(res.statusCode).toBe(200);
+    expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: '507f1f77bcf86cd799439011', deleted: false },
+      { $set: { district: '' } },
+      { returnDocument: 'after', lean: true }
     );
-
-    expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).errorKey).toBe('user.errors.noContactToRemove');
-    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(JSON.parse(res.body).data.district).toBe('');
   });
 
   test('missing authorizer context is normalized to a 401 common.unauthorized response', async () => {
@@ -738,7 +718,7 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       expect(getRes.body.data.district).toBe('Wan Chai');
     });
 
-    samTest('PATCH /user/me clears phoneNumber from the stored user document', async () => {
+    samTest('PATCH /user/me rejects phoneNumber reset payloads', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const patchRes = await req(
@@ -748,15 +728,14 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 2}` })
       );
 
-      expect(patchRes.status).toBe(200);
-      expect(patchRes.body.data.phoneNumber).toBeUndefined();
+      expect(patchRes.status).toBe(400);
+      expect(patchRes.body.errorKey).toBe('common.invalidBodyParams');
 
       const persisted = await usersCol().findOne({ _id: state.primaryUserId });
-      expect(persisted.phoneNumber).toBeUndefined();
-      expect(Object.prototype.hasOwnProperty.call(persisted, 'phoneNumber')).toBe(false);
+      expect(persisted.phoneNumber).toBe(state.primaryPhone);
     });
 
-    samTest('PATCH /user/me clears email from the stored user document', async () => {
+    samTest('PATCH /user/me rejects email reset payloads', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
       const patchRes = await req(
@@ -766,12 +745,45 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
         authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 3}` })
       );
 
-      expect(patchRes.status).toBe(200);
-      expect(patchRes.body.data.email).toBeUndefined();
+      expect(patchRes.status).toBe(400);
+      expect(patchRes.body.errorKey).toBe('common.invalidBodyParams');
 
       const persisted = await usersCol().findOne({ _id: state.primaryUserId });
-      expect(persisted.email).toBeUndefined();
-      expect(Object.prototype.hasOwnProperty.call(persisted, 'email')).toBe(false);
+      expect(persisted.email).toBe(state.primaryEmail);
+    });
+
+    samTest('PATCH /user/me allows resetting birthday to null', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const patchRes = await req(
+        'PATCH',
+        '/user/me',
+        { birthday: null },
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 4}` })
+      );
+
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.data.birthday).toBeNull();
+
+      const persisted = await usersCol().findOne({ _id: state.primaryUserId });
+      expect(persisted.birthday).toBeNull();
+    });
+
+    samTest('PATCH /user/me allows resetting district to empty string', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const patchRes = await req(
+        'PATCH',
+        '/user/me',
+        { district: '' },
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 5}` })
+      );
+
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.data.district).toBe('');
+
+      const persisted = await usersCol().findOne({ _id: state.primaryUserId });
+      expect(persisted.district).toBe('');
     });
 
     samTest('repeated GET requests remain stable across warm invocations', async () => {
@@ -914,51 +926,21 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('user.errors.contactRequired');
+      expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
-    samTest('PATCH /user/me rejects removing contact when no email/phone exists in DB', async () => {
+    samTest('PATCH /user/me rejects single-field contact reset payload', async () => {
       if (!(await ensureDbOrSkip())) return;
       await seedUsers();
-      const noContactUserId = new mongoose.Types.ObjectId();
-      const noContactToken = signUserToken({
-        userId: noContactUserId,
-        email: `${RUN_ID}-no-contact@test.com`,
-      });
-      const now = new Date();
-
-      await usersCol().insertOne({
-        _id: noContactUserId,
-        image: '',
-        firstName: 'No',
-        lastName: 'Contact',
-        role: 'user',
-        verified: true,
-        subscribe: false,
-        promotion: false,
-        district: null,
-        birthday: null,
-        deleted: false,
-        credit: 300,
-        vetCredit: 300,
-        eyeAnalysisCredit: 300,
-        bloodAnalysisCredit: 300,
-        gender: '',
-        createdAt: now,
-        updatedAt: now,
-      });
-
       const res = await req(
         'PATCH',
         '/user/me',
         { email: '' },
-        authHeaders(noContactToken, { 'x-forwarded-for': `198.51.116.${(TEST_TS % 200) + 3}` })
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.116.${(TEST_TS % 200) + 3}` })
       );
 
       expect(res.status).toBe(400);
-      expect(res.body.errorKey).toBe('user.errors.noContactToRemove');
-
-      await usersCol().deleteOne({ _id: noContactUserId });
+      expect(res.body.errorKey).toBe('common.invalidBodyParams');
     });
 
     samTest('repeat delete returns not found on the second request', async () => {
