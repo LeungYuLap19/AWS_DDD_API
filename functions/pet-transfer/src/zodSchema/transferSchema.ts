@@ -10,7 +10,12 @@ const transferCommonFields = {
 
 export const transferCreateBodySchema = z.object(transferCommonFields).strict();
 
-export const transferUpdateBodySchema = z.object(transferCommonFields).strict();
+const transferUpdateFields = {
+  ...transferCommonFields,
+  regDate: z.string().trim().max(64, 'common.invalidBodyParams').optional().nullable(),
+};
+
+export const transferUpdateBodySchema = z.object(transferUpdateFields).strict();
 
 export const ngoTransferBodySchema = z
   .object({
