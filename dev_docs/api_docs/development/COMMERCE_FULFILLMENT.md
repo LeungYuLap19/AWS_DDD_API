@@ -21,7 +21,7 @@ Post-order fulfillment, supplier edit flows, WhatsApp share-link retrieval, and 
 | GET | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read supplier-facing fulfillment view |
 | PATCH | `/commerce/fulfillment/suppliers/{orderId}` | `x-api-key` + Bearer JWT with `admin` role | `application/json` | Update supplier-editable fulfillment fields |
 | GET | `/commerce/fulfillment/share-links/whatsapp/{verificationId}` | `x-api-key` + Bearer JWT with `admin` role | — | Read WhatsApp share-link payload for one verification |
-| POST | `/commerce/commands/ptag-detection-email` | `x-api-key` + Bearer JWT | `application/json` | Send PTag detection email |
+| POST | `/commerce/commands/ptag-detection-email` | `x-api-key` only | `application/json` | Send PTag detection email |
 
 ### Integration-Critical Behavior
 
@@ -54,7 +54,7 @@ Gateway/API-key/JWT behavior for commerce-fulfillment routes is defined only in 
 | `GET /commerce/fulfillment/suppliers/{orderId}` | Admin only |
 | `PATCH /commerce/fulfillment/suppliers/{orderId}` | Admin only |
 | `GET /commerce/fulfillment/share-links/whatsapp/{verificationId}` | Admin only |
-| `POST /commerce/commands/ptag-detection-email` | Any authenticated caller |
+| `POST /commerce/commands/ptag-detection-email` | No Lambda auth check; API key only |
 
 ### Request-Model Validation
 
@@ -68,7 +68,12 @@ Malformed non-object JSON can be rejected before Lambda runs. Lambda-level body 
 
 ### Rate Limits
 
-No dedicated route-level rate limiter is configured inside the fulfillment handlers.
+`POST /commerce/commands/ptag-detection-email` uses layered Mongo-backed rate limits:
+
+- IP lane: `20` requests per `300` seconds
+- email-identifier lane: `3` requests per `600` seconds
+
+Other fulfillment routes in this Lambda currently have no dedicated route-level limiter.
 
 ### Localization
 
@@ -535,10 +540,10 @@ Read one fulfillment record for the WhatsApp share-link flow.
 
 ### POST /commerce/commands/ptag-detection-email
 
-Send PTag detection email to one user. Admin only.
+Send PTag detection email to one user.
 
 **Lambda owner:** `commerce-fulfillment`  
-**Auth:** `x-api-key` + Bearer JWT 
+**Auth:** `x-api-key` only
 **Content-Type:** `application/json`
 
 #### Detection Email Request Body
@@ -587,7 +592,7 @@ On success, the Lambda sends the rendered HTML email to the provided `email` add
 | 400 | `common.invalidBodyParams` | Malformed JSON or strict-schema violation |
 | 400 | `fulfillment.errors.invalidLocationURL` | `locationURL` is not a valid `https://` URL |
 | 400 | `fulfillment.errors.invalidEmail` | Invalid email |
-| 403 | `common.forbidden` | Caller is not `admin` |
+| 429 | `common.rateLimited` | Rate-limit policy exceeded for caller IP or target email |
 | 503 | `fulfillment.errors.emailServiceUnavailable` | SMTP send failed |
 | 500 | `common.internalError` | Unexpected server error |
 
@@ -598,7 +603,7 @@ On success, the Lambda sends the rendered HTML email to the provided `email` add
 1. Use `/commerce/orders/operations` for admin operations dashboards and `/commerce/fulfillment` for admin fulfillment dashboards; they are different list payloads from different Lambdas.
 2. Read all single-record fulfillment responses from `data`; the old `form` wrapper is gone.
 3. Do not expect any payload body from successful DELETE or PATCH fulfillment mutations beyond the shared success envelope.
-4. Use `GET /commerce/fulfillment/tags/{tagId}` for API-key-only public tag reads. All other fulfillment endpoints in this Lambda are admin-only.
+4. Use `GET /commerce/fulfillment/tags/{tagId}` and `POST /commerce/commands/ptag-detection-email` as API-key-only routes. Fulfillment list, delete, supplier routes, share-link, and tag PATCH remain admin-only.
 5. For supplier lookup and update, identifier resolution still follows: `orderId`, then `contact`, then `tagId`.
 
 ---
