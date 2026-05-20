@@ -1,6 +1,6 @@
 import type { APIGatewayProxyResult } from 'aws-lambda';
 import mongoose from 'mongoose';
-import { requireAuthContext } from '@aws-ddd-api/shared/auth/context';
+import { getAuthContext, requireAuthContext } from '@aws-ddd-api/shared/auth/context';
 import { paginationQuerySchema, parseObjectIdParam } from '@aws-ddd-api/shared/validation/common';
 import { parseMultipartBody } from '@aws-ddd-api/shared/validation/zod';
 import type { RouteContext } from '../../../../types/lambda';
@@ -41,13 +41,12 @@ export async function handleListPetFound(ctx: RouteContext): Promise<APIGatewayP
 }
 
 /**
- * Creates a pet-found report for the authenticated user, including multipart
+ * Creates a pet-found report using API-key access, optional caller/userId
+ * context, multipart
  * normalization, serial-number allocation, optional image uploads, and legacy
  * date validation.
  */
 export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewayProxyResult> {
-  const authContext = requireAuthContext(ctx.event);
-
   const multiResult = await parseMultipartBody(ctx.event, createPetFoundSchema, {
     normalize: normalizeFoundMultipartBody,
   });
@@ -55,13 +54,14 @@ export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewa
     return response.errorResponse(multiResult.statusCode, multiResult.errorKey, ctx.event);
   }
   const { data, files } = multiResult;
+  const authContext = getAuthContext(ctx.event);
 
   await connectToMongoDB();
 
   const rateLimitResponse = await applyRateLimit({
     action: 'petRecovery.petFound.create',
     event: ctx.event,
-    identifier: authContext.userId,
+    identifier: authContext?.userId ?? null,
     policies: [
       { scope: 'ip', limit: 15, windowSeconds: 60 },
       { scope: 'identifier', limit: 8, windowSeconds: 60 },
@@ -98,7 +98,7 @@ export async function handleCreatePetFound(ctx: RouteContext): Promise<APIGatewa
 
   const record = await PetFound.create({
     _id: recordId,
-    userId: authContext.userId,
+    userId: authContext?.userId ?? null,
     animal: data.animal,
     breed: data.breed,
     description: data.description,

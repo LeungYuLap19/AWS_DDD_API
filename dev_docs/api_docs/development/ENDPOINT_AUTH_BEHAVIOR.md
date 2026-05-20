@@ -102,7 +102,6 @@ Every documented route belongs to exactly one auth class.
 - `POST /pet/analysis/uploads/breed-image`
 - `POST /pet/recovery/lost`
 - `DELETE /pet/recovery/lost/{petLostID}`
-- `POST /pet/recovery/found`
 - `DELETE /pet/recovery/found/{petFoundID}`
 - `GET /pet/biometric/{petId}`
 - `DELETE /pet/biometric/{petId}`
@@ -147,6 +146,7 @@ Every documented route belongs to exactly one auth class.
 - `POST /commerce/storefront/shop-code-verifications`
 - `GET /pet/recovery/lost`
 - `GET /pet/recovery/found`
+- `POST /pet/recovery/found`
 - `GET /commerce/fulfillment/tags/{tagId}`
 - `POST /logistics/token`
 - `POST /logistics/cloud-waybill`

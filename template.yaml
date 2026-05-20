@@ -1795,6 +1795,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /pet/recovery/found
             Method: POST
+            Auth:
+              Authorizer: NONE
         PetRecoveryFoundListOPTIONS:
           Type: Api
           Properties:
@@ -2281,6 +2283,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/fulfillment/tags/{tagId}
             Method: GET
+            Auth:
+              Authorizer: NONE
         CommerceFulfillmentTagsPATCH:
           Type: Api
           Properties:

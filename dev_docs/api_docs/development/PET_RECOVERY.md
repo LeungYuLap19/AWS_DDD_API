@@ -18,7 +18,7 @@ Lost and found recovery listings and submissions. All routes are authenticated. 
 | POST | `/pet/recovery/lost` | `x-api-key` + Bearer JWT | `multipart/form-data` | Create a lost-pet report |
 | DELETE | `/pet/recovery/lost/{petLostID}` | `x-api-key` + Bearer JWT | — | Delete caller-owned lost-pet report |
 | GET | `/pet/recovery/found` | `x-api-key` only | — | List found-pet reports |
-| POST | `/pet/recovery/found` | `x-api-key` + Bearer JWT | `multipart/form-data` | Create a found-pet report |
+| POST | `/pet/recovery/found` | `x-api-key` only | `multipart/form-data` | Create a found-pet report |
 | DELETE | `/pet/recovery/found/{petFoundID}` | `x-api-key` + Bearer JWT | — | Delete caller-owned found-pet report |
 
 ### Contract Notes
@@ -47,6 +47,7 @@ Additional route-specific checks:
 
 - DELETE routes require `record.userId === jwt.userId`
 - Lost-report creation with `petId` requires linked-pet ownership
+- Found-report creation accepts optional multipart `userId` and does not require JWT
 - There is no public list endpoint in the current DDD implementation
 
 ### Rate Limits
@@ -56,7 +57,7 @@ Current create-route limits are enforced by the shared rate-limit layer.
 | Route | Policy set |
 | --- | --- |
 | `POST /pet/recovery/lost` | IP 15/min, identifier 8/min, IP+identifier 5/min |
-| `POST /pet/recovery/found` | IP 15/min, identifier 8/min, IP+identifier 5/min |
+| `POST /pet/recovery/found` | IP 15/min, identifier 8/min when `userId` is present, IP+identifier 5/min |
 
 Exceeded limits return `429 common.rateLimited`.
 
@@ -405,13 +406,14 @@ List found-pet reports sorted by `foundDate` descending.
 Create a found-pet report using `multipart/form-data`.
 
 **Lambda owner:** `pet-recovery`  
-**Auth:** `x-api-key` + Bearer JWT required  
+**Auth:** `x-api-key` only  
 **Content-Type:** `multipart/form-data`
 
 #### Found Create Form Fields
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `userId` | string | No | Optional ObjectId; stored as record owner id when provided |
 | `animal` | string | Yes | |
 | `breed` | string | No | |
 | `description` | string | No | |
@@ -426,14 +428,17 @@ Create a found-pet report using `multipart/form-data`.
 
 #### Found Create Example Request
 
-Use multipart form-data. Representative text fields:
+Use multipart form-data with `x-api-key`. Representative `curl` request:
 
-```text
-animal=Cat
-foundDate=2025-03-15
-foundLocation=HK Island
-foundDistrict=Central
-ownerContact1=98765432
+```bash
+curl -X POST 'https://b6nj233e1a.execute-api.ap-southeast-1.amazonaws.com/development/pet/recovery/found' \
+  -H 'x-api-key: <api-key>' \
+  -F 'animal=Cat' \
+  -F 'foundDate=2025-03-15' \
+  -F 'foundLocation=HK Island' \
+  -F 'foundDistrict=Central' \
+  -F 'ownerContact1=98765432' \
+  -F 'userId=665f0000000000000000abcd'
 ```
 
 #### Found Create Success (201)
