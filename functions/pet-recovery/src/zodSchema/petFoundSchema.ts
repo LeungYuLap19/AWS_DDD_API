@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { sanitizeText } from '@aws-ddd-api/shared/sanitization/text';
+import { objectIdString } from '@aws-ddd-api/shared/validation/common';
 export const createPetFoundSchema = z
   .object({
+    userId: objectIdString().optional(),
     animal: z
       .string({ error: 'petRecovery.errors.petFound.animalRequired' })
       .trim()
