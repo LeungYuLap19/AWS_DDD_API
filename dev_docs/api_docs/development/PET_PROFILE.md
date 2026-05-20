@@ -267,6 +267,8 @@ The list summary intentionally does not include `userId`, contact fields, `tagId
 - `info`
 - `status`
 - `receivedDate`
+- `ownerEmail`
+- `ownerPhoneNumber`
 
 ---
 
@@ -657,7 +659,9 @@ Public tag-based lookup.
     "features": "Brown ears",
     "info": "Friendly",
     "status": "available",
-    "receivedDate": "2024-01-02T00:00:00.000Z"
+    "receivedDate": "2024-01-02T00:00:00.000Z",
+    "ownerEmail": "owner@example.com",
+    "ownerPhoneNumber": "91234567"
   },
   "requestId": "aws-lambda-request-id"
 }

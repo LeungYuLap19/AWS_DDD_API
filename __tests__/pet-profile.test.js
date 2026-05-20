@@ -869,12 +869,19 @@ describe('pet-profile handler Tier 2 integration', () => {
     });
 
     test('returns public-safe tag lookup data without auth for GET /pet/profile/by-tag/{tagId}', async () => {
+      const ownerId = new mongoose.Types.ObjectId().toString();
       const { handler } = loadHandlerWithMocks({
+        userDoc: {
+          _id: ownerId,
+          email: 'owner@example.test',
+          phoneNumber: '91234567',
+          deleted: false,
+        },
         publicTagPet: {
           name: 'Mochi',
           animal: 'Dog',
           breed: 'Mixed',
-          userId: new mongoose.Types.ObjectId().toString(),
+          userId: ownerId,
         },
       });
 
@@ -892,8 +899,37 @@ describe('pet-profile handler Tier 2 integration', () => {
       expect(parsed.statusCode).toBe(200);
       expect(parsed.body.data.name).toBe('Mochi');
       expect(parsed.body.data.breed).toBe('Mixed');
+      expect(parsed.body.data.ownerEmail).toBe('owner@example.test');
+      expect(parsed.body.data.ownerPhoneNumber).toBe('91234567');
       expect(parsed.body.data.userId).toBeUndefined();
       expect(parsed.body.data.ngoId).toBeUndefined();
+    });
+
+    test('returns null owner contact fields when public tag pet owner user cannot be found', async () => {
+      const { handler } = loadHandlerWithMocks({
+        publicTagPet: {
+          name: 'Mochi',
+          animal: 'Dog',
+          breed: 'Mixed',
+          userId: new mongoose.Types.ObjectId().toString(),
+        },
+        userDoc: null,
+      });
+
+      const result = await handler(
+        createEvent({
+          method: 'GET',
+          path: '/pet/profile/by-tag/TAG-001',
+          resource: '/pet/profile/by-tag/{tagId}',
+          pathParameters: { tagId: 'TAG-001' },
+        }),
+        createContext()
+      );
+
+      const parsed = parseResponse(result);
+      expect(parsed.statusCode).toBe(200);
+      expect(parsed.body.data.ownerEmail).toBeNull();
+      expect(parsed.body.data.ownerPhoneNumber).toBeNull();
     });
 
     test('creates a pet profile from multipart form via POST /pet/profile', async () => {

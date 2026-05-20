@@ -7,6 +7,7 @@ export type UserDocument = {
 };
 
 export const PUBLIC_TAG_PROJECTION = {
+  userId: 1,
   name: 1,
   breedimage: 1,
   animal: 1,

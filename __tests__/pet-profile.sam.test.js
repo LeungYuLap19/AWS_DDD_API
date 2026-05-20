@@ -355,6 +355,8 @@ describe('Tier 3 - /pet/profile via SAM local + UAT DB', () => {
 
       expect(res.status).toBe(200);
       expect(data.name).toBe('Tagged Pet');
+      expect(data.ownerEmail).toBe(`${RUN_ID}-primary@test.com`);
+      expect(data.ownerPhoneNumber).toBeNull();
       expect(data.userId).toBeUndefined();
       expect(data.ngoId).toBeUndefined();
     });
