@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 export const userPatchBodySchema = z
   .object({
-    firstName: z.string().trim().max(100, 'common.invalidBodyParams').optional(),
-    lastName: z.string().trim().max(100, 'common.invalidBodyParams').optional(),
+    firstName: z.string().trim().min(1, 'common.invalidBodyParams').max(100, 'common.invalidBodyParams').optional(),
+    lastName: z.string().trim().min(1, 'common.invalidBodyParams').max(100, 'common.invalidBodyParams').optional(),
     birthday: z.union([
       z
         .string()

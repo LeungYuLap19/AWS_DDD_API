@@ -47,11 +47,12 @@ export const purchaseConfirmationSchema = z
       .max(128)
       .transform(sanitizeText),
     petName: z
-      .string({ message: 'common.missingBodyParams' })
+      .string({ message: 'common.invalidBodyParams' })
       .trim()
-      .min(1, { message: 'common.missingBodyParams' })
       .max(100, { message: 'common.invalidBodyParams' })
-      .transform(sanitizeText),
+      .transform(sanitizeText)
+      .optional()
+      .default(''),
     phoneNumber: z
       .string()
       .trim()
@@ -72,6 +73,17 @@ export const purchaseConfirmationSchema = z
     optionColor: z.string().trim().max(64).optional().default(''),
     lang: z.enum(['chn', 'eng']).optional().default('eng'),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    const requiresPetName = data.option !== 'PTag';
+    const hasPetName = data.petName.trim().length > 0;
+    if (requiresPetName && !hasPetName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['petName'],
+        message: 'common.missingBodyParams',
+      });
+    }
+  });
 
 export type PurchaseConfirmationInput = z.infer<typeof purchaseConfirmationSchema>;

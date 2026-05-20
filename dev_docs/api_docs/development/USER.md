@@ -132,8 +132,8 @@ Removed internal fields:
 
 | Field | Type | Required | Validation |
 | --- | --- | --- | --- |
-| `firstName` | string | No | Max 100 chars |
-| `lastName` | string | No | Max 100 chars |
+| `firstName` | string | No | Must be non-empty after trim; max 100 chars |
+| `lastName` | string | No | Must be non-empty after trim; max 100 chars |
 | `birthday` | string or `null` | No | String value must parse as a valid date; `null` clears it |
 | `email` | string | No | Must be valid email |
 | `district` | string | No | Max 100 chars |
@@ -202,8 +202,8 @@ Partially update the current user profile.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `firstName` | string | No | |
-| `lastName` | string | No | |
+| `firstName` | string | No | Must be non-empty after trim |
+| `lastName` | string | No | Must be non-empty after trim |
 | `birthday` | string or `null` | No | Stored as a `Date` when provided; `null` clears it |
 | `email` | string | No | Normalized before duplicate checks and storage |
 | `district` | string | No | `""` is allowed and persists as empty string |
@@ -214,6 +214,7 @@ Partially update the current user profile.
 
 - `birthday` can be reset by sending `null`.
 - `district` can be reset by sending `""`.
+- `firstName` and `lastName` cannot be reset via empty payloads.
 - `email` and `phoneNumber` cannot be reset via empty/null payloads.
 
 #### Patch Example Request
