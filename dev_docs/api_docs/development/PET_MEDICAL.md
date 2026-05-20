@@ -327,7 +327,25 @@ Update a general medical record.
 
 #### General Update Request Body
 
-Any subset of the general medical create fields may be supplied.
+Any subset of these fields may be supplied.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `medicalDate` | string or `null` | No | Flexible date string; use `null` to reset (empty string is invalid) |
+| `medicalPlace` | string | No | Max 200 chars |
+| `medicalDoctor` | string | No | Max 100 chars |
+| `medicalResult` | string | No | Max 2000 chars |
+| `medicalSolution` | string | No | Max 2000 chars |
+
+#### General Update Reset Payloads
+
+| Field | Reset payload |
+| --- | --- |
+| `medicalDate` | `null` |
+| `medicalPlace` | `""` |
+| `medicalDoctor` | `""` |
+| `medicalResult` | `""` |
+| `medicalSolution` | `""` |
 
 #### General Update Errors
 
@@ -411,6 +429,30 @@ Update a medication record.
 **Lambda owner:** `pet-medical`  
 **Auth:** `x-api-key` + Bearer JWT required  
 **Content-Type:** `application/json`
+
+#### Medication Update Request Body
+
+Any subset of these fields may be supplied.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `medicationDate` | string or `null` | No | Flexible date string; use `null` to reset (empty string is invalid) |
+| `drugName` | string | No | Max 200 chars |
+| `drugPurpose` | string | No | Max 500 chars |
+| `drugMethod` | string | No | Max 500 chars |
+| `allergy` | boolean | No | Use `false` to reset |
+| `drugRemark` | string | No | Max 2000 chars |
+
+#### Medication Update Reset Payloads
+
+| Field | Reset payload |
+| --- | --- |
+| `medicationDate` | `null` |
+| `drugName` | `""` |
+| `drugPurpose` | `""` |
+| `drugMethod` | `""` |
+| `allergy` | `false` |
+| `drugRemark` | `""` |
 
 #### Medication Update Errors
 
@@ -497,6 +539,34 @@ Update a deworming record.
 **Auth:** `x-api-key` + Bearer JWT required  
 **Content-Type:** `application/json`
 
+#### Deworming Update Request Body
+
+Any subset of these fields may be supplied.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `date` | string or `null` | No | Flexible date string; use `null` to reset (empty string is invalid) |
+| `vaccineBrand` | string | No | Max 100 chars |
+| `vaccineType` | string | No | Max 100 chars |
+| `typesOfInternalParasites` | string[] | No | Max 50 items; `[]` clears |
+| `typesOfExternalParasites` | string[] | No | Max 50 items; `[]` clears |
+| `frequency` | integer or `null` | No | 0 to 3650 when numeric; `null` resets |
+| `nextDewormDate` | string or `null` | No | Flexible date string; use `null` to reset (empty string is invalid) |
+| `notification` | boolean | No | Use `false` to reset |
+
+#### Deworming Update Reset Payloads
+
+| Field | Reset payload |
+| --- | --- |
+| `date` | `null` |
+| `vaccineBrand` | `""` |
+| `vaccineType` | `""` |
+| `typesOfInternalParasites` | `[]` |
+| `typesOfExternalParasites` | `[]` |
+| `frequency` | `null` or `0` |
+| `nextDewormDate` | `null` |
+| `notification` | `false` |
+
 #### Deworming Update Errors
 
 | Status | `errorKey` | Cause |
@@ -579,6 +649,30 @@ Update a blood test record.
 **Lambda owner:** `pet-medical`  
 **Auth:** `x-api-key` + Bearer JWT required  
 **Content-Type:** `application/json`
+
+#### Blood Test Update Request Body
+
+Any subset of these fields may be supplied.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `bloodTestDate` | string or `null` | No | Flexible date string; use `null` to reset (empty string is invalid) |
+| `heartworm` | string | No | Max 50 chars |
+| `lymeDisease` | string | No | Max 50 chars |
+| `ehrlichiosis` | string | No | Max 50 chars |
+| `anaplasmosis` | string | No | Max 50 chars |
+| `babesiosis` | string | No | Max 50 chars |
+
+#### Blood Test Update Reset Payloads
+
+| Field | Reset payload |
+| --- | --- |
+| `bloodTestDate` | `null` |
+| `heartworm` | `""` |
+| `lymeDisease` | `""` |
+| `ehrlichiosis` | `""` |
+| `anaplasmosis` | `""` |
+| `babesiosis` | `""` |
 
 #### Blood Test Update Errors
 
@@ -707,7 +801,25 @@ Update a vaccination record.
 
 #### Vaccination Update Request Body
 
-Any subset of the vaccination create fields may be supplied.
+Any subset of these fields may be supplied.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `vaccineDate` | string or `null` | No | Flexible date string; use `null` to reset (empty string is invalid) |
+| `vaccineName` | string | No | Max 200 chars |
+| `vaccineNumber` | string | No | Max 100 chars |
+| `vaccineTimes` | string | No | Max 100 chars |
+| `vaccinePosition` | string | No | Max 100 chars |
+
+#### Vaccination Update Reset Payloads
+
+| Field | Reset payload |
+| --- | --- |
+| `vaccineDate` | `null` |
+| `vaccineName` | `""` |
+| `vaccineNumber` | `""` |
+| `vaccineTimes` | `""` |
+| `vaccinePosition` | `""` |
 
 #### Vaccination Update Errors
 
