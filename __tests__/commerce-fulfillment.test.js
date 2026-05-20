@@ -12,7 +12,7 @@
  *   GET    /commerce/fulfillment/suppliers/{orderId}         — get supplier verification (admin only)
  *   PATCH  /commerce/fulfillment/suppliers/{orderId}         — update supplier verification (admin only)
  *   GET    /commerce/fulfillment/share-links/whatsapp/{_id}  — get WhatsApp order link (admin only)
- *   POST   /commerce/commands/ptag-detection-email           — send ptag detection email (authenticated)
+ *   POST   /commerce/commands/ptag-detection-email           — send ptag detection email (API key only at gateway)
  *
  * Run:  npm test -- __tests__/commerce-fulfillment.test.js --runInBand
  * Pre-req: npm run build:ts
@@ -201,6 +201,8 @@ function createQueryMock(result, err = null) {
  * @param {number} opts.ovCountResult         Value returned by countDocuments
  * @param {object} opts.ovUpdateOneResult
  * @param {any}    opts.ovFindOneAndUpdateResult
+ * @param {number} opts.rateLimitCount       Count returned by RateLimit.findOneAndUpdate()
+ * @param {Error}  opts.rateLimitError       Error thrown by RateLimit.findOneAndUpdate()
  * @param {Error}  opts.connectError
  * @param {object} opts.sendMailResult
  * @param {Error}  opts.sendMailError
@@ -216,6 +218,8 @@ function loadHandlerWithMocks({
   ovFindOneAndUpdateResult = null,
   ovFindOneAndUpdateError = null,
   orderFindOneAndUpdateResult = null,
+  rateLimitCount = 1,
+  rateLimitError = null,
   connectError = null,
   sendMailResult = { messageId: 'test-msg-id' },
   sendMailError = null,
@@ -275,6 +279,17 @@ function loadHandlerWithMocks({
     findOneAndUpdate: jest.fn().mockResolvedValue(orderFindOneAndUpdateResult),
   };
 
+  const rateLimitFindOneAndUpdateFn = jest.fn().mockImplementation(() =>
+    rateLimitError
+      ? Promise.reject(rateLimitError)
+      : Promise.resolve({ count: rateLimitCount })
+  );
+
+  const rateLimitModel = {
+    findOne: jest.fn().mockReturnValue(createQueryMock(null)),
+    findOneAndUpdate: rateLimitFindOneAndUpdateFn,
+  };
+
   const mongooseMock = {
     Schema: actualMongoose.Schema,
     Types: actualMongoose.Types,
@@ -287,6 +302,7 @@ function loadHandlerWithMocks({
     model: jest.fn((name) => {
       if (name === 'OrderVerification') return orderVerificationModel;
       if (name === 'Order') return orderModel;
+      if (name === 'RateLimit') return rateLimitModel;
       throw new Error(`Unexpected model "${name}"`);
     }),
   };
@@ -329,6 +345,7 @@ function loadHandlerWithMocks({
       ovUpdateOneFn,
       ovFindOneAndUpdateFn,
       orderFindOneFn,
+      rateLimitFindOneAndUpdateFn,
       mockSendMail,
     },
   };
@@ -1319,6 +1336,25 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
     expect(parseResponse(result).statusCode).toBe(400);
   });
 
+  test('returns 429 when command rate limit is exceeded', async () => {
+    const { handler, mocks } = loadHandlerWithMocks({ rateLimitCount: 999 });
+    const result = await handler(
+      createEvent({
+        method: 'POST',
+        path: '/commerce/commands/ptag-detection-email',
+        resource: '/commerce/commands/ptag-detection-email',
+        pathParameters: null,
+        body: validEmailBody,
+        authorizer: undefined,
+      }),
+      createContext()
+    );
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(429);
+    expect(parsed.body.errorKey).toBe('common.rateLimited');
+    expect(mocks.mockSendMail).not.toHaveBeenCalled();
+  });
+
   test('returns 503 when sendMail throws', async () => {
     const { handler } = loadHandlerWithMocks({
       sendMailError: new Error('SMTP connection refused'),
@@ -1354,8 +1390,8 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
     expect(mocks.mockSendMail).toHaveBeenCalledTimes(1);
   });
 
-  test('rejects unauthenticated request with 401', async () => {
-    const { handler } = loadHandlerWithMocks();
+  test('allows request without authorizer context', async () => {
+    const { handler, mocks } = loadHandlerWithMocks();
     const result = await handler(
       createEvent({
         method: 'POST',
@@ -1367,7 +1403,8 @@ describe('POST /commerce/commands/ptag-detection-email', () => {
       }),
       createContext()
     );
-    expect(parseResponse(result).statusCode).toBe(401);
+    expect(parseResponse(result).statusCode).toBe(200);
+    expect(mocks.mockSendMail).toHaveBeenCalledTimes(1);
   });
 
   test('cyberattack — HTML injection in name is escaped in email body', async () => {

@@ -2323,6 +2323,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /commerce/commands/ptag-detection-email
             Method: POST
+            Auth:
+              Authorizer: NONE
             RequestModel:
               Model: GenericJsonObjectRequest
               Required: false
