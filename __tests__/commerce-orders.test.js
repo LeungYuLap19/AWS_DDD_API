@@ -1196,6 +1196,26 @@ describe('POST /commerce/orders — purchase confirmation', () => {
     expect(parseResponse(result).statusCode).toBe(400);
   });
 
+  test('allows missing petName when option is PTag', async () => {
+    const { handler } = loadWithMultipartMock(validFields({ option: 'PTag', petName: undefined }));
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(200);
+    expect(parsed.body.data).toHaveProperty('purchaseCode');
+  });
+
+  test('returns 400 when petName is missing for non-PTag options', async () => {
+    const { handler } = loadWithMultipartMock(
+      validFields({ option: 'PTagAir', type: '', shopCode: undefined, petName: undefined }),
+      { files: [] },
+      { shopInfoResult: null }
+    );
+    const result = await handler(postEvent(), createContext());
+    const parsed = parseResponse(result);
+    expect(parsed.statusCode).toBe(400);
+    expect(parsed.body.errorKey).toBe('common.missingBodyParams');
+  });
+
   test('returns 400 for invalid email', async () => {
     const { handler } = loadWithMultipartMock(validFields({ email: 'not-an-email' }));
     const result = await handler(postEvent(), createContext());

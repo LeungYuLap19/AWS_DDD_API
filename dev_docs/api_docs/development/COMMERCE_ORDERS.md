@@ -270,7 +270,7 @@ The backend detects MIME type from file bytes, not just the declared multipart c
 | `lastName` | string | Yes | Trimmed, max 100 |
 | `email` | string | Yes | Valid email |
 | `address` | string | Yes | Trimmed, max 500 |
-| `petName` | string | Yes | Trimmed, max 100 |
+| `petName` | string | Conditional | Required unless `option=PTag`; trimmed, max 100 |
 | `phoneNumber` | string | Yes | 7 to 15 digits only |
 | `shopCode` | string | No | Defaults to `""` |
 | `promotionCode` | string | No | Defaults to `""` |
@@ -337,7 +337,7 @@ If order-verification creation fails after the order is saved, the handler compe
 
 | Status | `errorKey` | Cause |
 | --- | --- | --- |
-| 400 | `common.missingBodyParams` | Missing multipart body or missing required text field |
+| 400 | `common.missingBodyParams` | Missing multipart body or missing required text field (including `petName` when `option` is not `PTag`) |
 | 400 | `orders.errors.invalidEmail` | Invalid email |
 | 400 | `orders.errors.invalidOption` | Invalid `option` format |
 | 400 | `orders.errors.invalidTempId` | Invalid `tempId` format |

@@ -539,6 +539,52 @@ describe('Tier 2 - user handler integration', () => {
     expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
+  test('PATCH /user/me rejects firstName reset payloads', async () => {
+    const { handler, userModel } = loadHandlerWithMocks({
+      activeUser: null,
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'PATCH',
+        body: JSON.stringify({ firstName: '' }),
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'tier2@test.com',
+          userRole: 'user',
+        },
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).errorKey).toBe('common.invalidBodyParams');
+    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  test('PATCH /user/me rejects lastName reset payloads', async () => {
+    const { handler, userModel } = loadHandlerWithMocks({
+      activeUser: null,
+    });
+
+    const res = await handler(
+      createEvent({
+        method: 'PATCH',
+        body: JSON.stringify({ lastName: '' }),
+        authorizer: {
+          userId: '507f1f77bcf86cd799439011',
+          userEmail: 'tier2@test.com',
+          userRole: 'user',
+        },
+      }),
+      createContext()
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).errorKey).toBe('common.invalidBodyParams');
+    expect(userModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
   test('PATCH /user/me allows resetting birthday to null', async () => {
     const { handler, userModel } = loadHandlerWithMocks({
       updatedUser: {
@@ -750,6 +796,40 @@ describe('Tier 3/4 - /user/me via SAM local + UAT DB', () => {
 
       const persisted = await usersCol().findOne({ _id: state.primaryUserId });
       expect(persisted.email).toBe(state.primaryEmail);
+    });
+
+    samTest('PATCH /user/me rejects firstName reset payloads', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const patchRes = await req(
+        'PATCH',
+        '/user/me',
+        { firstName: '' },
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 31}` })
+      );
+
+      expect(patchRes.status).toBe(400);
+      expect(patchRes.body.errorKey).toBe('common.invalidBodyParams');
+
+      const persisted = await usersCol().findOne({ _id: state.primaryUserId });
+      expect(persisted.firstName).toBe('Primary');
+    });
+
+    samTest('PATCH /user/me rejects lastName reset payloads', async () => {
+      if (!(await ensureDbOrSkip())) return;
+      await seedUsers();
+      const patchRes = await req(
+        'PATCH',
+        '/user/me',
+        { lastName: '' },
+        authHeaders(state.primaryToken, { 'x-forwarded-for': `198.51.110.${(TEST_TS % 200) + 32}` })
+      );
+
+      expect(patchRes.status).toBe(400);
+      expect(patchRes.body.errorKey).toBe('common.invalidBodyParams');
+
+      const persisted = await usersCol().findOne({ _id: state.primaryUserId });
+      expect(persisted.lastName).toBe('User');
     });
 
     samTest('PATCH /user/me allows resetting birthday to null', async () => {
