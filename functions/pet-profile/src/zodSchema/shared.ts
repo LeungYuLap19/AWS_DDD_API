@@ -34,6 +34,14 @@ export const optionalDateString = (message: string) =>
     .refine((value) => isValidDateFormat(value), { message })
     .optional();
 
+export const optionalNullableDateString = (message: string) =>
+  z
+    .string()
+    .max(64, { message })
+    .refine((value) => isValidDateFormat(value), { message })
+    .optional()
+    .nullable();
+
 export const requiredDateString = (requiredMessage: string, formatMessage: string) =>
   z
     .string({ error: requiredMessage })
