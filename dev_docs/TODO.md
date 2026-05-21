@@ -1,5 +1,9 @@
 # TODO
 
+- [ ] change the whatsapp token env !!!!
+
+- [ ] stricter role checking for services, especially admin routes
+
 ## Standardization
 
 - [x] service function flow
@@ -43,6 +47,10 @@
   - Consider WAF rate-based rules later if infra scope allows.
 
 ## TODO endpoints
+
+- [ ] commerce-fulfillment lambda
+  - POST /commerce/commands/ptag-detection
+    - Send email or whatsapp notification (email/phone must present)
 
 - [x] pet-medical lambda
   - GET /pet/medical/{petId}/vaccination
@@ -88,49 +96,3 @@
 - [ ] Remove dead S3 env vars from `PetBiometricFunction` and `CommerceFulfillmentFunction`
   - `AWS_BUCKET_NAME`, `AWS_BUCKET_BASE_URL`, `AWS_BUCKET_REGION` declared in `envSchema.ts` and wired in `template.yaml` but never consumed by any service, router, or utility
   - Remove from both `envSchema.ts` files and from the `Environment.Variables` blocks in `template.yaml`
-
-## Lambdas / MongoDB Optimization
-
-- [ ] centralize rate limiting on DynamoDB (single implementation, replace Mongo rate-limit storage)
-  - add shared helper (`requireDynamoRateLimit`) with same policy API (`ip`, `identifier`, `ip+identifier`, `account`, `global`)
-  - add DynamoDB table + TTL + IAM in `template.yaml`
-  - migrate all call sites from `requireMongoRateLimit` / `requireMongoRateLimitNotInCooldown`
-  - remove mandatory Mongo connect from public routes that only need rate limiting
-
-- [x] authorizer cold-start optimization
-  - make `request-authorizer` self-contained (no `@aws-ddd-api/shared` import, no shared layer attachment)
-  - bundle `jsonwebtoken` into authorizer artifact
-
-- [x] shared import/layer optimization across Lambdas
-  - replace root barrel imports (`@aws-ddd-api/shared`) with subpath imports
-  - enforce no-barrel policy with CI check (`rg`/lint rule)
-  - shrink shared layer to truly shared lightweight modules; bundle medium dependencies per-function where it improves cold start
-
-- [ ] business-logic request-path optimization
-  - move non-critical side effects (email/WhatsApp) to async worker queue (SQS/EventBridge)
-  - keep synchronous path focused on validation + persistence + response
-  - add timing logs around DB, third-party API calls, and serialization to identify hotspots
-
-- [ ] MongoDB indexing + query plan optimization
-  - run profiler + `explain('executionStats')` on top slow queries per endpoint
-  - add/adjust compound indexes for real filter/sort patterns
-  - enforce `.lean()`, minimal projections (`select`), and avoid expensive full counts where not required
-  - review skip/limit usage on large collections; move to cursor pagination where needed
-
-- [ ] connection + concurrency tuning
-  - review `mongoose.connect` options function-by-function (current `maxPoolSize: 1` may serialize work)
-  - tune Lambda `ReservedConcurrentExecutions` by function class to prevent Atlas connection storms
-  - validate connection reuse behavior and reduce reconnect churn on warm invokes
-
-- [ ] region/network architecture decision
-  - test Atlas region alignment scenarios (HK vs SG) and document latency impact
-  - decide target: keep compute+DB co-located in one region unless compliance requires split
-  - evaluate private connectivity path (VPC peering / PrivateLink) and DNS/egress overhead
-
-- [ ] Lambda compute tuning
-  - run power tuning for hot Lambdas and optimize memory/CPU (`256/512/1024`) by cost-latency curve
-  - prioritize functions with high cold-start + high invocation volume
-
-- [ ] rollout plan
-  - ship in phases with before/after metrics per phase
-  - add rollback checkpoints for each infra/code change
