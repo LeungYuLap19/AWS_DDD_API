@@ -10,6 +10,17 @@ import { sanitizePetBasic, sanitizePetFull, sanitizePetLineage, sanitizePetListS
 import { PUBLIC_TAG_PROJECTION } from './profileHelpers';
 
 const PET_VIEWS = new Set(['basic', 'detail', 'full']);
+const LIST_SORT_FIELDS = new Set([
+  'updatedAt',
+  'createdAt',
+  'name',
+  'animal',
+  'breed',
+  'birthday',
+  'receivedDate',
+  'ngoPetId',
+]);
+const LIST_SEARCH_FIELDS = ['name', 'animal', 'breed', 'ngoPetId', 'locationName', 'owner'];
 
 type PublicOwnerContact = {
   ownerEmail: string | null;
@@ -121,9 +132,8 @@ export async function handleGetPetProfileByTag(ctx: RouteContext): Promise<APIGa
 }
 
 /**
- * Returns the caller's pet list with shared pagination. NGO callers receive
- * NGO-scoped searching and sorting, while standard users receive only their
- * own active pets.
+ * Returns the caller's pet list with shared pagination, scoped either by
+ * `ngoId` or `userId`. Search and sort parameters apply in both modes.
  */
 export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGatewayProxyResult> {
   const authContext = requireAuthContext(ctx.event);
@@ -137,58 +147,24 @@ export async function handleGetMyPetProfiles(ctx: RouteContext): Promise<APIGate
   }
   const { page, limit } = pagination.data;
   const skip = (page - 1) * limit;
+  const search = typeof queryParams.search === 'string' ? queryParams.search.trim() : '';
+  const sortBy = LIST_SORT_FIELDS.has(String(queryParams.sortBy)) ? String(queryParams.sortBy) : 'updatedAt';
+  const sortOrder = String(queryParams.sortOrder || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+  const query: Record<string, unknown> = {
+    deleted: false,
+    ...(authContext.ngoId ? { ngoId: authContext.ngoId } : { userId: authContext.userId }),
+  };
 
-  if (authContext.ngoId) {
-    const search = typeof queryParams.search === 'string' ? queryParams.search.trim() : '';
-    const sortByAllowlist = new Set([
-      'updatedAt',
-      'createdAt',
-      'name',
-      'animal',
-      'breed',
-      'birthday',
-      'receivedDate',
-      'ngoPetId',
-    ]);
-    const sortBy = sortByAllowlist.has(String(queryParams.sortBy)) ? String(queryParams.sortBy) : 'updatedAt';
-    const sortOrder = String(queryParams.sortOrder || 'desc').toLowerCase() === 'asc' ? 1 : -1;
-    const query: Record<string, unknown> = {
-      ngoId: authContext.ngoId,
-      deleted: false,
-    };
-
-    if (search) {
-      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      query.$or = [
-        { name: { $regex: safeSearch, $options: 'i' } },
-        { animal: { $regex: safeSearch, $options: 'i' } },
-        { breed: { $regex: safeSearch, $options: 'i' } },
-        { ngoPetId: { $regex: safeSearch, $options: 'i' } },
-        { locationName: { $regex: safeSearch, $options: 'i' } },
-        { owner: { $regex: safeSearch, $options: 'i' } },
-      ];
-    }
-
-    const [pets, totalNumber] = await Promise.all([
-      Pet.find(query)
-        .sort({ [sortBy]: sortOrder, _id: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Pet.countDocuments(query),
-    ]);
-
-    return response.successResponse(200, ctx.event, {
-      message: 'success.retrieved',
-      data: sanitizePetListSummary(pets),
-      pagination: { page, limit, total: totalNumber, totalPages: Math.ceil(totalNumber / limit) },
-    });
+  if (search) {
+    const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    query.$or = LIST_SEARCH_FIELDS.map(field => ({
+      [field]: { $regex: safeSearch, $options: 'i' },
+    }));
   }
 
-  const query = { userId: authContext.userId, deleted: false };
   const [pets, totalNumber] = await Promise.all([
     Pet.find(query)
-      .sort({ updatedAt: -1 })
+      .sort({ [sortBy]: sortOrder, _id: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),

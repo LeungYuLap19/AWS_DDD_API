@@ -1,6 +1,6 @@
 # TODO
 
-- [ ] change the whatsapp token env !!!!
+- [x] change the whatsapp token env !!!!
 
 - [ ] stricter role checking for services, especially admin routes
 

@@ -35,7 +35,7 @@ Pet profile creation, list/read, update, delete, and public tag lookup. The curr
 | Public tag lookup | Tag lookup returns a fixed public field set inside `data`; when no pet matches, it returns `404 common.notFound` |
 | View selector | `GET /pet/profile/{petId}` supports `?view=basic`, `?view=detail`, or `?view=full` with `full` as the default |
 | Update transport | PATCH uses multipart parsing, including typed normalization and optional file uploads |
-| List mode switch | `GET /pet/profile/me` uses the NGO query/sort/search branch whenever the JWT includes `ngoId` |
+| List mode switch | `GET /pet/profile/me` scopes by `ngoId` when present, otherwise by `userId`; search and sort apply in both cases |
 
 ---
 
@@ -393,13 +393,11 @@ List the caller's pets.
 | --- | --- | --- | --- |
 | `page` | integer | No | Shared pagination schema |
 | `limit` | integer | No | Shared pagination schema |
-| `search` | string | No | NGO callers only; filters name, animal, breed, ngoPetId, location, owner |
-| `sortBy` | string | No | NGO callers only; allowlist: `updatedAt`, `createdAt`, `name`, `animal`, `breed`, `birthday`, `receivedDate`, `ngoPetId` |
-| `sortOrder` | `asc` or `desc` | No | NGO callers only |
+| `search` | string | No | Filters the caller's scoped pet list by `name`, `animal`, `breed`, `ngoPetId`, `location`, and `owner` |
+| `sortBy` | string | No | Allowlist: `updatedAt`, `createdAt`, `name`, `animal`, `breed`, `birthday`, `receivedDate`, `ngoPetId` |
+| `sortOrder` | `asc` or `desc` | No | Defaults to `desc` when omitted or invalid |
 
-For non-NGO callers, `search`, `sortBy`, and `sortOrder` are not used.
-
-Current implementation note: the handler switches into the NGO list branch whenever the auth context contains `ngoId`.
+Current implementation note: the handler scopes the list by `ngoId` whenever the auth context contains `ngoId`; otherwise it scopes by `userId`. `search`, `sortBy`, and `sortOrder` work in either scope.
 
 #### List Success (200)
 
